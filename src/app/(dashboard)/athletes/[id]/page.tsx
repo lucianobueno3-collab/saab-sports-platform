@@ -43,6 +43,10 @@ const recentActivities = [
   { name: 'Ride Intervalos', date: '4 dias atrás', duration: '1h 55min', tss: 134, np: '304W', if: '1.03' },
 ]
 
+export function generateStaticParams() {
+  return [{ id: '1' }, { id: '2' }, { id: '3' }, { id: '4' }, { id: '5' }]
+}
+
 export default function AthleteDetailPage({ params }: { params: { id: string } }) {
   const wKg = (athlete.ftp / athlete.weight).toFixed(2)
 
