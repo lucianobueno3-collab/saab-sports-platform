@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  Activity, TrendingUp, Heart, LogOut
+  TrendingUp, Heart, LogOut
 } from 'lucide-react'
 
 const navItems = [
@@ -19,6 +20,11 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { user, signOut } = useAuth()
+  const initials = user?.user_metadata?.full_name
+    ? user.user_metadata.full_name.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
+    : user?.email?.slice(0, 2).toUpperCase() ?? 'CO'
+  const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Coach'
 
   return (
     <aside className="flex flex-col w-64 min-h-screen bg-[#0d0d14] border-r border-border">
@@ -58,16 +64,16 @@ export function Sidebar() {
 
       {/* User */}
       <div className="px-3 py-4 border-t border-border">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary cursor-pointer transition-colors">
-          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary">
-            CN
+        <button onClick={signOut} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary cursor-pointer transition-colors text-left">
+          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+            {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">Coach</p>
-            <p className="text-xs text-muted-foreground truncate">saabsports.com.br</p>
+            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
           </div>
-          <LogOut className="w-4 h-4 text-muted-foreground" />
-        </div>
+          <LogOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        </button>
       </div>
     </aside>
   )

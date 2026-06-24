@@ -22,9 +22,10 @@ export default function LoginPage() {
     setMessage(null)
 
     if (mode === 'login') {
-      const { error } = await sb.auth.signInWithPassword({ email, password })
+      const { data, error } = await sb.auth.signInWithPassword({ email, password })
+      console.log('login result:', { data, error })
       if (error) {
-        setError('Email ou senha incorretos.')
+        setError(error.message || error.name || JSON.stringify(error) || 'Erro desconhecido')
       } else {
         window.location.href = '/dashboard'
       }
@@ -35,9 +36,13 @@ export default function LoginPage() {
         options: { data: { full_name: name } },
       })
       if (error) {
-        setError(error.message)
+        if (error.message?.includes('already registered') || error.message?.includes('already exists') || error.message?.includes('User already')) {
+          setError('Este email já está cadastrado. Clique em "Fazer login".')
+        } else {
+          setError(error.message || 'Erro ao criar conta. Tente novamente.')
+        }
       } else {
-        setMessage('Conta criada! Verifique seu email para confirmar e depois faça login.')
+        setMessage('Conta criada com sucesso! Faça login abaixo.')
         setMode('login')
       }
     }
