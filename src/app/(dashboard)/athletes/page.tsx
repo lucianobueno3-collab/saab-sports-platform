@@ -1,23 +1,61 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { StatusBadge } from '@/components/dashboard/status-badge'
-import { Plus, Filter } from 'lucide-react'
+import { Plus, Filter, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { getAthletes, type AthleteRow } from '@/lib/supabase/queries'
+import { AddAthleteModal } from '@/components/athletes/add-athlete-modal'
 
-const athletes = [
-  { id: '1', initials: 'MR', name: 'Marcos Rocha', email: 'marcos@email.com', sport: 'Ciclismo', age: 32, ctl: 94, atl: 86, tsb: 8, ftp: 295, vo2max: 65, status: 'peak' as const, lastActivity: '2 horas atrás' },
-  { id: '2', initials: 'AF', name: 'Ana Ferreira', email: 'ana@email.com', sport: 'Corrida', age: 28, ctl: 71, atl: 83, tsb: -12, ftp: null, vo2max: 58, status: 'tired' as const, lastActivity: '1 dia atrás' },
-  { id: '3', initials: 'JS', name: 'João Silva', email: 'joao@email.com', sport: 'Triathlon', age: 41, ctl: 85, atl: 113, tsb: -28, ftp: 260, vo2max: 61, status: 'overreaching' as const, lastActivity: '5 horas atrás' },
-  { id: '4', initials: 'CM', name: 'Carla Melo', email: 'carla@email.com', sport: 'Corrida', age: 35, ctl: 62, atl: 57, tsb: 5, ftp: null, vo2max: 54, status: 'fit' as const, lastActivity: '3 dias atrás' },
-  { id: '5', initials: 'RP', name: 'Rafael Pinto', email: 'rafael@email.com', sport: 'Ciclismo', age: 29, ctl: 78, atl: 64, tsb: 14, ftp: 310, vo2max: 68, status: 'fresh' as const, lastActivity: '1 hora atrás' },
-]
+function initials(name: string) {
+  return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
+}
+
+function sportLabel(sport: string) {
+  const map: Record<string, string> = {
+    running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon',
+    swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro',
+  }
+  return map[sport] ?? sport
+}
+
+function lastActivityLabel(isoDate: string | null) {
+  if (!isoDate) return '—'
+  const diff = Date.now() - new Date(isoDate).getTime()
+  const h = Math.floor(diff / 3600000)
+  if (h < 1) return 'Agora há pouco'
+  if (h < 24) return `${h}h atrás`
+  const d = Math.floor(h / 24)
+  if (d === 1) return '1 dia atrás'
+  return `${d} dias atrás`
+}
 
 export default function AthletesPage() {
+  const [athletes, setAthletes] = useState<AthleteRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+
+  async function load() {
+    setLoading(true)
+    try {
+      const data = await getAthletes()
+      setAthletes(data)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { load() }, [])
+
   return (
     <div>
-      <Topbar title="Alunos" subtitle={`${athletes.length} alunos cadastrados`} />
+      <Topbar
+        title="Alunos"
+        subtitle={loading ? 'Carregando...' : `${athletes.length} aluno${athletes.length !== 1 ? 's' : ''} cadastrado${athletes.length !== 1 ? 's' : ''}`}
+      />
 
       <div className="p-6">
-        {/* Actions */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
             <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-muted-foreground border border-border rounded-lg hover:bg-secondary transition-colors">
@@ -25,60 +63,87 @@ export default function AthletesPage() {
               Filtrar
             </button>
           </div>
-          <button className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors">
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+          >
             <Plus className="w-4 h-4" />
             Novo Aluno
           </button>
         </div>
 
-        {/* Table */}
         <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-secondary/30">
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Atleta</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Modalidade</th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">CTL</th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">ATL</th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">TSB</th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">FTP</th>
-                <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">VO2max</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
-                <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Último Treino</th>
-              </tr>
-            </thead>
-            <tbody>
-              {athletes.map((a) => (
-                <tr key={a.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
-                  <td className="px-5 py-3.5">
-                    <Link href={`/athletes/${a.id}`} className="flex items-center gap-3 group">
-                      <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                        {a.initials}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-foreground group-hover:text-primary transition-colors">{a.name}</p>
-                        <p className="text-xs text-muted-foreground">{a.email}</p>
-                      </div>
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3.5 text-muted-foreground">{a.sport}</td>
-                  <td className="px-4 py-3.5 text-center font-bold text-[#0088ff]">{a.ctl}</td>
-                  <td className="px-4 py-3.5 text-center font-bold text-primary">{a.atl}</td>
-                  <td className="px-4 py-3.5 text-center">
-                    <span className={`font-bold ${a.tsb >= 0 ? 'text-[#00d084]' : 'text-[#ffa800]'}`}>
-                      {a.tsb > 0 ? '+' : ''}{a.tsb}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3.5 text-center text-foreground">{a.ftp ? `${a.ftp}W` : '—'}</td>
-                  <td className="px-4 py-3.5 text-center text-foreground">{a.vo2max}</td>
-                  <td className="px-4 py-3.5"><StatusBadge status={a.status} /></td>
-                  <td className="px-4 py-3.5 text-xs text-muted-foreground">{a.lastActivity}</td>
+          {loading ? (
+            <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Carregando atletas...</span>
+            </div>
+          ) : athletes.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="text-sm font-semibold text-foreground mb-1">Nenhum aluno cadastrado</p>
+              <p className="text-xs text-muted-foreground mb-4">Clique em "Novo Aluno" para começar</p>
+              <button
+                onClick={() => setShowAdd(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Novo Aluno
+              </button>
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-secondary/30">
+                  <th className="text-left px-5 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Atleta</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Modalidade</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">CTL</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">ATL</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">TSB</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">FTP</th>
+                  <th className="text-center px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">VO2max</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="text-left px-4 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Último Treino</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {athletes.map((a) => {
+                  const tsb = a.tsb ?? 0
+                  const status = (a.status ?? 'fit') as 'peak' | 'fresh' | 'fit' | 'tired' | 'overreaching'
+                  return (
+                    <tr key={a.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
+                      <td className="px-5 py-3.5">
+                        <Link href={`/athletes/detail?id=${a.id}`} className="flex items-center gap-3 group">
+                          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+                            {initials(a.full_name)}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground group-hover:text-primary transition-colors">{a.full_name}</p>
+                            <p className="text-xs text-muted-foreground">{a.email ?? '—'}</p>
+                          </div>
+                        </Link>
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground">{sportLabel(a.primary_sport)}</td>
+                      <td className="px-4 py-3.5 text-center font-bold text-[#0088ff]">{a.ctl?.toFixed(0) ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-center font-bold text-primary">{a.atl?.toFixed(0) ?? '—'}</td>
+                      <td className="px-4 py-3.5 text-center">
+                        <span className={`font-bold ${tsb >= 0 ? 'text-[#00d084]' : 'text-[#ffa800]'}`}>
+                          {tsb > 0 ? '+' : ''}{tsb.toFixed(0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3.5 text-center text-foreground">{a.ftp_watts ? `${a.ftp_watts}W` : '—'}</td>
+                      <td className="px-4 py-3.5 text-center text-foreground">{a.vo2max_ml_kg_min?.toFixed(1) ?? '—'}</td>
+                      <td className="px-4 py-3.5"><StatusBadge status={status} /></td>
+                      <td className="px-4 py-3.5 text-xs text-muted-foreground">{lastActivityLabel(a.last_activity_at)}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
+
+      {showAdd && <AddAthleteModal onClose={() => setShowAdd(false)} onSaved={load} />}
     </div>
   )
 }
