@@ -2,21 +2,25 @@
 
 import { useState, useEffect } from 'react'
 import { Topbar } from '@/components/layout/topbar'
-import { Settings, Loader2 } from 'lucide-react'
+import { Settings, Loader2, MessageCircle, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/context/auth-context'
 
 export default function SettingsPage() {
   const { user, signOut } = useAuth()
   const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
   const [loading, setLoading] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
     if (!user) return
     const sb = createClient()
-    sb.from('profiles').select('full_name').eq('id', user.id).single().then(({ data }) => {
-      if (data) setFullName(data.full_name ?? '')
+    sb.from('profiles').select('full_name, phone').eq('id', user.id).single().then(({ data }) => {
+      if (data) {
+        setFullName(data.full_name ?? '')
+        setPhone((data as { phone?: string }).phone ?? '')
+      }
     })
   }, [user])
 
@@ -25,7 +29,7 @@ export default function SettingsPage() {
     if (!user) return
     setLoading(true)
     const sb = createClient()
-    await sb.from('profiles').update({ full_name: fullName }).eq('id', user.id)
+    await sb.from('profiles').update({ full_name: fullName, phone: phone || null }).eq('id', user.id)
     setLoading(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
@@ -34,7 +38,9 @@ export default function SettingsPage() {
   return (
     <div>
       <Topbar title="Configurações" subtitle="Perfil e preferências da conta" />
-      <div className="p-6 max-w-lg">
+      <div className="p-6 max-w-lg space-y-5">
+
+        {/* Perfil */}
         <div className="bg-card border border-border rounded-xl p-6 space-y-5">
           <div className="flex items-center gap-3 pb-4 border-b border-border">
             <div className="w-10 h-10 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-center">
@@ -64,10 +70,30 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2.5 bg-secondary/50 border border-border rounded-lg text-sm text-muted-foreground cursor-not-allowed"
               />
             </div>
+
+            {/* WhatsApp do treinador */}
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <MessageCircle className="w-3.5 h-3.5 text-[#25d366]" />
+                  WhatsApp para briefings (seu número)
+                </span>
+              </label>
+              <input
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                placeholder="+5511999999999"
+                className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary font-mono"
+              />
+              <p className="text-[10px] text-muted-foreground mt-1.5 leading-relaxed">
+                Com DDI. Ex: +5511999999999. Usado para enviar o briefing diário da Central de Alertas direto para você.
+              </p>
+            </div>
+
             <div className="flex gap-3 pt-1">
               <button type="submit" disabled={loading}
                 className="flex items-center gap-2 px-4 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition-colors">
-                {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : null}
                 {saved ? 'Salvo!' : 'Salvar'}
               </button>
               <button type="button" onClick={signOut}
@@ -77,6 +103,7 @@ export default function SettingsPage() {
             </div>
           </form>
         </div>
+
       </div>
     </div>
   )

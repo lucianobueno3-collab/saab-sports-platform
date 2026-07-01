@@ -5,8 +5,10 @@ import { Topbar } from '@/components/layout/topbar'
 import { KpiCard } from '@/components/dashboard/kpi-card'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { Users, TrendingUp, AlertTriangle, Activity, Loader2 } from 'lucide-react'
+import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import Link from 'next/link'
 import { getDashboardSummary } from '@/lib/supabase/queries'
+import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 
 type AthleteSummary = {
   id: string
@@ -31,6 +33,7 @@ export default function DashboardPage() {
   const [athletes, setAthletes] = useState<AthleteSummary[]>([])
   const [weeklyActivities, setWeeklyActivities] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [metricDetail, setMetricDetail] = useState<{ key: MetricKey } | null>(null)
 
   useEffect(() => {
     getDashboardSummary().then(({ athletes, weeklyActivities }) => {
@@ -56,8 +59,10 @@ export default function DashboardPage() {
         {/* KPI Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Alunos Ativos" value={loading ? '—' : athletes.length} sub="total cadastrado" icon={Users} color="blue" />
-          <KpiCard label="CTL Médio Grupo" value={loading ? '—' : avgCTL} sub="Fitness coletivo" icon={TrendingUp} color="green" />
-          <KpiCard label="Em Alerta" value={loading ? '—' : alertAthletes.length} sub="TSB crítico" icon={AlertTriangle} color="yellow" />
+          <KpiCard label="CTL Médio Grupo" value={loading ? '—' : avgCTL} sub="Fitness coletivo" icon={TrendingUp} color="green"
+            onClick={() => setMetricDetail({ key: 'ctl' })} />
+          <KpiCard label="Em Alerta" value={loading ? '—' : alertAthletes.length} sub="TSB crítico" icon={AlertTriangle} color="yellow"
+            onClick={() => setMetricDetail({ key: 'tsb' })} />
           <KpiCard label="Treinos — 7 dias" value={loading ? '—' : weeklyActivities} sub="Todos os alunos" icon={Activity} color="red" />
         </div>
 
@@ -156,7 +161,16 @@ export default function DashboardPage() {
             </div>
           </>
         )}
+
+        <GlossaryLegend terms={['CTL', 'TSB', 'TSS', 'ATL']} />
       </div>
+
+      {metricDetail && (
+        <MetricDetailSheet
+          metricKey={metricDetail.key}
+          onClose={() => setMetricDetail(null)}
+        />
+      )}
     </div>
   )
 }

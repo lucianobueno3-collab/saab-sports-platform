@@ -23,6 +23,10 @@ export type AthleteRow = {
   last_activity_tss: number | null
   last_metrics_date: string | null
   watts_per_kg: number | null
+  phone: string | null
+  initial_ctl: number | null
+  initial_atl: number | null
+  initial_date: string | null
 }
 
 export type PMCRow = {
@@ -49,9 +53,14 @@ export type ActivityRow = {
 export type DailyMetricRow = {
   date: string
   hrv_rmssd: number | null
+  hrv_ms: number | null
   hrv_score: number | null
   recovery_score: number | null
   sleep_hours: number | null
+  body_battery: number | null
+  rem_pct: number | null
+  resting_hr: number | null
+  stress_avg: number | null
 }
 
 export async function getAthletes(): Promise<AthleteRow[]> {
@@ -66,13 +75,12 @@ export async function getAthletes(): Promise<AthleteRow[]> {
 
 export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
-  const { data, error } = await sb
-    .from('v_athlete_summary')
-    .select('*')
-    .eq('id', id)
-    .single()
-  if (error) return null
-  return data
+  const [{ data: summary }, { data: extra }] = await Promise.all([
+    sb.from('v_athlete_summary').select('*').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date').eq('id', id).single(),
+  ])
+  if (!summary) return null
+  return { ...summary, ...(extra ?? {}) } as AthleteRow
 }
 
 export async function getAthletePMC(athleteId: string, days = 90): Promise<PMCRow[]> {
@@ -107,12 +115,129 @@ export async function getAthleteHRV(athleteId: string, days = 30): Promise<Daily
   from.setDate(from.getDate() - days)
   const { data, error } = await sb
     .from('daily_metrics')
-    .select('date, hrv_rmssd, hrv_score, recovery_score, sleep_hours')
+    .select('date, hrv_rmssd, hrv_ms, hrv_score, recovery_score, sleep_hours, body_battery, rem_pct, resting_hr, stress_avg')
     .eq('athlete_id', athleteId)
     .gte('date', from.toISOString().slice(0, 10))
     .order('date')
   if (error) return []
   return data ?? []
+}
+
+export type AthleteAlertRow = {
+  id: string
+  full_name: string
+  primary_sport: string
+  phone: string | null
+  ctl: number | null
+  atl: number | null
+  tsb: number | null
+  latest_date: string | null
+  hrv_ms: number | null
+  body_battery: number | null
+  sleep_hours: number | null
+  rem_pct: number | null
+  resting_hr: number | null
+  stress_avg: number | null
+  // previous 7 days for stop protocol
+  week_metrics: {
+    date: string; hrv_ms: number | null; body_battery: number | null
+    sleep_hours: number | null; resting_hr: number | null
+  }[]
+}
+
+export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
+  const sb = createClient()
+  const { data: athletes } = await sb
+    .from('v_athlete_summary')
+    .select('id, full_name, primary_sport, phone, ctl, atl, tsb')
+    .order('full_name')
+  if (!athletes?.length) return []
+
+  const since = new Date(); since.setDate(since.getDate() - 7)
+  const { data: metrics } = await sb
+    .from('daily_metrics')
+    .select('athlete_id, date, hrv_ms, body_battery, sleep_hours, rem_pct, resting_hr, stress_avg')
+    .in('athlete_id', athletes.map(a => a.id))
+    .gte('date', since.toISOString().slice(0, 10))
+    .order('date', { ascending: false })
+
+  return athletes.map(a => {
+    const rows = (metrics ?? []).filter(m => m.athlete_id === a.id).sort((x, y) => y.date.localeCompare(x.date))
+    const latest = rows[0] ?? null
+    return {
+      id: a.id, full_name: a.full_name, primary_sport: a.primary_sport,
+      phone: a.phone ?? null, ctl: a.ctl ?? null, atl: a.atl ?? null, tsb: a.tsb ?? null,
+      latest_date: latest?.date ?? null,
+      hrv_ms: latest?.hrv_ms ?? null, body_battery: latest?.body_battery ?? null,
+      sleep_hours: latest?.sleep_hours ?? null, rem_pct: latest?.rem_pct ?? null,
+      resting_hr: latest?.resting_hr ?? null, stress_avg: latest?.stress_avg ?? null,
+      week_metrics: rows.map(r => ({ date: r.date, hrv_ms: r.hrv_ms, body_battery: r.body_battery, sleep_hours: r.sleep_hours, resting_hr: r.resting_hr })),
+    }
+  })
+}
+
+export async function getCoachProfile(): Promise<{ full_name: string | null; phone: string | null; role: string | null } | null> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return null
+  const { data, error } = await sb.from('profiles').select('full_name, phone, role').eq('id', user.id).single()
+  if (error || !data) return null
+  return {
+    full_name: (data as { full_name?: string }).full_name ?? null,
+    phone: (data as { phone?: string }).phone ?? null,
+    role: (data as { role?: string }).role ?? null,
+  }
+}
+
+export async function getMyRole(): Promise<string | null> {
+  const sb = createClient()
+  // Use security definer RPC to bypass RLS self-reference issue
+  const { data, error } = await sb.rpc('get_my_role')
+  if (error || data === null) return null
+  return data as string
+}
+
+export type CoachRow = {
+  id: string
+  full_name: string | null
+  email: string
+  phone: string | null
+  role: string
+  plan: string
+  active: boolean
+  created_at: string
+  athlete_count?: number
+}
+
+export async function getCoaches(): Promise<CoachRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('profiles')
+    .select('id, full_name, email, phone, role, plan, active, created_at')
+    .order('created_at', { ascending: true })
+  if (error) return []
+
+  const coaches = (data ?? []) as CoachRow[]
+
+  // Count athletes per coach
+  const { data: counts } = await sb
+    .from('athletes')
+    .select('coach_id')
+  const countMap: Record<string, number> = {}
+  for (const r of counts ?? []) {
+    countMap[r.coach_id] = (countMap[r.coach_id] ?? 0) + 1
+  }
+  return coaches.map(c => ({ ...c, athlete_count: countMap[c.id] ?? 0 }))
+}
+
+export async function setCoachActive(coachId: string, active: boolean): Promise<void> {
+  const sb = createClient()
+  await sb.from('profiles').update({ active }).eq('id', coachId)
+}
+
+export async function setCoachRole(coachId: string, role: 'coach' | 'admin'): Promise<void> {
+  const sb = createClient()
+  await sb.from('profiles').update({ role }).eq('id', coachId)
 }
 
 export async function getDashboardSummary() {

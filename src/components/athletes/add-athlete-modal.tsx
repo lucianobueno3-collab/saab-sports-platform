@@ -15,6 +15,7 @@ export function AddAthleteModal({ onClose, onSaved }: Props) {
   const [form, setForm] = useState({
     full_name: '',
     email: '',
+    phone: '',
     primary_sport: 'running',
     weight_kg: '',
     ftp_watts: '',
@@ -42,6 +43,7 @@ export function AddAthleteModal({ onClose, onSaved }: Props) {
       primary_sport: form.primary_sport,
     }
     if (form.email) payload.email = form.email.trim()
+    if (form.phone) payload.phone = form.phone.trim().replace(/\s/g, '')
     if (form.weight_kg) payload.weight_kg = parseFloat(form.weight_kg)
     if (form.ftp_watts) payload.ftp_watts = parseInt(form.ftp_watts)
     if (form.lthr_bpm) payload.lthr_bpm = parseInt(form.lthr_bpm)
@@ -78,10 +80,17 @@ export function AddAthleteModal({ onClose, onSaved }: Props) {
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
             </div>
 
-            <div className="col-span-2">
+            <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Email</label>
               <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
                 placeholder="atleta@email.com"
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5">WhatsApp</label>
+              <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)}
+                placeholder="+5511999999999"
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
             </div>
 

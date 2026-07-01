@@ -10,6 +10,7 @@ interface KpiCardProps {
   icon?: LucideIcon
   color?: 'red' | 'green' | 'blue' | 'yellow' | 'purple' | 'default'
   className?: string
+  onClick?: () => void
 }
 
 const colorMap = {
@@ -21,17 +22,24 @@ const colorMap = {
   default:{ value: 'text-foreground',        border: 'border-border',       icon: 'text-muted-foreground',bg: 'bg-secondary' },
 }
 
-export function KpiCard({ label, value, sub, delta, deltaUp, icon: Icon, color = 'default', className }: KpiCardProps) {
+export function KpiCard({ label, value, sub, delta, deltaUp, icon: Icon, color = 'default', className, onClick }: KpiCardProps) {
   const c = colorMap[color]
   return (
-    <div className={cn('rounded-xl border bg-card p-4', c.border, className)}>
+    <div
+      className={cn('rounded-xl border bg-card p-4 transition-colors', c.border, className, onClick && 'cursor-pointer hover:bg-secondary/50')}
+      onClick={onClick}
+      title={onClick ? 'Clique para ver detalhes do cálculo' : undefined}
+    >
       <div className="flex items-start justify-between mb-3">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
-        {Icon && (
-          <span className={cn('p-1.5 rounded-lg', c.bg)}>
-            <Icon className={cn('w-3.5 h-3.5', c.icon)} />
-          </span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {onClick && <span className="text-[8px] text-muted-foreground/40 font-medium">ⓘ</span>}
+          {Icon && (
+            <span className={cn('p-1.5 rounded-lg', c.bg)}>
+              <Icon className={cn('w-3.5 h-3.5', c.icon)} />
+            </span>
+          )}
+        </div>
       </div>
       <p className={cn('text-2xl font-extrabold leading-none', c.value)}>{value}</p>
       {sub && <p className="text-[11px] text-muted-foreground mt-1.5">{sub}</p>}
