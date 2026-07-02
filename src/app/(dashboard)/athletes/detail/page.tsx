@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { ZoneChart } from '@/components/charts/zone-chart'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
@@ -48,6 +48,8 @@ function AthleteDetailContent() {
   const [saving, setSaving] = useState(false)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
+  const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
+  const [recalcTss, setRecalcTss] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -184,6 +186,40 @@ function AthleteDetailContent() {
     const encoded = encodeURIComponent(text)
     const url = phone ? `https://wa.me/${phone.replace(/\D/g, '')}?text=${encoded}` : `https://wa.me/?text=${encoded}`
     window.open(url, '_blank')
+  }
+
+  async function handleRecalcHrTss() {
+    if (!athlete?.lthr_bpm) return
+    setRecalcTss(true)
+    const sb = createClient()
+    const lthr = athlete.lthr_bpm
+    // Update each activity that has avg_hr but no TSS
+    const { data: noTss } = await sb
+      .from('activities')
+      .select('id, duration_seconds, avg_hr_bpm')
+      .eq('athlete_id', athlete.id)
+      .is('tss', null)
+      .not('avg_hr_bpm', 'is', null)
+    if (noTss && noTss.length > 0) {
+      for (const act of noTss) {
+        const avgHr = act.avg_hr_bpm as number
+        const dur = act.duration_seconds as number
+        if (!avgHr || !dur) continue
+        const ifHR = Math.min(avgHr / lthr, 1.15)
+        const hrTss = Math.round((dur / 3600) * ifHR * ifHR * 100)
+        await sb.from('activities').update({ tss: hrTss }).eq('id', act.id)
+      }
+      // Recalculate PMC
+      await sb.rpc('recalculate_pmc', { p_athlete_id: athlete.id })
+      // Reload
+      const [newPmc, newActs] = await Promise.all([
+        import('@/lib/supabase/queries').then(m => m.getAthletePMC(athlete.id, 90)),
+        import('@/lib/supabase/queries').then(m => m.getAthleteActivities(athlete.id, 6)),
+      ])
+      setPmc(newPmc)
+      setActivities(newActs)
+    }
+    setRecalcTss(false)
   }
 
   const last = pmc[pmc.length - 1]
@@ -340,32 +376,89 @@ function AthleteDetailContent() {
             <ZoneChart zones={zoneData} />
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-bold text-foreground mb-4">Atividades Recentes</h3>
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
+              <h3 className="text-sm font-bold text-foreground">Atividades Recentes</h3>
+              {athlete.lthr_bpm && activities.some(a => a.tss == null) && (
+                <button
+                  onClick={handleRecalcHrTss}
+                  disabled={recalcTss}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold rounded-lg transition-colors disabled:opacity-50"
+                  style={{ background: '#ffa80015', border: '1px solid #ffa80040', color: '#ffa800' }}
+                  title="Calcular TSS via FC (hrTSS) para atividades sem potência"
+                >
+                  {recalcTss ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                  Calcular hrTSS
+                </button>
+              )}
+            </div>
             {activities.length === 0 ? (
               <p className="text-xs text-muted-foreground text-center py-8">Nenhuma atividade importada</p>
             ) : (
-              <div className="space-y-3">
-                {activities.map((act) => (
-                  <div key={act.id} className="flex items-start justify-between gap-2 pb-3 border-b border-border/50 last:border-0 last:pb-0">
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">{act.name ?? sportLabel(act.sport)}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {new Date(act.started_at).toLocaleDateString('pt-BR')} · {formatDuration(act.duration_seconds)}
-                      </p>
-                      {act.normalized_power && (
-                        <p className="text-[10px] text-muted-foreground">
-                          NP: {act.normalized_power}W
-                          {act.intensity_factor ? ` · IF: ${act.intensity_factor.toFixed(2)}` : ''}
-                        </p>
+              <div className="divide-y divide-border/40">
+                {activities.map((act) => {
+                  const isExpanded = expandedActivity === act.id
+                  const hasDist = act.distance_meters && act.distance_meters > 0
+                  return (
+                    <div key={act.id}>
+                      <button
+                        className="w-full flex items-center gap-3 px-5 py-3 hover:bg-secondary/30 transition-colors text-left"
+                        onClick={() => setExpandedActivity(isExpanded ? null : act.id)}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            {isExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+                            <p className="text-xs font-semibold text-foreground truncate">{act.name ?? sportLabel(act.sport)}</p>
+                          </div>
+                          <p className="text-[10px] text-muted-foreground ml-5">
+                            {new Date(act.started_at).toLocaleDateString('pt-BR')} · {formatDuration(act.duration_seconds)}
+                            {hasDist ? ` · ${((act.distance_meters ?? 0) / 1000).toFixed(1)}km` : ''}
+                          </p>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          {act.tss != null ? (
+                            <>
+                              <p className="text-sm font-bold text-[#ffa800]">{act.tss.toFixed(0)}</p>
+                              <p className="text-[9px] text-muted-foreground">TSS</p>
+                            </>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground/40">sem TSS</p>
+                          )}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="px-5 pb-4 pt-0 ml-8 space-y-3" style={{ background: '#0a0a0f' }}>
+                          <div className="grid grid-cols-2 gap-2 pt-3">
+                            {[
+                              { label: 'Duração', value: formatDuration(act.duration_seconds) },
+                              { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : '—' },
+                              { label: 'TSS', value: act.tss?.toFixed(0) ?? '—', highlight: true },
+                              { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : '—' },
+                              { label: 'NP', value: act.normalized_power ? `${act.normalized_power}W` : '—' },
+                              { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? '—' },
+                            ].map(({ label, value, highlight }) => (
+                              <div key={label} className="rounded-lg px-3 py-2" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
+                                <p className={`text-sm font-bold mt-0.5 ${highlight ? 'text-[#ffa800]' : 'text-foreground'}`}>{value}</p>
+                              </div>
+                            ))}
+                          </div>
+                          {act.tss == null && athlete.lthr_bpm && act.avg_hr_bpm && (
+                            <p className="text-[10px] text-[#ffa800] flex items-center gap-1">
+                              ⚡ FC média disponível — clique em "Calcular hrTSS" para estimar o TSS via LTHR ({athlete.lthr_bpm} bpm)
+                            </p>
+                          )}
+                          {act.tss == null && !athlete.lthr_bpm && (
+                            <p className="text-[10px] text-muted-foreground">
+                              TSS não calculado — sem wattímetro e sem LTHR cadastrado. Adicione o LTHR no perfil para estimar via FC.
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-[#ffa800]">{act.tss?.toFixed(0) ?? '—'}</p>
-                      <p className="text-[10px] text-muted-foreground">TSS</p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

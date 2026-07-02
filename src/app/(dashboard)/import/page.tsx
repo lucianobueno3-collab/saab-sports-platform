@@ -35,7 +35,7 @@ interface MetricsFile {
   log?: string
 }
 
-type AthleteSummary = { id: string; full_name: string; ftp_watts: number | null }
+type AthleteSummary = { id: string; full_name: string; ftp_watts: number | null; lthr_bpm: number | null }
 
 async function decompressGz(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   const ds = new DecompressionStream('gzip')
@@ -102,14 +102,14 @@ export default function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    createClient().from('athletes').select('id, full_name, ftp_watts').eq('active', true).order('full_name')
+    createClient().from('athletes').select('id, full_name, ftp_watts, lthr_bpm').eq('active', true).order('full_name')
       .then(({ data }) => setAthletes(data ?? []))
   }, [])
 
   const athlete = athletes.find(a => a.id === selectedAthlete) ?? null
 
-  async function parseSingleFit(buf: ArrayBuffer, name: string, ftp?: number): Promise<ParsedFile['metrics']> {
-    const act = await parseFitFile(buf, ftp)
+  async function parseSingleFit(buf: ArrayBuffer, name: string, ftp?: number, lthr?: number): Promise<ParsedFile['metrics']> {
+    const act = await parseFitFile(buf, ftp, lthr)
     return {
       tss: act.tss ?? undefined,
       duration: formatDuration(act.duration_seconds),
@@ -245,7 +245,7 @@ export default function ImportPage() {
               if (nf.ext === 'fit') {
                 let buf = nf.buffer!
                 if (nf.name.toLowerCase().endsWith('.gz')) buf = await decompressGz(buf)
-                const metrics = await parseSingleFit(buf, nf.name, athlete?.ftp_watts ?? undefined)
+                const metrics = await parseSingleFit(buf, nf.name, athlete?.ftp_watts ?? undefined, athlete?.lthr_bpm ?? undefined)
                 setFiles(prev => prev.map(f => f.id === nf.id ? { ...f, status: 'success', metrics, buffer: buf } : f))
               } else {
                 const blob = new Blob([nf.buffer!], { type: 'text/csv' })
@@ -279,7 +279,7 @@ export default function ImportPage() {
         try {
           let buf = await raw.arrayBuffer()
           if (isGz) buf = await decompressGz(buf)
-          const metrics = await parseSingleFit(buf, raw.name, athlete?.ftp_watts ?? undefined)
+          const metrics = await parseSingleFit(buf, raw.name, athlete?.ftp_watts ?? undefined, athlete?.lthr_bpm ?? undefined)
           setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'success', metrics, buffer: buf } : f))
         } catch (err) {
           setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'error', error: String(err) } : f))
@@ -334,7 +334,7 @@ export default function ImportPage() {
     for (const uf of readyFiles) {
       if (uf.ext === 'fit') {
         try {
-          const act = await parseFitFile(uf.buffer!, athlete.ftp_watts ?? undefined)
+          const act = await parseFitFile(uf.buffer!, athlete.ftp_watts ?? undefined, athlete.lthr_bpm ?? undefined)
           const { error } = await sb.from('activities').insert({
             athlete_id: selectedAthlete,
             name: act.name,
@@ -494,10 +494,23 @@ export default function ImportPage() {
             </div>
           )}
           {athlete && (
-            <p className="text-xs text-muted-foreground mt-2">
-              FTP: <span className="text-foreground font-medium">{athlete.ftp_watts ? `${athlete.ftp_watts}W` : 'não definido'}</span>
-              {!athlete.ftp_watts && <span className="text-[#ffa800] ml-2">⚠ Sem FTP — TSS não será calculado para arquivos .FIT</span>}
-            </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+              <p className="text-xs text-muted-foreground">
+                FTP: <span className="text-foreground font-medium">{athlete.ftp_watts ? `${athlete.ftp_watts}W` : 'não definido'}</span>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                LTHR: <span className="text-foreground font-medium">{athlete.lthr_bpm ? `${athlete.lthr_bpm} bpm` : 'não definido'}</span>
+              </p>
+              {!athlete.ftp_watts && !athlete.lthr_bpm && (
+                <span className="text-[10px] text-[#ffa800]">⚠ Sem FTP nem LTHR — TSS não será calculado. Cadastre no perfil do atleta.</span>
+              )}
+              {!athlete.ftp_watts && athlete.lthr_bpm && (
+                <span className="text-[10px] text-[#0088ff]">ℹ Sem FTP — TSS de ciclismo calculado via FC (hrTSS). Para potência, cadastre o FTP.</span>
+              )}
+              {athlete.ftp_watts && !athlete.lthr_bpm && (
+                <span className="text-[10px] text-[#ffa800]">⚠ Sem LTHR — natação e corrida sem potência não terão TSS. Cadastre o LTHR no perfil.</span>
+              )}
+            </div>
           )}
         </div>
 

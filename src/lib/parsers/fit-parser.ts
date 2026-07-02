@@ -10,6 +10,7 @@ export interface FitActivity {
   normalized_power: number | null
   intensity_factor: number | null
   tss: number | null
+  tss_method: 'power' | 'hr' | null
   avg_hr: number | null
   max_hr: number | null
   avg_cadence: number | null
@@ -17,7 +18,11 @@ export interface FitActivity {
   calories: number | null
 }
 
-export async function parseFitFile(buffer: ArrayBuffer, ftp?: number): Promise<FitActivity> {
+export async function parseFitFile(
+  buffer: ArrayBuffer,
+  ftp?: number,
+  lthr?: number,
+): Promise<FitActivity> {
   return new Promise((resolve, reject) => {
     const parser = new FitParser({
       force: true,
@@ -69,9 +74,24 @@ export async function parseFitFile(buffer: ArrayBuffer, ftp?: number): Promise<F
         const npFinal = np ?? avgPower
         let tss: number | null = null
         let intensityFactor: number | null = null
+        let tssMethod: 'power' | 'hr' | null = null
+
+        // Power-based TSS (primary — requires power meter)
         if (ftp && npFinal && duration > 0) {
           intensityFactor = Math.round((npFinal / ftp) * 100) / 100
           tss = Math.round((duration * npFinal * intensityFactor) / (ftp * 3600) * 100)
+          tssMethod = 'power'
+        }
+
+        // HR-based TSS (fallback — for running, swimming, cycling without power)
+        // hrTSS = (duration_hours) × IF² × 100, where IF = avg_hr / LTHR
+        if (!tss && lthr && avgHR && avgHR > 0 && duration > 0) {
+          const ifHR = avgHR / lthr
+          // Cap IF at 1.15 to avoid absurd values when HR drifts above LTHR
+          const ifCapped = Math.min(ifHR, 1.15)
+          tss = Math.round((duration / 3600) * ifCapped * ifCapped * 100)
+          intensityFactor = Math.round(ifHR * 100) / 100
+          tssMethod = 'hr'
         }
 
         const sportStr = sport.toString().toLowerCase()
@@ -88,6 +108,7 @@ export async function parseFitFile(buffer: ArrayBuffer, ftp?: number): Promise<F
           normalized_power: npFinal ? Math.round(npFinal) : null,
           intensity_factor: intensityFactor,
           tss,
+          tss_method: tssMethod,
           avg_hr: avgHR ? Math.round(avgHR) : null,
           max_hr: maxHR ? Math.round(maxHR) : null,
           avg_cadence: avgCadence ? Math.round(avgCadence) : null,
