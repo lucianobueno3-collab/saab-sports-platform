@@ -8,6 +8,9 @@ export type AthleteRow = {
   primary_sport: string
   ftp_watts: number | null
   lthr_bpm: number | null
+  lthr_bike_bpm: number | null
+  lthr_run_bpm: number | null
+  lthr_swim_bpm: number | null
   vo2max_ml_kg_min: number | null
   weight_kg: number | null
   active: boolean
@@ -77,7 +80,7 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, { data: extra }] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm').eq('id', id).single(),
   ])
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow

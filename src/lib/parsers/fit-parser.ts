@@ -21,7 +21,9 @@ export interface FitActivity {
 export async function parseFitFile(
   buffer: ArrayBuffer,
   ftp?: number,
-  lthr?: number,
+  lthrBike?: number,
+  lthrRun?: number,
+  lthrSwim?: number,
 ): Promise<FitActivity> {
   return new Promise((resolve, reject) => {
     const parser = new FitParser({
@@ -83,18 +85,22 @@ export async function parseFitFile(
           tssMethod = 'power'
         }
 
+        const sportStr = sport.toString().toLowerCase()
+
         // HR-based TSS (fallback — for running, swimming, cycling without power)
-        // hrTSS = (duration_hours) × IF² × 100, where IF = avg_hr / LTHR
-        if (!tss && lthr && avgHR && avgHR > 0 && duration > 0) {
-          const ifHR = avgHR / lthr
+        // hrTSS = (duration_hours) × IF² × 100, where IF = avg_hr / LTHR_sport
+        // Pick LTHR by sport; fall back to bike LTHR if specific one not set
+        const lthrForSport = sportStr.includes('swim') ? (lthrSwim ?? lthrBike)
+          : (sportStr.includes('run')) ? (lthrRun ?? lthrBike)
+          : lthrBike
+        if (!tss && lthrForSport && avgHR && avgHR > 0 && duration > 0) {
+          const ifHR = avgHR / lthrForSport
           // Cap IF at 1.15 to avoid absurd values when HR drifts above LTHR
           const ifCapped = Math.min(ifHR, 1.15)
           tss = Math.round((duration / 3600) * ifCapped * ifCapped * 100)
           intensityFactor = Math.round(ifHR * 100) / 100
           tssMethod = 'hr'
         }
-
-        const sportStr = sport.toString().toLowerCase()
         const nameMap: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', swimming: 'Natação', triathlon: 'Triathlon', ride: 'Ciclismo', run: 'Corrida', swim: 'Natação' }
         const sportName = nameMap[sportStr] ?? 'Treino'
 

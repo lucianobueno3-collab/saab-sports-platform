@@ -43,7 +43,7 @@ function AthleteDetailContent() {
   const [hrv, setHrv] = useState<DailyMetricRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
-  const [editValues, setEditValues] = useState({ ftp_watts: '', lthr_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
+  const [editValues, setEditValues] = useState({ ftp_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
@@ -64,6 +64,9 @@ function AthleteDetailContent() {
       if (a) setEditValues({
         ftp_watts: a.ftp_watts?.toString() ?? '',
         lthr_bpm: a.lthr_bpm?.toString() ?? '',
+        lthr_bike_bpm: a.lthr_bike_bpm?.toString() ?? '',
+        lthr_run_bpm: a.lthr_run_bpm?.toString() ?? '',
+        lthr_swim_bpm: a.lthr_swim_bpm?.toString() ?? '',
         vo2max_ml_kg_min: a.vo2max_ml_kg_min?.toString() ?? '',
         weight_kg: a.weight_kg?.toString() ?? '',
         primary_sport: a.primary_sport ?? '',
@@ -114,6 +117,9 @@ function AthleteDetailContent() {
     const updates = {
       ftp_watts: editValues.ftp_watts ? parseInt(editValues.ftp_watts) : null,
       lthr_bpm: editValues.lthr_bpm ? parseInt(editValues.lthr_bpm) : null,
+      lthr_bike_bpm: editValues.lthr_bike_bpm ? parseInt(editValues.lthr_bike_bpm) : null,
+      lthr_run_bpm: editValues.lthr_run_bpm ? parseInt(editValues.lthr_run_bpm) : null,
+      lthr_swim_bpm: editValues.lthr_swim_bpm ? parseInt(editValues.lthr_swim_bpm) : null,
       vo2max_ml_kg_min: editValues.vo2max_ml_kg_min ? parseFloat(editValues.vo2max_ml_kg_min) : null,
       weight_kg: editValues.weight_kg ? parseFloat(editValues.weight_kg) : null,
       primary_sport: editValues.primary_sport || athlete.primary_sport,
@@ -189,14 +195,14 @@ function AthleteDetailContent() {
   }
 
   async function handleRecalcHrTss() {
-    if (!athlete?.lthr_bpm) return
+    const hasLthr = athlete?.lthr_bpm || athlete?.lthr_bike_bpm || athlete?.lthr_run_bpm || athlete?.lthr_swim_bpm
+    if (!athlete || !hasLthr) return
     setRecalcTss(true)
     const sb = createClient()
-    const lthr = athlete.lthr_bpm
     // Update each activity that has avg_hr but no TSS
     const { data: noTss } = await sb
       .from('activities')
-      .select('id, duration_seconds, avg_hr_bpm')
+      .select('id, sport, duration_seconds, avg_hr_bpm')
       .eq('athlete_id', athlete.id)
       .is('tss', null)
       .not('avg_hr_bpm', 'is', null)
@@ -204,14 +210,18 @@ function AthleteDetailContent() {
       for (const act of noTss) {
         const avgHr = act.avg_hr_bpm as number
         const dur = act.duration_seconds as number
+        const sport = (act.sport as string ?? '').toLowerCase()
         if (!avgHr || !dur) continue
+        // Pick LTHR by sport, fall back to generic lthr_bpm
+        const lthr = sport.includes('swim') ? (athlete.lthr_swim_bpm ?? athlete.lthr_bpm)
+          : sport.includes('run') ? (athlete.lthr_run_bpm ?? athlete.lthr_bpm)
+          : (athlete.lthr_bike_bpm ?? athlete.lthr_bpm)
+        if (!lthr) continue
         const ifHR = Math.min(avgHr / lthr, 1.15)
         const hrTss = Math.round((dur / 3600) * ifHR * ifHR * 100)
         await sb.from('activities').update({ tss: hrTss }).eq('id', act.id)
       }
-      // Recalculate PMC
       await sb.rpc('recalculate_pmc', { p_athlete_id: athlete.id })
-      // Reload
       const [newPmc, newActs] = await Promise.all([
         import('@/lib/supabase/queries').then(m => m.getAthletePMC(athlete.id, 90)),
         import('@/lib/supabase/queries').then(m => m.getAthleteActivities(athlete.id, 6)),
@@ -379,7 +389,7 @@ function AthleteDetailContent() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
               <h3 className="text-sm font-bold text-foreground">Atividades Recentes</h3>
-              {athlete.lthr_bpm && activities.some(a => a.tss == null) && (
+              {(athlete.lthr_bpm || athlete.lthr_bike_bpm || athlete.lthr_run_bpm || athlete.lthr_swim_bpm) && activities.some(a => a.tss == null) && (
                 <button
                   onClick={handleRecalcHrTss}
                   disabled={recalcTss}
@@ -506,9 +516,25 @@ function AthleteDetailContent() {
                     placeholder="ex: 250" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">FC Limiar (bpm)</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">LTHR Geral (bpm) <span className="text-muted-foreground/50">— fallback</span></label>
                   <input type="number" value={editValues.lthr_bpm} onChange={e => setEditValues(v => ({ ...v, lthr_bpm: e.target.value }))}
                     placeholder="ex: 162" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                </div>
+                <div className="col-span-2">
+                  <p className="text-[10px] font-bold text-muted-foreground mb-2 uppercase tracking-wider">LTHR por modalidade <span className="font-normal normal-case">(para hrTSS preciso)</span></p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {([
+                      { label: '🚴 Bike', key: 'lthr_bike_bpm', placeholder: 'ex: 165' },
+                      { label: '🏃 Corrida', key: 'lthr_run_bpm', placeholder: 'ex: 170' },
+                      { label: '🏊 Natação', key: 'lthr_swim_bpm', placeholder: 'ex: 155' },
+                    ] as { label: string; key: 'lthr_bike_bpm' | 'lthr_run_bpm' | 'lthr_swim_bpm'; placeholder: string }[]).map(({ label, key, placeholder }) => (
+                      <div key={key}>
+                        <label className="block text-[10px] text-muted-foreground mb-1">{label}</label>
+                        <input type="number" value={editValues[key]} onChange={e => setEditValues(v => ({ ...v, [key]: e.target.value }))}
+                          placeholder={placeholder} className="w-full px-2.5 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">VO2max (ml/kg/min)</label>
