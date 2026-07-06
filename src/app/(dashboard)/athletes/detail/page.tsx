@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import React, { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Topbar } from '@/components/layout/topbar'
 import { KpiCard } from '@/components/dashboard/kpi-card'
@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { ZoneChart } from '@/components/charts/zone-chart'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target } from 'lucide-react'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
@@ -18,6 +18,10 @@ import {
   type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow,
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
+import { SaudeTab } from '@/components/athlete/saude-tab'
+import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { ProvasTab } from '@/components/athlete/provas-tab'
+import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 
 function sportLabel(sport: string) {
   const map: Record<string, string> = {
@@ -50,6 +54,7 @@ function AthleteDetailContent() {
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
+  const [activeTab, setActiveTab] = useState<'performance' | 'saude' | 'nutricao' | 'provas' | 'evolucao'>('performance')
 
   useEffect(() => {
     if (!id) return
@@ -298,6 +303,32 @@ function AthleteDetailContent() {
           </div>
         </div>
 
+        {/* Tab Navigation */}
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }}>
+          {([
+            { key: 'performance', label: 'Performance', icon: TrendingUp },
+            { key: 'saude', label: 'Saúde', icon: AlertTriangle },
+            { key: 'nutricao', label: 'Nutrição', icon: Utensils },
+            { key: 'provas', label: 'Provas', icon: Trophy },
+            { key: 'evolucao', label: 'Evolução', icon: Target },
+          ] as { key: typeof activeTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => setActiveTab(key)}
+              className="flex items-center gap-1.5 flex-1 justify-center py-2 px-3 rounded-lg text-xs font-semibold transition-all"
+              style={activeTab === key
+                ? { background: '#7c3aed', color: '#fff' }
+                : { color: '#64748b' }
+              }
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {activeTab === 'performance' && (
+          <>
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
           <KpiCard label="CTL / Fitness" value={last?.ctl?.toFixed(0) ?? '—'} icon={TrendingUp} color="blue"
@@ -473,6 +504,13 @@ function AthleteDetailContent() {
             )}
           </div>
         </div>
+          </>
+        )}
+
+        {activeTab === 'saude' && <SaudeTab athleteId={id} />}
+        {activeTab === 'nutricao' && <NutricaoTab athleteId={id} currentWeight={athlete.weight_kg} />}
+        {activeTab === 'provas' && <ProvasTab athleteId={id} />}
+        {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
       </div>
 
       {/* Edit modal */}

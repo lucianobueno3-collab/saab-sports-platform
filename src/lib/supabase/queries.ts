@@ -179,6 +179,122 @@ export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
   })
 }
 
+// ─── Portal do Atleta ────────────────────────────────────────────────────────
+
+export type InjuryRow = {
+  id: string
+  athlete_id: string
+  started_at: string
+  resolved_at: string | null
+  location: string
+  injury_type: string
+  severity: 'mild' | 'moderate' | 'severe'
+  notes: string | null
+}
+
+export type MedicalExamRow = {
+  id: string
+  athlete_id: string
+  exam_date: string
+  exam_name: string
+  value: number | null
+  unit: string | null
+  reference_min: number | null
+  reference_max: number | null
+  notes: string | null
+}
+
+export type BodyCompositionRow = {
+  id: string
+  athlete_id: string
+  measured_at: string
+  weight_kg: number | null
+  body_fat_pct: number | null
+  muscle_mass_kg: number | null
+  bone_mass_kg: number | null
+  visceral_fat: number | null
+  notes: string | null
+}
+
+export type NutritionPlanRow = {
+  id: string
+  athlete_id: string
+  phase: string
+  calories_target: number | null
+  protein_g: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  hydration_ml: number | null
+  notes: string | null
+  active: boolean
+}
+
+export type CompetitionRow = {
+  id: string
+  athlete_id: string
+  race_date: string
+  name: string
+  sport: string | null
+  distance_label: string | null
+  goal_time_min: number | null
+  result_time_min: number | null
+  result_position: number | null
+  dnf: boolean
+  priority: 'A' | 'B' | 'C'
+  notes: string | null
+}
+
+export type GoalRow = {
+  id: string
+  athlete_id: string
+  title: string
+  category: string
+  target_date: string | null
+  target_value: number | null
+  target_unit: string | null
+  current_value: number | null
+  status: 'active' | 'achieved' | 'cancelled'
+  notes: string | null
+}
+
+export async function getAthleteInjuries(athleteId: string): Promise<InjuryRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('injuries').select('*').eq('athlete_id', athleteId).order('started_at', { ascending: false })
+  return (data ?? []) as InjuryRow[]
+}
+
+export async function getAthleteMedicalExams(athleteId: string): Promise<MedicalExamRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('medical_exams').select('*').eq('athlete_id', athleteId).order('exam_date', { ascending: false })
+  return (data ?? []) as MedicalExamRow[]
+}
+
+export async function getAthleteBodyComposition(athleteId: string): Promise<BodyCompositionRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('body_composition').select('*').eq('athlete_id', athleteId).order('measured_at', { ascending: false })
+  return (data ?? []) as BodyCompositionRow[]
+}
+
+export async function getAthleteNutritionPlans(athleteId: string): Promise<NutritionPlanRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('nutrition_plans').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false })
+  return (data ?? []) as NutritionPlanRow[]
+}
+
+export async function getAthleteCompetitions(athleteId: string): Promise<CompetitionRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('competitions').select('*').eq('athlete_id', athleteId).order('race_date', { ascending: false })
+  return (data ?? []) as CompetitionRow[]
+}
+
+export async function getAthleteGoals(athleteId: string): Promise<GoalRow[]> {
+  const sb = createClient()
+  const { data } = await sb.from('athlete_goals').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false })
+  return (data ?? []) as GoalRow[]
+}
+
+// ─── Coach Profile ────────────────────────────────────────────────────────────
+
 export async function getCoachProfile(): Promise<{ full_name: string | null; phone: string | null; role: string | null } | null> {
   const sb = createClient()
   const { data: { user } } = await sb.auth.getUser()
