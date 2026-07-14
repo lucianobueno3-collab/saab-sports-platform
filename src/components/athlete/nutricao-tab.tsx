@@ -16,9 +16,9 @@ function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
-interface Props { athleteId: string; currentWeight?: number | null }
+interface Props { athleteId: string }
 
-export function NutricaoTab({ athleteId, currentWeight }: Props) {
+export function NutricaoTab({ athleteId }: Props) {
   const [bodyComp, setBodyComp] = useState<BodyCompositionRow[]>([])
   const [plans, setPlans] = useState<NutritionPlanRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,12 +85,14 @@ export function NutricaoTab({ athleteId, currentWeight }: Props) {
   }
 
   async function deleteBodyComp(id: string) {
+    if (!window.confirm('Excluir esta medição permanentemente?')) return
     const sb = createClient()
     await sb.from('body_composition').delete().eq('id', id)
     load()
   }
 
   async function deletePlan(id: string) {
+    if (!window.confirm('Excluir este plano nutricional permanentemente?')) return
     const sb = createClient()
     await sb.from('nutrition_plans').delete().eq('id', id)
     load()

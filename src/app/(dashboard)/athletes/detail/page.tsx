@@ -7,7 +7,7 @@ import { KpiCard } from '@/components/dashboard/kpi-card'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
-import { ZoneChart } from '@/components/charts/zone-chart'
+import { hrTss, lthrForSport } from '@/lib/calculations/tss'
 import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target } from 'lucide-react'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
@@ -47,7 +47,7 @@ function AthleteDetailContent() {
   const [hrv, setHrv] = useState<DailyMetricRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
-  const [editValues, setEditValues] = useState({ ftp_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
+  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
@@ -68,6 +68,7 @@ function AthleteDetailContent() {
       setAthlete(a)
       if (a) setEditValues({
         ftp_watts: a.ftp_watts?.toString() ?? '',
+        ftp_run_watts: a.ftp_run_watts?.toString() ?? '',
         lthr_bpm: a.lthr_bpm?.toString() ?? '',
         lthr_bike_bpm: a.lthr_bike_bpm?.toString() ?? '',
         lthr_run_bpm: a.lthr_run_bpm?.toString() ?? '',
@@ -121,6 +122,7 @@ function AthleteDetailContent() {
     const sb = createClient()
     const updates = {
       ftp_watts: editValues.ftp_watts ? parseInt(editValues.ftp_watts) : null,
+      ftp_run_watts: editValues.ftp_run_watts ? parseInt(editValues.ftp_run_watts) : null,
       lthr_bpm: editValues.lthr_bpm ? parseInt(editValues.lthr_bpm) : null,
       lthr_bike_bpm: editValues.lthr_bike_bpm ? parseInt(editValues.lthr_bike_bpm) : null,
       lthr_run_bpm: editValues.lthr_run_bpm ? parseInt(editValues.lthr_run_bpm) : null,
@@ -212,19 +214,26 @@ function AthleteDetailContent() {
       .is('tss', null)
       .not('avg_hr_bpm', 'is', null)
     if (noTss && noTss.length > 0) {
-      for (const act of noTss) {
+      const thresholds = {
+        lthrBike: athlete.lthr_bike_bpm, lthrRun: athlete.lthr_run_bpm,
+        lthrSwim: athlete.lthr_swim_bpm, lthrGeneric: athlete.lthr_bpm,
+      }
+      const updates = noTss.flatMap(act => {
         const avgHr = act.avg_hr_bpm as number
         const dur = act.duration_seconds as number
-        const sport = (act.sport as string ?? '').toLowerCase()
-        if (!avgHr || !dur) continue
-        // Pick LTHR by sport, fall back to generic lthr_bpm
-        const lthr = sport.includes('swim') ? (athlete.lthr_swim_bpm ?? athlete.lthr_bpm)
-          : sport.includes('run') ? (athlete.lthr_run_bpm ?? athlete.lthr_bpm)
-          : (athlete.lthr_bike_bpm ?? athlete.lthr_bpm)
-        if (!lthr) continue
-        const ifHR = Math.min(avgHr / lthr, 1.15)
-        const hrTss = Math.round((dur / 3600) * ifHR * ifHR * 100)
-        await sb.from('activities').update({ tss: hrTss }).eq('id', act.id)
+        if (!avgHr || !dur) return []
+        const lthr = lthrForSport((act.sport as string) ?? '', thresholds)
+        if (!lthr) return []
+        const result = hrTss(dur, avgHr, lthr)
+        return [{ id: act.id as string, tss: result.tss, intensity_factor: result.intensityFactor }]
+      })
+      // Atualiza em paralelo, em lotes de 10 para não sobrecarregar
+      for (let i = 0; i < updates.length; i += 10) {
+        const batch = updates.slice(i, i + 10)
+        const results = await Promise.all(batch.map(u =>
+          sb.from('activities').update({ tss: u.tss, intensity_factor: u.intensity_factor, tss_method: 'hr' }).eq('id', u.id)
+        ))
+        results.forEach(r => { if (r.error) console.error('[hrTSS]', r.error.message) })
       }
       await sb.rpc('recalculate_pmc', { p_athlete_id: athlete.id })
       const [newPmc, newActs] = await Promise.all([
@@ -250,14 +259,6 @@ function AthleteDetailContent() {
   const hrvForChart = hrv
     .filter(h => h.hrv_rmssd != null)
     .map(h => ({ date: h.date, hrv: h.hrv_rmssd! }))
-
-  const zoneData = [
-    { zone: 'Z1', name: 'Recuperação', percent: 0, color: '#4ade80' },
-    { zone: 'Z2', name: 'Resistência', percent: 0, color: '#86efac' },
-    { zone: 'Z3', name: 'Tempo', percent: 0, color: '#fbbf24' },
-    { zone: 'Z4', name: 'Limiar', percent: 0, color: '#f97316' },
-    { zone: 'Z5', name: 'VO2max', percent: 0, color: '#ef4444' },
-  ]
 
   return (
     <div>
@@ -382,7 +383,8 @@ function AthleteDetailContent() {
               {([
                 ['Modalidade', sportLabel(athlete.primary_sport)],
                 ['Peso', athlete.weight_kg ? `${athlete.weight_kg} kg` : '—'],
-                ['FTP', athlete.ftp_watts ? `${athlete.ftp_watts} W` : '—'],
+                ['FTP Bike', athlete.ftp_watts ? `${athlete.ftp_watts} W` : '—'],
+                ['FTP Corrida', athlete.ftp_run_watts ? `${athlete.ftp_run_watts} W` : '—'],
                 ['LTHR', athlete.lthr_bpm ? `${athlete.lthr_bpm} bpm` : '—'],
                 ['VO2max', athlete.vo2max_ml_kg_min ? `${athlete.vo2max_ml_kg_min} ml/kg/min` : '—'],
                 ['W/kg', wKg],
@@ -396,8 +398,8 @@ function AthleteDetailContent() {
           </div>
         </div>
 
-        {/* HRV + Zonas + Atividades */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* HRV + Atividades */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-card border border-border rounded-xl p-5">
             <h3 className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
               <Heart className="w-4 h-4 text-[#00d084]" /> HRV — 30 dias
@@ -407,14 +409,6 @@ function AthleteDetailContent() {
               ? <HRVChart data={hrvForChart} baseline={65} />
               : <div className="h-32 flex items-center justify-center text-muted-foreground text-xs">Sem dados de HRV</div>
             }
-          </div>
-
-          <div className="bg-card border border-border rounded-xl p-5">
-            <h3 className="text-sm font-bold text-foreground mb-1 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-[#ffa800]" /> Zonas FC
-            </h3>
-            <p className="text-xs text-muted-foreground mb-4">Semana atual</p>
-            <ZoneChart zones={zoneData} />
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -474,7 +468,7 @@ function AthleteDetailContent() {
                             {[
                               { label: 'Duração', value: formatDuration(act.duration_seconds) },
                               { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : '—' },
-                              { label: 'TSS', value: act.tss?.toFixed(0) ?? '—', highlight: true },
+                              { label: `TSS${act.tss_method === 'hr' ? ' (via FC)' : act.tss_method === 'power' ? ' (via potência)' : ''}`, value: act.tss?.toFixed(0) ?? '—', highlight: true },
                               { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : '—' },
                               { label: 'NP', value: act.normalized_power ? `${act.normalized_power}W` : '—' },
                               { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? '—' },
@@ -487,7 +481,7 @@ function AthleteDetailContent() {
                           </div>
                           {act.tss == null && athlete.lthr_bpm && act.avg_hr_bpm && (
                             <p className="text-[10px] text-[#ffa800] flex items-center gap-1">
-                              ⚡ FC média disponível — clique em "Calcular hrTSS" para estimar o TSS via LTHR ({athlete.lthr_bpm} bpm)
+                              ⚡ FC média disponível — clique em &ldquo;Calcular hrTSS&rdquo; para estimar o TSS via LTHR ({athlete.lthr_bpm} bpm)
                             </p>
                           )}
                           {act.tss == null && !athlete.lthr_bpm && (
@@ -508,7 +502,7 @@ function AthleteDetailContent() {
         )}
 
         {activeTab === 'saude' && <SaudeTab athleteId={id} />}
-        {activeTab === 'nutricao' && <NutricaoTab athleteId={id} currentWeight={athlete.weight_kg} />}
+        {activeTab === 'nutricao' && <NutricaoTab athleteId={id} />}
         {activeTab === 'provas' && <ProvasTab athleteId={id} />}
         {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
       </div>
@@ -549,9 +543,14 @@ function AthleteDetailContent() {
                     placeholder="ex: 75" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">FTP (watts)</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">FTP Bike (watts)</label>
                   <input type="number" value={editValues.ftp_watts} onChange={e => setEditValues(v => ({ ...v, ftp_watts: e.target.value }))}
                     placeholder="ex: 250" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">FTP Corrida (watts) <span className="text-muted-foreground/50">— Stryd</span></label>
+                  <input type="number" value={editValues.ftp_run_watts} onChange={e => setEditValues(v => ({ ...v, ftp_run_watts: e.target.value }))}
+                    placeholder="ex: 181" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">LTHR Geral (bpm) <span className="text-muted-foreground/50">— fallback</span></label>

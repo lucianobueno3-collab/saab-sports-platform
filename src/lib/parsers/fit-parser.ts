@@ -1,4 +1,5 @@
 import FitParser from 'fit-file-parser'
+import { calcActivityTss, type SportThresholds } from '@/lib/calculations/tss'
 
 export interface FitActivity {
   date: string
@@ -20,10 +21,7 @@ export interface FitActivity {
 
 export async function parseFitFile(
   buffer: ArrayBuffer,
-  ftp?: number,
-  lthrBike?: number,
-  lthrRun?: number,
-  lthrSwim?: number,
+  thresholds: SportThresholds = {},
 ): Promise<FitActivity> {
   return new Promise((resolve, reject) => {
     const parser = new FitParser({
@@ -57,11 +55,14 @@ export async function parseFitFile(
         const elevGain = session.total_ascent ?? null
         const calories = session.total_calories ?? null
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const records: { power?: number }[] = sessions.flatMap((s: any) =>
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (s.laps ?? []).flatMap((l: any) => l.records ?? [])
         )
         const powers = records.map(r => r.power).filter((p): p is number => typeof p === 'number' && p > 0)
 
+        // Normalized Power: média móvel de 30s elevada à 4ª potência
         let np: number | null = null
         if (powers.length >= 30) {
           const rolling: number[] = []
@@ -73,34 +74,17 @@ export async function parseFitFile(
           np = Math.round((rolling.reduce((a, b) => a + b, 0) / rolling.length) ** 0.25)
         }
 
-        const npFinal = np ?? avgPower
-        let tss: number | null = null
-        let intensityFactor: number | null = null
-        let tssMethod: 'power' | 'hr' | null = null
-
-        // Power-based TSS (primary — requires power meter)
-        if (ftp && npFinal && duration > 0) {
-          intensityFactor = Math.round((npFinal / ftp) * 100) / 100
-          tss = Math.round((duration * npFinal * intensityFactor) / (ftp * 3600) * 100)
-          tssMethod = 'power'
-        }
-
         const sportStr = sport.toString().toLowerCase()
+        const npFinal = np ?? avgPower
 
-        // HR-based TSS (fallback — for running, swimming, cycling without power)
-        // hrTSS = (duration_hours) × IF² × 100, where IF = avg_hr / LTHR_sport
-        // Pick LTHR by sport; fall back to bike LTHR if specific one not set
-        const lthrForSport = sportStr.includes('swim') ? (lthrSwim ?? lthrBike)
-          : (sportStr.includes('run')) ? (lthrRun ?? lthrBike)
-          : lthrBike
-        if (!tss && lthrForSport && avgHR && avgHR > 0 && duration > 0) {
-          const ifHR = avgHR / lthrForSport
-          // Cap IF at 1.15 to avoid absurd values when HR drifts above LTHR
-          const ifCapped = Math.min(ifHR, 1.15)
-          tss = Math.round((duration / 3600) * ifCapped * ifCapped * 100)
-          intensityFactor = Math.round(ifHR * 100) / 100
-          tssMethod = 'hr'
-        }
+        const result = calcActivityTss({
+          sport: sportStr,
+          durationSeconds: duration,
+          np: npFinal,
+          avgHr: avgHR,
+          thresholds,
+        })
+
         const nameMap: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', swimming: 'Natação', triathlon: 'Triathlon', ride: 'Ciclismo', run: 'Corrida', swim: 'Natação' }
         const sportName = nameMap[sportStr] ?? 'Treino'
 
@@ -112,9 +96,9 @@ export async function parseFitFile(
           distance_meters: distance ? Math.round(distance) : null,
           avg_power_watts: avgPower ? Math.round(avgPower) : null,
           normalized_power: npFinal ? Math.round(npFinal) : null,
-          intensity_factor: intensityFactor,
-          tss,
-          tss_method: tssMethod,
+          intensity_factor: result?.intensityFactor ?? null,
+          tss: result?.tss ?? null,
+          tss_method: result?.method ?? null,
           avg_hr: avgHR ? Math.round(avgHR) : null,
           max_hr: maxHR ? Math.round(maxHR) : null,
           avg_cadence: avgCadence ? Math.round(avgCadence) : null,

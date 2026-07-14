@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteInjuries, getAthleteMedicalExams, type InjuryRow, type MedicalExamRow } from '@/lib/supabase/queries'
+import { todayLocalISO } from '@/lib/dates'
 import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle } from 'lucide-react'
 
 const SEVERITY_LABEL = { mild: 'Leve', moderate: 'Moderada', severe: 'Grave' }
@@ -89,17 +90,19 @@ export function SaudeTab({ athleteId }: Props) {
 
   async function resolveInjury(id: string) {
     const sb = createClient()
-    await sb.from('injuries').update({ resolved_at: new Date().toISOString().slice(0, 10) }).eq('id', id)
+    await sb.from('injuries').update({ resolved_at: todayLocalISO() }).eq('id', id)
     load()
   }
 
   async function deleteInjury(id: string) {
+    if (!window.confirm('Excluir esta lesão permanentemente?')) return
     const sb = createClient()
     await sb.from('injuries').delete().eq('id', id)
     load()
   }
 
   async function deleteExam(id: string) {
+    if (!window.confirm('Excluir este exame permanentemente?')) return
     const sb = createClient()
     await sb.from('medical_exams').delete().eq('id', id)
     load()

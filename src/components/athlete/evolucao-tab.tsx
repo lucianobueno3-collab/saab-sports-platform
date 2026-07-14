@@ -90,6 +90,7 @@ export function EvolucaoTab({ athleteId }: Props) {
   }
 
   async function deleteGoal(id: string) {
+    if (!window.confirm('Excluir esta meta permanentemente?')) return
     const sb = createClient()
     await sb.from('athlete_goals').delete().eq('id', id)
     load()

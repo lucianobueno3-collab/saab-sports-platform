@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteCompetitions, type CompetitionRow } from '@/lib/supabase/queries'
+import { todayLocalISO, daysFromToday } from '@/lib/dates'
 import { Plus, X, Trophy, Calendar, Target, CheckCircle2 } from 'lucide-react'
 
 const PRIORITY_COLOR = { A: '#ef4444', B: '#fbbf24', C: '#60a5fa' }
@@ -74,12 +75,13 @@ export function ProvasTab({ athleteId }: Props) {
   }
 
   async function deleteComp(id: string) {
+    if (!window.confirm('Excluir esta prova permanentemente?')) return
     const sb = createClient()
     await sb.from('competitions').delete().eq('id', id)
     load()
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayLocalISO()
   const upcoming = competitions.filter(c => c.race_date >= today).sort((a, b) => a.race_date.localeCompare(b.race_date))
   const past = competitions.filter(c => c.race_date < today)
 
@@ -130,7 +132,7 @@ export function ProvasTab({ athleteId }: Props) {
           </div>
           <div className="divide-y divide-border/40">
             {upcoming.map(c => {
-              const daysUntil = Math.ceil((new Date(c.race_date).getTime() - new Date().getTime()) / 86400000)
+              const daysUntil = daysFromToday(c.race_date)
               const color = PRIORITY_COLOR[c.priority]
               return (
                 <div key={c.id} className="flex items-start gap-4 px-5 py-4">

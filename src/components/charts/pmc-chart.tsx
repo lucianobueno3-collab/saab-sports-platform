@@ -4,9 +4,16 @@ import {
   ComposedChart, Line, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, ReferenceLine
 } from 'recharts'
-import { PMCPoint } from '@/lib/calculations/pmc'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+
+export interface PMCPoint {
+  date: string
+  ctl: number
+  atl: number
+  tsb: number
+  tss?: number
+}
 
 interface PMCChartProps {
   data: PMCPoint[]

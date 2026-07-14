@@ -35,7 +35,7 @@ interface MetricsFile {
   log?: string
 }
 
-type AthleteSummary = { id: string; full_name: string; ftp_watts: number | null; lthr_bpm: number | null; lthr_bike_bpm: number | null; lthr_run_bpm: number | null; lthr_swim_bpm: number | null }
+type AthleteSummary = { id: string; full_name: string; ftp_watts: number | null; ftp_run_watts: number | null; lthr_bpm: number | null; lthr_bike_bpm: number | null; lthr_run_bpm: number | null; lthr_swim_bpm: number | null }
 
 async function decompressGz(buffer: ArrayBuffer): Promise<ArrayBuffer> {
   const ds = new DecompressionStream('gzip')
@@ -102,14 +102,22 @@ export default function ImportPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    createClient().from('athletes').select('id, full_name, ftp_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm').eq('active', true).order('full_name')
+    createClient().from('athletes').select('id, full_name, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm').eq('active', true).order('full_name')
       .then(({ data }) => setAthletes(data ?? []))
   }, [])
 
   const athlete = athletes.find(a => a.id === selectedAthlete) ?? null
 
-  async function parseSingleFit(buf: ArrayBuffer, name: string, ftp?: number, lthrBike?: number, lthrRun?: number, lthrSwim?: number): Promise<ParsedFile['metrics']> {
-    const act = await parseFitFile(buf, ftp, lthrBike, lthrRun, lthrSwim)
+  function athleteThresholds(a: AthleteSummary | null) {
+    return {
+      ftp: a?.ftp_watts, ftpRun: a?.ftp_run_watts,
+      lthrBike: a?.lthr_bike_bpm, lthrRun: a?.lthr_run_bpm,
+      lthrSwim: a?.lthr_swim_bpm, lthrGeneric: a?.lthr_bpm,
+    }
+  }
+
+  async function parseSingleFit(buf: ArrayBuffer, name: string, a: AthleteSummary | null): Promise<ParsedFile['metrics']> {
+    const act = await parseFitFile(buf, athleteThresholds(a))
     return {
       tss: act.tss ?? undefined,
       duration: formatDuration(act.duration_seconds),
@@ -245,7 +253,7 @@ export default function ImportPage() {
               if (nf.ext === 'fit') {
                 let buf = nf.buffer!
                 if (nf.name.toLowerCase().endsWith('.gz')) buf = await decompressGz(buf)
-                const metrics = await parseSingleFit(buf, nf.name, athlete?.ftp_watts ?? undefined, athlete?.lthr_bike_bpm ?? athlete?.lthr_bpm ?? undefined, athlete?.lthr_run_bpm ?? athlete?.lthr_bpm ?? undefined, athlete?.lthr_swim_bpm ?? athlete?.lthr_bpm ?? undefined)
+                const metrics = await parseSingleFit(buf, nf.name, athlete)
                 setFiles(prev => prev.map(f => f.id === nf.id ? { ...f, status: 'success', metrics, buffer: buf } : f))
               } else {
                 const blob = new Blob([nf.buffer!], { type: 'text/csv' })
@@ -279,7 +287,7 @@ export default function ImportPage() {
         try {
           let buf = await raw.arrayBuffer()
           if (isGz) buf = await decompressGz(buf)
-          const metrics = await parseSingleFit(buf, raw.name, athlete?.ftp_watts ?? undefined, athlete?.lthr_bike_bpm ?? athlete?.lthr_bpm ?? undefined, athlete?.lthr_run_bpm ?? athlete?.lthr_bpm ?? undefined, athlete?.lthr_swim_bpm ?? athlete?.lthr_bpm ?? undefined)
+          const metrics = await parseSingleFit(buf, raw.name, athlete)
           setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'success', metrics, buffer: buf } : f))
         } catch (err) {
           setFiles(prev => prev.map(f => f.id === entry.id ? { ...f, status: 'error', error: String(err) } : f))
@@ -334,7 +342,7 @@ export default function ImportPage() {
     for (const uf of readyFiles) {
       if (uf.ext === 'fit') {
         try {
-          const act = await parseFitFile(uf.buffer!, athlete.ftp_watts ?? undefined, athlete.lthr_bike_bpm ?? athlete.lthr_bpm ?? undefined, athlete.lthr_run_bpm ?? athlete.lthr_bpm ?? undefined, athlete.lthr_swim_bpm ?? athlete.lthr_bpm ?? undefined)
+          const act = await parseFitFile(uf.buffer!, athleteThresholds(athlete))
           const { error } = await sb.from('activities').insert({
             athlete_id: selectedAthlete,
             name: act.name,
@@ -346,6 +354,7 @@ export default function ImportPage() {
             normalized_power: act.normalized_power ?? null,
             intensity_factor: act.intensity_factor ?? null,
             tss: act.tss ?? null,
+            tss_method: act.tss_method,
             avg_hr_bpm: act.avg_hr ?? null,
             max_hr_bpm: act.max_hr ?? null,
             avg_cadence_rpm: act.avg_cadence ?? null,
@@ -495,7 +504,8 @@ export default function ImportPage() {
           )}
           {athlete && (
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-              <p className="text-xs text-muted-foreground">FTP: <span className="text-foreground font-medium">{athlete.ftp_watts ? `${athlete.ftp_watts}W` : '—'}</span></p>
+              <p className="text-xs text-muted-foreground">FTP Bike: <span className="text-foreground font-medium">{athlete.ftp_watts ? `${athlete.ftp_watts}W` : '—'}</span></p>
+              <p className="text-xs text-muted-foreground">FTP Run: <span className="text-foreground font-medium">{athlete.ftp_run_watts ? `${athlete.ftp_run_watts}W` : '—'}</span></p>
               <p className="text-xs text-muted-foreground">LTHR Bike: <span className="text-foreground font-medium">{athlete.lthr_bike_bpm ?? athlete.lthr_bpm ? `${athlete.lthr_bike_bpm ?? athlete.lthr_bpm} bpm` : '—'}</span></p>
               <p className="text-xs text-muted-foreground">LTHR Run: <span className="text-foreground font-medium">{athlete.lthr_run_bpm ? `${athlete.lthr_run_bpm} bpm` : '—'}</span></p>
               <p className="text-xs text-muted-foreground">LTHR Swim: <span className="text-foreground font-medium">{athlete.lthr_swim_bpm ? `${athlete.lthr_swim_bpm} bpm` : '—'}</span></p>

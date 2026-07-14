@@ -7,6 +7,7 @@ export type AthleteRow = {
   email: string | null
   primary_sport: string
   ftp_watts: number | null
+  ftp_run_watts: number | null
   lthr_bpm: number | null
   lthr_bike_bpm: number | null
   lthr_run_bpm: number | null
@@ -48,6 +49,7 @@ export type ActivityRow = {
   duration_seconds: number
   distance_meters: number | null
   tss: number | null
+  tss_method: 'power' | 'hr' | null
   normalized_power: number | null
   intensity_factor: number | null
   avg_hr_bpm: number | null
@@ -80,7 +82,7 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, { data: extra }] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts').eq('id', id).single(),
   ])
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
@@ -96,7 +98,7 @@ export async function getAthletePMC(athleteId: string, days = 90): Promise<PMCRo
     .eq('athlete_id', athleteId)
     .gte('date', from.toISOString().slice(0, 10))
     .order('date')
-  if (error) return []
+  if (error) { console.error("[queries]", error.message); return [] }
   return data ?? []
 }
 
@@ -104,11 +106,11 @@ export async function getAthleteActivities(athleteId: string, limit = 10): Promi
   const sb = createClient()
   const { data, error } = await sb
     .from('activities')
-    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, normalized_power, intensity_factor, avg_hr_bpm')
+    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
     .eq('athlete_id', athleteId)
     .order('started_at', { ascending: false })
     .limit(limit)
-  if (error) return []
+  if (error) { console.error("[queries]", error.message); return [] }
   return data ?? []
 }
 
@@ -122,7 +124,7 @@ export async function getAthleteHRV(athleteId: string, days = 30): Promise<Daily
     .eq('athlete_id', athleteId)
     .gte('date', from.toISOString().slice(0, 10))
     .order('date')
-  if (error) return []
+  if (error) { console.error("[queries]", error.message); return [] }
   return data ?? []
 }
 
@@ -334,7 +336,7 @@ export async function getCoaches(): Promise<CoachRow[]> {
     .from('profiles')
     .select('id, full_name, email, phone, role, plan, active, created_at')
     .order('created_at', { ascending: true })
-  if (error) return []
+  if (error) { console.error("[queries]", error.message); return [] }
 
   const coaches = (data ?? []) as CoachRow[]
 
