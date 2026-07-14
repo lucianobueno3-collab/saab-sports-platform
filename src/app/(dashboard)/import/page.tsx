@@ -481,7 +481,7 @@ export default function ImportPage() {
             <p className="font-semibold text-[#0088ff] mb-1">Como exportar do TrainingPeaks</p>
             <ul className="text-xs text-muted-foreground space-y-0.5">
               <li><strong>Treinos em lote (ZIP):</strong> Settings → Export → WorkoutFileExport → Download ZIP</li>
-              <li><strong>Métricas Garmin (ZIP):</strong> Settings → Export → Metrics Export → Download ZIP</li>
+              <li><strong>Métricas (ZIP):</strong> Settings → Export → Metrics Export → Download ZIP</li>
               <li><strong>Individual:</strong> Calendário → selecione atividade → Exportar → .FIT</li>
             </ul>
           </div>
