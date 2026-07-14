@@ -47,6 +47,7 @@ export function NutricaoTab({ athleteId }: Props) {
 
   const [planOpen, setPlanOpen] = useState(false)
   const [planForm, setPlanForm] = useState({ phase: 'base', calories_target: '', protein_g: '', carbs_g: '', fat_g: '', hydration_ml: '', notes: '' })
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null)
 
   const [saving, setSaving] = useState(false)
 
@@ -141,10 +142,7 @@ export function NutricaoTab({ athleteId }: Props) {
     if (!planForm.phase) return
     setSaving(true)
     const sb = createClient()
-    // Deactivate other plans first
-    await sb.from('nutrition_plans').update({ active: false }).eq('athlete_id', athleteId)
-    await sb.from('nutrition_plans').insert({
-      athlete_id: athleteId,
+    const payload = {
       phase: planForm.phase,
       calories_target: planForm.calories_target ? parseInt(planForm.calories_target) : null,
       protein_g: planForm.protein_g ? parseInt(planForm.protein_g) : null,
@@ -152,12 +150,34 @@ export function NutricaoTab({ athleteId }: Props) {
       fat_g: planForm.fat_g ? parseInt(planForm.fat_g) : null,
       hydration_ml: planForm.hydration_ml ? parseInt(planForm.hydration_ml) : null,
       notes: planForm.notes || null,
-      active: true,
-    })
+    }
+    if (editingPlanId) {
+      // Edição: mantém o status ativo/inativo do plano
+      await sb.from('nutrition_plans').update(payload).eq('id', editingPlanId)
+    } else {
+      // Novo plano vira o ativo; desativa os demais
+      await sb.from('nutrition_plans').update({ active: false }).eq('athlete_id', athleteId)
+      await sb.from('nutrition_plans').insert({ athlete_id: athleteId, ...payload, active: true })
+    }
     setSaving(false)
     setPlanOpen(false)
+    setEditingPlanId(null)
     setPlanForm({ phase: 'base', calories_target: '', protein_g: '', carbs_g: '', fat_g: '', hydration_ml: '', notes: '' })
     load()
+  }
+
+  function openEditPlan(plan: NutritionPlanRow) {
+    setPlanForm({
+      phase: plan.phase,
+      calories_target: plan.calories_target?.toString() ?? '',
+      protein_g: plan.protein_g?.toString() ?? '',
+      carbs_g: plan.carbs_g?.toString() ?? '',
+      fat_g: plan.fat_g?.toString() ?? '',
+      hydration_ml: plan.hydration_ml?.toString() ?? '',
+      notes: plan.notes ?? '',
+    })
+    setEditingPlanId(plan.id)
+    setPlanOpen(true)
   }
 
   function handlePdfText(text: string, fileName: string) {
@@ -276,7 +296,7 @@ export function NutricaoTab({ athleteId }: Props) {
             <Utensils className="w-4 h-4 text-[#4ade80]" />
             <h3 className="text-sm font-bold text-foreground">Planos Nutricionais</h3>
           </div>
-          <button onClick={() => setPlanOpen(true)}
+          <button onClick={() => { setEditingPlanId(null); setPlanForm({ phase: 'base', calories_target: '', protein_g: '', carbs_g: '', fat_g: '', hydration_ml: '', notes: '' }); setPlanOpen(true) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
             style={{ background: '#4ade8015', border: '1px solid #4ade8040', color: '#4ade80' }}>
             <Plus className="w-3 h-3" /> Novo Plano
@@ -302,7 +322,10 @@ export function NutricaoTab({ athleteId }: Props) {
                         <span className="text-[9px] font-bold text-[#4ade80] uppercase tracking-wider">● Ativo</span>
                       )}
                     </div>
-                    <button onClick={() => deletePlan(plan.id)}><X className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-muted-foreground/80" /></button>
+                    <span className="flex items-center gap-1.5">
+                      <button onClick={() => openEditPlan(plan)} title="Editar"><Pencil className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-[#4ade80]" /></button>
+                      <button onClick={() => deletePlan(plan.id)}><X className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-muted-foreground/80" /></button>
+                    </span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
@@ -451,7 +474,7 @@ export function NutricaoTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Novo Plano Nutricional</h3>
+              <h3 className="text-sm font-bold">{editingPlanId ? 'Editar Plano Nutricional' : 'Novo Plano Nutricional'}</h3>
               <button onClick={() => setPlanOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-3">
@@ -485,7 +508,7 @@ export function NutricaoTab({ athleteId }: Props) {
             <div className="flex gap-3 mt-5">
               <button onClick={savePlan} disabled={saving}
                 className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg disabled:opacity-50">
-                {saving ? 'Salvando...' : 'Salvar e Ativar'}
+                {saving ? 'Salvando...' : editingPlanId ? 'Salvar Alterações' : 'Salvar e Ativar'}
               </button>
               <button onClick={() => setPlanOpen(false)} className="px-4 py-2.5 border border-border text-sm text-muted-foreground rounded-lg hover:bg-secondary">Cancelar</button>
             </div>

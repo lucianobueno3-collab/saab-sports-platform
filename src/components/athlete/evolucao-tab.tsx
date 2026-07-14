@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteGoals, type GoalRow } from '@/lib/supabase/queries'
-import { Plus, X, Target, CheckCircle2, Circle, XCircle } from 'lucide-react'
+import { Plus, X, Target, CheckCircle2, Circle, XCircle, Pencil } from 'lucide-react'
 
 const CATEGORY_LABEL: Record<string, string> = {
   performance: 'Performance', health: 'Saúde', race: 'Prova', lifestyle: 'Estilo de Vida', body: 'Composição', other: 'Outro',
@@ -44,9 +44,11 @@ export function EvolucaoTab({ athleteId }: Props) {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const EMPTY_FORM = {
     title: '', category: 'performance', target_date: '', target_value: '', target_unit: '', current_value: '', notes: '',
-  })
+  }
+  const [form, setForm] = useState({ ...EMPTY_FORM })
 
   useEffect(() => { load() }, [athleteId])
 
@@ -60,8 +62,7 @@ export function EvolucaoTab({ athleteId }: Props) {
     if (!form.title) return
     setSaving(true)
     const sb = createClient()
-    await sb.from('athlete_goals').insert({
-      athlete_id: athleteId,
+    const payload = {
       title: form.title,
       category: form.category,
       target_date: form.target_date || null,
@@ -69,12 +70,28 @@ export function EvolucaoTab({ athleteId }: Props) {
       target_unit: form.target_unit || null,
       current_value: form.current_value ? parseFloat(form.current_value) : null,
       notes: form.notes || null,
-      status: 'active',
-    })
+    }
+    if (editingId) await sb.from('athlete_goals').update(payload).eq('id', editingId)
+    else await sb.from('athlete_goals').insert({ athlete_id: athleteId, ...payload, status: 'active' })
     setSaving(false)
     setOpen(false)
-    setForm({ title: '', category: 'performance', target_date: '', target_value: '', target_unit: '', current_value: '', notes: '' })
+    setEditingId(null)
+    setForm({ ...EMPTY_FORM })
     load()
+  }
+
+  function openEdit(goal: GoalRow) {
+    setForm({
+      title: goal.title,
+      category: goal.category,
+      target_date: goal.target_date ?? '',
+      target_value: goal.target_value?.toString() ?? '',
+      target_unit: goal.target_unit ?? '',
+      current_value: goal.current_value?.toString() ?? '',
+      notes: goal.notes ?? '',
+    })
+    setEditingId(goal.id)
+    setOpen(true)
   }
 
   async function updateStatus(id: string, status: 'active' | 'achieved' | 'cancelled') {
@@ -115,7 +132,7 @@ export function EvolucaoTab({ athleteId }: Props) {
             <p className="text-xs text-muted-foreground">{active.length} ativa{active.length !== 1 ? 's' : ''} · {achieved.length} conquistada{achieved.length !== 1 ? 's' : ''}</p>
           </div>
         </div>
-        <button onClick={() => setOpen(true)}
+        <button onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setOpen(true) }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
           style={{ background: '#60a5fa15', border: '1px solid #60a5fa40', color: '#60a5fa' }}>
           <Plus className="w-3 h-3" /> Nova Meta
@@ -168,7 +185,7 @@ export function EvolucaoTab({ athleteId }: Props) {
                       title="Cancelar meta">
                       ✕
                     </button>
-                    <button onClick={() => deleteGoal(goal.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
+                    <button onClick={() => openEdit(goal)} title="Editar" className="mr-0.5"><Pencil className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-[#60a5fa]" /></button><button onClick={() => deleteGoal(goal.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
                   </div>
                 </div>
 
@@ -225,7 +242,7 @@ export function EvolucaoTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Nova Meta</h3>
+              <h3 className="text-sm font-bold">{editingId ? 'Editar Meta' : 'Nova Meta'}</h3>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-3">

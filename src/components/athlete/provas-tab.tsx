@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteCompetitions, type CompetitionRow } from '@/lib/supabase/queries'
 import { todayLocalISO, daysFromToday } from '@/lib/dates'
-import { Plus, X, Trophy, Calendar, Target, CheckCircle2 } from 'lucide-react'
+import { Plus, X, Trophy, Calendar, Target, CheckCircle2, Pencil } from 'lucide-react'
 
 const PRIORITY_COLOR = { A: '#ef4444', B: '#fbbf24', C: '#60a5fa' }
 const PRIORITY_LABEL = { A: 'Prioridade A', B: 'Prioridade B', C: 'Prioridade C' }
@@ -33,11 +33,13 @@ export function ProvasTab({ athleteId }: Props) {
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const EMPTY_FORM = {
     name: '', race_date: '', sport: '', distance_label: '', priority: 'B',
     goal_time_h: '', goal_time_m: '', result_time_h: '', result_time_m: '',
     result_position: '', dnf: false, notes: '',
-  })
+  }
+  const [form, setForm] = useState({ ...EMPTY_FORM })
 
   useEffect(() => { load() }, [athleteId])
 
@@ -55,8 +57,7 @@ export function ProvasTab({ athleteId }: Props) {
       ? (parseInt(form.goal_time_h || '0') * 60 + parseInt(form.goal_time_m || '0')) : null
     const resultMin = form.result_time_h || form.result_time_m
       ? (parseInt(form.result_time_h || '0') * 60 + parseInt(form.result_time_m || '0')) : null
-    await sb.from('competitions').insert({
-      athlete_id: athleteId,
+    const payload = {
       name: form.name,
       race_date: form.race_date,
       sport: form.sport || null,
@@ -67,11 +68,33 @@ export function ProvasTab({ athleteId }: Props) {
       result_position: form.result_position ? parseInt(form.result_position) : null,
       dnf: form.dnf,
       notes: form.notes || null,
-    })
+    }
+    if (editingId) await sb.from('competitions').update(payload).eq('id', editingId)
+    else await sb.from('competitions').insert({ athlete_id: athleteId, ...payload })
     setSaving(false)
     setOpen(false)
-    setForm({ name: '', race_date: '', sport: '', distance_label: '', priority: 'B', goal_time_h: '', goal_time_m: '', result_time_h: '', result_time_m: '', result_position: '', dnf: false, notes: '' })
+    setEditingId(null)
+    setForm({ ...EMPTY_FORM })
     load()
+  }
+
+  function openEdit(c: CompetitionRow) {
+    setForm({
+      name: c.name,
+      race_date: c.race_date,
+      sport: c.sport ?? '',
+      distance_label: c.distance_label ?? '',
+      priority: c.priority,
+      goal_time_h: c.goal_time_min != null ? Math.floor(c.goal_time_min / 60).toString() : '',
+      goal_time_m: c.goal_time_min != null ? (c.goal_time_min % 60).toString() : '',
+      result_time_h: c.result_time_min != null ? Math.floor(c.result_time_min / 60).toString() : '',
+      result_time_m: c.result_time_min != null ? (c.result_time_min % 60).toString() : '',
+      result_position: c.result_position?.toString() ?? '',
+      dnf: c.dnf,
+      notes: c.notes ?? '',
+    })
+    setEditingId(c.id)
+    setOpen(true)
   }
 
   async function deleteComp(id: string) {
@@ -100,7 +123,7 @@ export function ProvasTab({ athleteId }: Props) {
             <p className="text-xs text-muted-foreground">{upcoming.length} próximas · {past.length} realizadas</p>
           </div>
         </div>
-        <button onClick={() => setOpen(true)}
+        <button onClick={() => { setEditingId(null); setForm({ ...EMPTY_FORM }); setOpen(true) }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
           style={{ background: '#fbbf2415', border: '1px solid #fbbf2440', color: '#fbbf24' }}>
           <Plus className="w-3 h-3" /> Adicionar Prova
@@ -158,7 +181,7 @@ export function ProvasTab({ athleteId }: Props) {
                     )}
                     {c.notes && <p className="text-[10px] text-muted-foreground/60 mt-1 italic">{c.notes}</p>}
                   </div>
-                  <button onClick={() => deleteComp(c.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
+                  <button onClick={() => openEdit(c)} title="Editar" className="mr-1"><Pencil className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-[#fbbf24]" /></button><button onClick={() => deleteComp(c.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
                 </div>
               )
             })}
@@ -197,7 +220,7 @@ export function ProvasTab({ athleteId }: Props) {
                   </div>
                   {c.notes && <p className="text-[10px] text-muted-foreground/60 mt-0.5 italic">{c.notes}</p>}
                 </div>
-                <button onClick={() => deleteComp(c.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
+                <button onClick={() => openEdit(c)} title="Editar" className="mr-1"><Pencil className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-[#fbbf24]" /></button><button onClick={() => deleteComp(c.id)}><X className="w-3.5 h-3.5 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
               </div>
             ))}
           </div>
@@ -217,7 +240,7 @@ export function ProvasTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Adicionar Prova</h3>
+              <h3 className="text-sm font-bold">{editingId ? 'Editar Prova' : 'Adicionar Prova'}</h3>
               <button onClick={() => setOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-3">

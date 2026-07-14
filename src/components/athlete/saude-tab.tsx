@@ -6,7 +6,7 @@ import { getAthleteInjuries, getAthleteMedicalExams, type InjuryRow, type Medica
 import { todayLocalISO } from '@/lib/dates'
 import { extractExamsFromText, extractDateFromText, type ExtractedExam } from '@/lib/parsers/pdf-parser'
 import { DocsSection } from './docs-section'
-import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle, Sparkles } from 'lucide-react'
+import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle, Sparkles, Pencil } from 'lucide-react'
 
 const SEVERITY_LABEL = { mild: 'Leve', moderate: 'Moderada', severe: 'Grave' }
 const SEVERITY_COLOR = { mild: '#4ade80', moderate: '#fbbf24', severe: '#ef4444' }
@@ -32,10 +32,12 @@ export function SaudeTab({ athleteId }: Props) {
   // Injury modal
   const [injuryOpen, setInjuryOpen] = useState(false)
   const [injuryForm, setInjuryForm] = useState({ location: '', injury_type: '', severity: 'moderate', started_at: '', resolved_at: '', notes: '' })
+  const [editingInjuryId, setEditingInjuryId] = useState<string | null>(null)
 
   // Exam modal
   const [examOpen, setExamOpen] = useState(false)
   const [examForm, setExamForm] = useState({ exam_name: '', exam_date: '', value: '', unit: '', reference_min: '', reference_max: '', notes: '' })
+  const [editingExamId, setEditingExamId] = useState<string | null>(null)
 
   const [saving, setSaving] = useState(false)
 
@@ -58,27 +60,41 @@ export function SaudeTab({ athleteId }: Props) {
     if (!injuryForm.location || !injuryForm.injury_type || !injuryForm.started_at) return
     setSaving(true)
     const sb = createClient()
-    await sb.from('injuries').insert({
-      athlete_id: athleteId,
+    const payload = {
       location: injuryForm.location,
       injury_type: injuryForm.injury_type,
       severity: injuryForm.severity,
       started_at: injuryForm.started_at,
       resolved_at: injuryForm.resolved_at || null,
       notes: injuryForm.notes || null,
-    })
+    }
+    if (editingInjuryId) await sb.from('injuries').update(payload).eq('id', editingInjuryId)
+    else await sb.from('injuries').insert({ athlete_id: athleteId, ...payload })
     setSaving(false)
     setInjuryOpen(false)
+    setEditingInjuryId(null)
     setInjuryForm({ location: '', injury_type: '', severity: 'moderate', started_at: '', resolved_at: '', notes: '' })
     load()
+  }
+
+  function openEditInjury(inj: InjuryRow) {
+    setInjuryForm({
+      location: inj.location,
+      injury_type: inj.injury_type,
+      severity: inj.severity,
+      started_at: inj.started_at,
+      resolved_at: inj.resolved_at ?? '',
+      notes: inj.notes ?? '',
+    })
+    setEditingInjuryId(inj.id)
+    setInjuryOpen(true)
   }
 
   async function saveExam() {
     if (!examForm.exam_name || !examForm.exam_date) return
     setSaving(true)
     const sb = createClient()
-    await sb.from('medical_exams').insert({
-      athlete_id: athleteId,
+    const payload = {
       exam_name: examForm.exam_name,
       exam_date: examForm.exam_date,
       value: examForm.value ? parseFloat(examForm.value) : null,
@@ -86,11 +102,28 @@ export function SaudeTab({ athleteId }: Props) {
       reference_min: examForm.reference_min ? parseFloat(examForm.reference_min) : null,
       reference_max: examForm.reference_max ? parseFloat(examForm.reference_max) : null,
       notes: examForm.notes || null,
-    })
+    }
+    if (editingExamId) await sb.from('medical_exams').update(payload).eq('id', editingExamId)
+    else await sb.from('medical_exams').insert({ athlete_id: athleteId, ...payload })
     setSaving(false)
     setExamOpen(false)
+    setEditingExamId(null)
     setExamForm({ exam_name: '', exam_date: '', value: '', unit: '', reference_min: '', reference_max: '', notes: '' })
     load()
+  }
+
+  function openEditExam(exam: MedicalExamRow) {
+    setExamForm({
+      exam_name: exam.exam_name,
+      exam_date: exam.exam_date,
+      value: exam.value?.toString() ?? '',
+      unit: exam.unit ?? '',
+      reference_min: exam.reference_min?.toString() ?? '',
+      reference_max: exam.reference_max?.toString() ?? '',
+      notes: exam.notes ?? '',
+    })
+    setEditingExamId(exam.id)
+    setExamOpen(true)
   }
 
   async function resolveInjury(id: string) {
@@ -182,7 +215,7 @@ export function SaudeTab({ athleteId }: Props) {
               </span>
             )}
           </div>
-          <button onClick={() => setInjuryOpen(true)}
+          <button onClick={() => { setEditingInjuryId(null); setInjuryForm({ location: '', injury_type: '', severity: 'moderate', started_at: '', resolved_at: '', notes: '' }); setInjuryOpen(true) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
             style={{ background: '#fbbf2415', border: '1px solid #fbbf2440', color: '#fbbf24' }}>
             <Plus className="w-3 h-3" /> Registrar Lesão
@@ -226,6 +259,10 @@ export function SaudeTab({ athleteId }: Props) {
                       Resolver
                     </button>
                   )}
+                  <button onClick={() => openEditInjury(inj)}
+                    className="p-1 rounded hover:bg-secondary transition-colors" title="Editar">
+                    <Pencil className="w-3 h-3 text-muted-foreground/50" />
+                  </button>
                   <button onClick={() => deleteInjury(inj.id)}
                     className="p-1 rounded hover:bg-secondary transition-colors">
                     <X className="w-3 h-3 text-muted-foreground/50" />
@@ -244,7 +281,7 @@ export function SaudeTab({ athleteId }: Props) {
             <FlaskConical className="w-4 h-4 text-[#818cf8]" />
             <h3 className="text-sm font-bold text-foreground">Exames Laboratoriais</h3>
           </div>
-          <button onClick={() => setExamOpen(true)}
+          <button onClick={() => { setEditingExamId(null); setExamForm({ exam_name: '', exam_date: '', value: '', unit: '', reference_min: '', reference_max: '', notes: '' }); setExamOpen(true) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
             style={{ background: '#818cf815', border: '1px solid #818cf840', color: '#818cf8' }}>
             <Plus className="w-3 h-3" /> Adicionar Exame
@@ -280,13 +317,21 @@ export function SaudeTab({ athleteId }: Props) {
                           <div key={r.id} className="flex justify-between items-center">
                             <span className="text-[10px] text-muted-foreground/60">{fmtDate(r.exam_date)}</span>
                             <span className="text-[10px] text-muted-foreground">{r.value} {r.unit}</span>
-                            <button onClick={() => deleteExam(r.id)} className="p-0.5 hover:opacity-70"><X className="w-2.5 h-2.5 text-muted-foreground/30" /></button>
+                            <span className="flex items-center gap-1">
+                              <button onClick={() => openEditExam(r)} className="p-0.5 hover:opacity-70" title="Editar"><Pencil className="w-2.5 h-2.5 text-muted-foreground/30" /></button>
+                              <button onClick={() => deleteExam(r.id)} className="p-0.5 hover:opacity-70"><X className="w-2.5 h-2.5 text-muted-foreground/30" /></button>
+                            </span>
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                  <button onClick={() => deleteExam(latest.id)} className="mt-2 text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">remover último</button>
+                  <div className="mt-2 flex items-center gap-3">
+                    <button onClick={() => openEditExam(latest)} className="text-[9px] text-muted-foreground/40 hover:text-[#818cf8] transition-colors flex items-center gap-0.5">
+                      <Pencil className="w-2.5 h-2.5" /> editar último
+                    </button>
+                    <button onClick={() => deleteExam(latest.id)} className="text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">remover último</button>
+                  </div>
                 </div>
               )
             })}
@@ -357,7 +402,7 @@ export function SaudeTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Registrar Lesão</h3>
+              <h3 className="text-sm font-bold">{editingInjuryId ? 'Editar Lesão' : 'Registrar Lesão'}</h3>
               <button onClick={() => setInjuryOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-3">
@@ -411,7 +456,7 @@ export function SaudeTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Adicionar Exame</h3>
+              <h3 className="text-sm font-bold">{editingExamId ? 'Editar Exame' : 'Adicionar Exame'}</h3>
               <button onClick={() => setExamOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-3">
