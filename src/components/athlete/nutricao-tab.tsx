@@ -6,7 +6,7 @@ import { getAthleteBodyComposition, getAthleteNutritionPlans, type BodyCompositi
 import { extractBodyCompFromText, extractDateFromText } from '@/lib/parsers/pdf-parser'
 import { todayLocalISO } from '@/lib/dates'
 import { DocsSection } from './docs-section'
-import { Plus, X, Scale, Utensils, TrendingDown, TrendingUp, Minus } from 'lucide-react'
+import { Plus, X, Scale, Utensils, TrendingDown, TrendingUp, Minus, Pencil } from 'lucide-react'
 
 const PHASE_LABEL: Record<string, string> = {
   base: 'Base', build: 'Build', peak: 'Pico', race: 'Prova', recovery: 'Recuperação', offseason: 'Off-season',
@@ -43,6 +43,7 @@ export function NutricaoTab({ athleteId }: Props) {
 
   const [compOpen, setCompOpen] = useState(false)
   const [compForm, setCompForm] = useState({ ...EMPTY_COMP_FORM })
+  const [editingCompId, setEditingCompId] = useState<string | null>(null)
 
   const [planOpen, setPlanOpen] = useState(false)
   const [planForm, setPlanForm] = useState({ phase: 'base', calories_target: '', protein_g: '', carbs_g: '', fat_g: '', hydration_ml: '', notes: '' })
@@ -86,8 +87,7 @@ export function NutricaoTab({ athleteId }: Props) {
     const leanPct = num(compForm.lean_mass_pct) ?? (fatPct != null ? Math.round((100 - fatPct) * 100) / 100 : null)
     const leanMass = num(compForm.lean_mass_kg) ?? (weight && leanPct ? Math.round(weight * leanPct) / 100 : null)
 
-    const { error } = await sb.from('body_composition').insert({
-      athlete_id: athleteId,
+    const payload = {
       measured_at: compForm.measured_at,
       weight_kg: weight,
       body_fat_pct: fatPct,
@@ -103,12 +103,38 @@ export function NutricaoTab({ athleteId }: Props) {
       arm_muscle_area: num(compForm.arm_muscle_area),
       arm_fat_area: num(compForm.arm_fat_area),
       notes: compForm.notes || null,
-    })
+    }
+    const { error } = editingCompId
+      ? await sb.from('body_composition').update(payload).eq('id', editingCompId)
+      : await sb.from('body_composition').insert({ athlete_id: athleteId, ...payload })
     if (error) console.error('[nutricao-tab]', error.message)
     setSaving(false)
     setCompOpen(false)
     setCompForm({ ...EMPTY_COMP_FORM })
+    setEditingCompId(null)
     load()
+  }
+
+  function openEditComp(bc: BodyCompositionRow) {
+    setCompForm({
+      measured_at: bc.measured_at,
+      weight_kg: bc.weight_kg?.toString() ?? '',
+      body_fat_pct: bc.body_fat_pct?.toString() ?? '',
+      muscle_mass_kg: bc.muscle_mass_kg?.toString() ?? '',
+      bone_mass_kg: bc.bone_mass_kg?.toString() ?? '',
+      visceral_fat: bc.visceral_fat?.toString() ?? '',
+      fat_mass_kg: bc.fat_mass_kg?.toString() ?? '',
+      lean_mass_kg: bc.lean_mass_kg?.toString() ?? '',
+      lean_mass_pct: bc.lean_mass_pct?.toString() ?? '',
+      waist_hip_ratio: bc.waist_hip_ratio?.toString() ?? '',
+      body_density: bc.body_density?.toString() ?? '',
+      skinfold_sum_mm: bc.skinfold_sum_mm?.toString() ?? '',
+      arm_muscle_area: bc.arm_muscle_area?.toString() ?? '',
+      arm_fat_area: bc.arm_fat_area?.toString() ?? '',
+      notes: bc.notes ?? '',
+    })
+    setEditingCompId(bc.id)
+    setCompOpen(true)
   }
 
   async function savePlan() {
@@ -142,6 +168,7 @@ export function NutricaoTab({ athleteId }: Props) {
       return
     }
     // Pré-preenche o formulário de medição e abre o modal para revisão
+    setEditingCompId(null)
     setCompForm({
       ...EMPTY_COMP_FORM,
       measured_at: extractDateFromText(text) ?? todayLocalISO(),
@@ -194,7 +221,7 @@ export function NutricaoTab({ athleteId }: Props) {
             <Scale className="w-4 h-4 text-[#60a5fa]" />
             <h3 className="text-sm font-bold text-foreground">Composição Corporal</h3>
           </div>
-          <button onClick={() => setCompOpen(true)}
+          <button onClick={() => { setEditingCompId(null); setCompForm({ ...EMPTY_COMP_FORM }); setCompOpen(true) }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors"
             style={{ background: '#60a5fa15', border: '1px solid #60a5fa40', color: '#60a5fa' }}>
             <Plus className="w-3 h-3" /> Nova Medição
@@ -237,7 +264,7 @@ export function NutricaoTab({ athleteId }: Props) {
             </p>
 
             {/* Evolução por data */}
-            <EvolutionTable bodyComp={bodyComp} heightCm={heightCm} onDelete={deleteBodyComp} />
+            <EvolutionTable bodyComp={bodyComp} heightCm={heightCm} onDelete={deleteBodyComp} onEdit={openEditComp} />
           </div>
         )}
       </div>
@@ -324,8 +351,8 @@ export function NutricaoTab({ athleteId }: Props) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-sm font-bold">Nova Medição Corporal</h3>
-              <button onClick={() => setCompOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
+              <h3 className="text-sm font-bold">{editingCompId ? `Editar Medição — ${fmtDate(compForm.measured_at)}` : 'Nova Medição Corporal'}</h3>
+              <button onClick={() => { setCompOpen(false); setEditingCompId(null) }}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
             <div className="space-y-4">
               <div className="grid grid-cols-3 gap-3">
@@ -411,9 +438,9 @@ export function NutricaoTab({ athleteId }: Props) {
             <div className="flex gap-3 mt-5">
               <button onClick={saveBodyComp} disabled={saving || !compForm.measured_at}
                 className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg disabled:opacity-50">
-                {saving ? 'Salvando...' : 'Salvar'}
+                {saving ? 'Salvando...' : editingCompId ? 'Salvar Alterações' : 'Salvar'}
               </button>
-              <button onClick={() => setCompOpen(false)} className="px-4 py-2.5 border border-border text-sm text-muted-foreground rounded-lg hover:bg-secondary">Cancelar</button>
+              <button onClick={() => { setCompOpen(false); setEditingCompId(null) }} className="px-4 py-2.5 border border-border text-sm text-muted-foreground rounded-lg hover:bg-secondary">Cancelar</button>
             </div>
           </div>
         </div>
@@ -481,10 +508,11 @@ type MetricDef = {
   goodDirection: 'down' | 'up' | null
 }
 
-function EvolutionTable({ bodyComp, heightCm, onDelete }: {
+function EvolutionTable({ bodyComp, heightCm, onDelete, onEdit }: {
   bodyComp: BodyCompositionRow[]
   heightCm: number | null
   onDelete: (id: string) => void
+  onEdit: (bc: BodyCompositionRow) => void
 }) {
   const sorted = [...bodyComp].sort((a, b) => a.measured_at.localeCompare(b.measured_at))
 
@@ -521,6 +549,9 @@ function EvolutionTable({ bodyComp, heightCm, onDelete }: {
               {sorted.map(bc => (
                 <th key={bc.id} className="text-right py-2 px-2 text-[10px] font-bold text-foreground whitespace-nowrap">
                   {fmtDate(bc.measured_at)}
+                  <button onClick={() => onEdit(bc)} className="ml-1.5 align-middle" title="Editar medição">
+                    <Pencil className="w-2.5 h-2.5 inline text-muted-foreground/40 hover:text-[#60a5fa]" />
+                  </button>
                   <button onClick={() => onDelete(bc.id)} className="ml-1 align-middle" title="Excluir medição">
                     <X className="w-2.5 h-2.5 inline text-muted-foreground/40 hover:text-muted-foreground" />
                   </button>
