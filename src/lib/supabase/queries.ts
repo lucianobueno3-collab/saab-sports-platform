@@ -295,6 +295,27 @@ export async function getAthleteGoals(athleteId: string): Promise<GoalRow[]> {
   return (data ?? []) as GoalRow[]
 }
 
+export type AthleteDocumentRow = {
+  id: string
+  athlete_id: string
+  area: 'saude' | 'nutricao'
+  file_name: string
+  storage_path: string
+  uploaded_at: string
+}
+
+export async function getAthleteDocuments(athleteId: string, area: 'saude' | 'nutricao'): Promise<AthleteDocumentRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb
+    .from('athlete_documents')
+    .select('*')
+    .eq('athlete_id', athleteId)
+    .eq('area', area)
+    .order('uploaded_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as AthleteDocumentRow[]
+}
+
 // ─── Coach Profile ────────────────────────────────────────────────────────────
 
 export async function getCoachProfile(): Promise<{ full_name: string | null; phone: string | null; role: string | null } | null> {

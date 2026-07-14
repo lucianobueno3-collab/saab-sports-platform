@@ -1,0 +1,160 @@
+// Extração de texto de PDF (pdf.js) + detecção heurística de exames laboratoriais
+// e composição corporal em laudos brasileiros. O resultado sempre passa por revisão
+// do usuário antes de salvar — a extração é sugestão, não verdade.
+
+/** Extrai o texto de todas as páginas do PDF, no navegador */
+export async function extractPdfText(file: File): Promise<string> {
+  const pdfjs = await import('pdfjs-dist')
+  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).toString()
+
+  const buf = await file.arrayBuffer()
+  const doc = await pdfjs.getDocument({ data: buf }).promise
+  const pages: string[] = []
+  for (let i = 1; i <= doc.numPages; i++) {
+    const page = await doc.getPage(i)
+    const content = await page.getTextContent()
+    const text = content.items
+      .map(item => ('str' in item ? item.str : ''))
+      .join(' ')
+    pages.push(text)
+  }
+  return pages.join('\n')
+}
+
+// ─── Exames laboratoriais ────────────────────────────────────────────────────
+
+export interface ExtractedExam {
+  exam_name: string
+  value: number
+  unit: string | null
+  reference_min: number | null
+  reference_max: number | null
+}
+
+// Exames conhecidos: nome canônico + variações que aparecem em laudos
+const KNOWN_EXAMS: { name: string; patterns: RegExp[] }[] = [
+  { name: 'Ferritina', patterns: [/ferritina/i] },
+  { name: 'Hemoglobina', patterns: [/hemoglobina(?!\s*glicada)/i] },
+  { name: 'Hemoglobina Glicada', patterns: [/hemoglobina\s*glicada|hba1c/i] },
+  { name: 'Hematócrito', patterns: [/hemat[óo]crito/i] },
+  { name: 'Vitamina D', patterns: [/vitamina\s*d\b|25[\s-]*hidroxi|25[\s-]*oh/i] },
+  { name: 'Vitamina B12', patterns: [/vitamina\s*b\s*12|cianocobalamina/i] },
+  { name: 'TSH', patterns: [/\btsh\b|tireoestimulante/i] },
+  { name: 'T4 Livre', patterns: [/t4\s*livre|tiroxina\s*livre/i] },
+  { name: 'Testosterona', patterns: [/testosterona\s*total|testosterona(?!\s*livre)/i] },
+  { name: 'Cortisol', patterns: [/cortisol/i] },
+  { name: 'Creatinina', patterns: [/creatinina/i] },
+  { name: 'PCR', patterns: [/\bpcr\b|prote[íi]na\s*c\s*reativa/i] },
+  { name: 'TGO', patterns: [/\btgo\b|\bast\b|aspartato/i] },
+  { name: 'TGP', patterns: [/\btgp\b|\balt\b|alanina/i] },
+  { name: 'Glicose', patterns: [/glicose|glicemia/i] },
+  { name: 'Ureia', patterns: [/ur[ée]ia/i] },
+  { name: 'Colesterol Total', patterns: [/colesterol\s*total/i] },
+  { name: 'HDL', patterns: [/\bhdl\b/i] },
+  { name: 'LDL', patterns: [/\bldl\b/i] },
+  { name: 'Triglicerídeos', patterns: [/triglicer[íi]d/i] },
+  { name: 'Ferro', patterns: [/ferro\s*s[ée]rico|\bferro\b(?!\w)/i] },
+  { name: 'Leucócitos', patterns: [/leuc[óo]citos/i] },
+  { name: 'CPK', patterns: [/\bcpk\b|creatinoquinase|creatina\s*quinase/i] },
+  { name: 'Magnésio', patterns: [/magn[ée]sio/i] },
+  { name: 'Zinco', patterns: [/\bzinco\b/i] },
+]
+
+const UNIT_RE = 'ng/mL|pg/mL|mg/dL|g/dL|µg/dL|ug/dL|mcg/dL|U/L|UI/L|µUI/mL|uUI/mL|mUI/L|nmol/L|ng/dL|mil/mm3|/mm3|%'
+// número BR: 1.234,5 ou 1234.5 ou 12,3 ou 12
+const NUM_RE = '\\d{1,3}(?:\\.\\d{3})*(?:,\\d+)?|\\d+(?:\\.\\d+)?'
+
+export function parseBrNumber(s: string): number {
+  // "1.234,5" → 1234.5 · "12,3" → 12.3 · "12.3" → 12.3
+  if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.'))
+  return parseFloat(s)
+}
+
+/** Detecta exames conhecidos no texto do laudo. Cada exame reporta a 1ª ocorrência. */
+export function extractExamsFromText(text: string): ExtractedExam[] {
+  const results: ExtractedExam[] = []
+
+  for (const exam of KNOWN_EXAMS) {
+    for (const pattern of exam.patterns) {
+      const m = pattern.exec(text)
+      if (!m) continue
+
+      // Janela de até 120 caracteres após o nome do exame: valor + unidade + referência
+      const window = text.slice(m.index, m.index + 160)
+      const valueMatch = new RegExp(`(?::|\\s)\\s*(${NUM_RE})\\s*(${UNIT_RE})?`).exec(window.slice(m[0].length))
+      if (!valueMatch) continue
+
+      const value = parseBrNumber(valueMatch[1])
+      if (isNaN(value)) continue
+
+      // Faixa de referência: "Referência: 20 a 300" | "VR: 20 - 300" | "(20-300)"
+      const refMatch = new RegExp(
+        `(?:refer[êe]ncia|valores?\\s*de\\s*refer[êe]ncia|vr|normal)[:\\s]*(?:de\\s*)?(${NUM_RE})\\s*(?:a|-|–|at[ée])\\s*(${NUM_RE})`, 'i'
+      ).exec(window) ?? new RegExp(`\\((${NUM_RE})\\s*(?:a|-|–)\\s*(${NUM_RE})\\)`).exec(window)
+
+      results.push({
+        exam_name: exam.name,
+        value,
+        unit: valueMatch[2] ?? null,
+        reference_min: refMatch ? parseBrNumber(refMatch[1]) : null,
+        reference_max: refMatch ? parseBrNumber(refMatch[2]) : null,
+      })
+      break // achou por um dos padrões, não repete o mesmo exame
+    }
+  }
+  return results
+}
+
+/** Primeira data dd/mm/aaaa encontrada no texto (data do laudo) */
+export function extractDateFromText(text: string): string | null {
+  const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(text)
+  if (!m) return null
+  const [, d, mo, y] = m
+  const day = parseInt(d), month = parseInt(mo)
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null
+  return `${y}-${mo}-${d}`
+}
+
+// ─── Composição corporal ─────────────────────────────────────────────────────
+
+export interface ExtractedBodyComp {
+  weight_kg: number | null
+  body_fat_pct: number | null
+  muscle_mass_kg: number | null
+  bone_mass_kg: number | null
+  visceral_fat: number | null
+}
+
+export function extractBodyCompFromText(text: string): ExtractedBodyComp {
+  const find = (patterns: RegExp[]): number | null => {
+    for (const p of patterns) {
+      const m = p.exec(text)
+      if (m) {
+        const v = parseBrNumber(m[1])
+        if (!isNaN(v)) return v
+      }
+    }
+    return null
+  }
+
+  return {
+    weight_kg: find([
+      new RegExp(`peso(?:\\s*corporal|\\s*atual)?\\s*[:\\s]\\s*(${NUM_RE})\\s*kg`, 'i'),
+    ]),
+    body_fat_pct: find([
+      new RegExp(`(?:%\\s*(?:de\\s*)?gordura|gordura\\s*corporal|percentual\\s*de\\s*gordura)\\s*[:\\s]\\s*(${NUM_RE})\\s*%?`, 'i'),
+    ]),
+    muscle_mass_kg: find([
+      new RegExp(`massa\\s*(?:muscular|magra)\\s*[:\\s]\\s*(${NUM_RE})\\s*kg`, 'i'),
+    ]),
+    bone_mass_kg: find([
+      new RegExp(`massa\\s*[óo]ssea\\s*[:\\s]\\s*(${NUM_RE})\\s*kg`, 'i'),
+    ]),
+    visceral_fat: find([
+      new RegExp(`gordura\\s*visceral\\s*[:\\s]*(?:n[íi]vel\\s*)?(${NUM_RE})`, 'i'),
+    ]),
+  }
+}

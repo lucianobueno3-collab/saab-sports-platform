@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteInjuries, getAthleteMedicalExams, type InjuryRow, type MedicalExamRow } from '@/lib/supabase/queries'
 import { todayLocalISO } from '@/lib/dates'
-import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle } from 'lucide-react'
+import { extractExamsFromText, extractDateFromText, type ExtractedExam } from '@/lib/parsers/pdf-parser'
+import { DocsSection } from './docs-section'
+import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle, Sparkles } from 'lucide-react'
 
 const SEVERITY_LABEL = { mild: 'Leve', moderate: 'Moderada', severe: 'Grave' }
 const SEVERITY_COLOR = { mild: '#4ade80', moderate: '#fbbf24', severe: '#ef4444' }
@@ -36,6 +38,9 @@ export function SaudeTab({ athleteId }: Props) {
   const [examForm, setExamForm] = useState({ exam_name: '', exam_date: '', value: '', unit: '', reference_min: '', reference_max: '', notes: '' })
 
   const [saving, setSaving] = useState(false)
+
+  // Revisão de exames detectados no PDF
+  const [detected, setDetected] = useState<{ exams: (ExtractedExam & { include: boolean })[]; date: string; fileName: string } | null>(null)
 
   useEffect(() => {
     load()
@@ -108,6 +113,41 @@ export function SaudeTab({ athleteId }: Props) {
     load()
   }
 
+  function handlePdfText(text: string, fileName: string) {
+    const exams = extractExamsFromText(text)
+    if (exams.length === 0) {
+      window.alert('Nenhum exame conhecido foi detectado neste PDF. Adicione manualmente.')
+      return
+    }
+    setDetected({
+      exams: exams.map(e => ({ ...e, include: true })),
+      date: extractDateFromText(text) ?? todayLocalISO(),
+      fileName,
+    })
+  }
+
+  async function saveDetectedExams() {
+    if (!detected) return
+    const toSave = detected.exams.filter(e => e.include)
+    if (toSave.length === 0) { setDetected(null); return }
+    setSaving(true)
+    const sb = createClient()
+    const { error } = await sb.from('medical_exams').insert(toSave.map(e => ({
+      athlete_id: athleteId,
+      exam_name: e.exam_name,
+      exam_date: detected.date,
+      value: e.value,
+      unit: e.unit,
+      reference_min: e.reference_min,
+      reference_max: e.reference_max,
+      notes: `Importado de: ${detected.fileName}`,
+    })))
+    if (error) console.error('[saude-tab]', error.message)
+    setSaving(false)
+    setDetected(null)
+    load()
+  }
+
   const activeInjuries = injuries.filter(i => !i.resolved_at)
   const resolvedInjuries = injuries.filter(i => i.resolved_at)
 
@@ -122,6 +162,14 @@ export function SaudeTab({ athleteId }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Documentos PDF */}
+      <DocsSection
+        athleteId={athleteId}
+        area="saude"
+        extractLabel="Detectar exames"
+        onExtractText={handlePdfText}
+      />
+
       {/* Lesões */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
@@ -245,6 +293,64 @@ export function SaudeTab({ athleteId }: Props) {
           </div>
         )}
       </div>
+
+      {/* Modal revisão de exames detectados no PDF */}
+      {detected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#a78bfa]" /> Exames detectados
+              </h3>
+              <button onClick={() => setDetected(null)}><X className="w-4 h-4 text-muted-foreground" /></button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mb-4">
+              Extraído de <span className="text-foreground">{detected.fileName}</span> — revise os valores antes de salvar. Desmarque o que estiver errado.
+            </p>
+            <div className="mb-4">
+              <label className="block text-xs text-muted-foreground mb-1">Data do exame</label>
+              <input type="date" value={detected.date}
+                onChange={e => setDetected(d => d ? { ...d, date: e.target.value } : d)}
+                className={inputCls + ' max-w-[180px]'} />
+            </div>
+            <div className="space-y-2">
+              {detected.exams.map((e, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2.5"
+                  style={{ background: '#12121e', border: '1px solid #1e1e2e', opacity: e.include ? 1 : 0.45 }}>
+                  <input type="checkbox" checked={e.include}
+                    onChange={ev => setDetected(d => {
+                      if (!d) return d
+                      const exams = [...d.exams]; exams[i] = { ...exams[i], include: ev.target.checked }
+                      return { ...d, exams }
+                    })}
+                    className="w-4 h-4 accent-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-foreground">{e.exam_name}</p>
+                    {(e.reference_min != null || e.reference_max != null) && (
+                      <p className="text-[10px] text-muted-foreground">Ref: {e.reference_min ?? '?'} – {e.reference_max ?? '?'}</p>
+                    )}
+                  </div>
+                  <input type="number" step="0.01" value={e.value}
+                    onChange={ev => setDetected(d => {
+                      if (!d) return d
+                      const exams = [...d.exams]; exams[i] = { ...exams[i], value: parseFloat(ev.target.value) || 0 }
+                      return { ...d, exams }
+                    })}
+                    className="w-24 px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground text-right focus:outline-none focus:ring-1 focus:ring-primary/40" />
+                  <span className="text-[10px] text-muted-foreground w-14 flex-shrink-0">{e.unit ?? ''}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={saveDetectedExams} disabled={saving || detected.exams.every(e => !e.include)}
+                className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg disabled:opacity-50">
+                {saving ? 'Salvando...' : `Salvar ${detected.exams.filter(e => e.include).length} exame(s)`}
+              </button>
+              <button onClick={() => setDetected(null)} className="px-4 py-2.5 border border-border text-sm text-muted-foreground rounded-lg hover:bg-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Lesão */}
       {injuryOpen && (

@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteBodyComposition, getAthleteNutritionPlans, type BodyCompositionRow, type NutritionPlanRow } from '@/lib/supabase/queries'
+import { extractBodyCompFromText, extractDateFromText } from '@/lib/parsers/pdf-parser'
+import { todayLocalISO } from '@/lib/dates'
+import { DocsSection } from './docs-section'
 import { Plus, X, Scale, Utensils, TrendingDown, TrendingUp, Minus } from 'lucide-react'
 
 const PHASE_LABEL: Record<string, string> = {
@@ -84,6 +87,26 @@ export function NutricaoTab({ athleteId }: Props) {
     load()
   }
 
+  function handlePdfText(text: string, fileName: string) {
+    const comp = extractBodyCompFromText(text)
+    const found = Object.values(comp).some(v => v != null)
+    if (!found) {
+      window.alert('Nenhum dado de composição corporal detectado neste PDF (peso, % gordura, massa muscular...). Preencha manualmente.')
+      return
+    }
+    // Pré-preenche o formulário de medição e abre o modal para revisão
+    setCompForm({
+      measured_at: extractDateFromText(text) ?? todayLocalISO(),
+      weight_kg: comp.weight_kg?.toString() ?? '',
+      body_fat_pct: comp.body_fat_pct?.toString() ?? '',
+      muscle_mass_kg: comp.muscle_mass_kg?.toString() ?? '',
+      bone_mass_kg: comp.bone_mass_kg?.toString() ?? '',
+      visceral_fat: comp.visceral_fat?.toString() ?? '',
+      notes: `Importado de: ${fileName}`,
+    })
+    setCompOpen(true)
+  }
+
   async function deleteBodyComp(id: string) {
     if (!window.confirm('Excluir esta medição permanentemente?')) return
     const sb = createClient()
@@ -108,6 +131,14 @@ export function NutricaoTab({ athleteId }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Documentos PDF */}
+      <DocsSection
+        athleteId={athleteId}
+        area="nutricao"
+        extractLabel="Preencher medição"
+        onExtractText={handlePdfText}
+      />
+
       {/* Composição Corporal */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
