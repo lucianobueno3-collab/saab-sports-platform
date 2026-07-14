@@ -14,6 +14,7 @@ export type AthleteRow = {
   lthr_swim_bpm: number | null
   vo2max_ml_kg_min: number | null
   weight_kg: number | null
+  height_cm: number | null
   active: boolean
   ctl: number | null
   atl: number | null
@@ -82,7 +83,7 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, { data: extra }] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm').eq('id', id).single(),
   ])
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
@@ -215,6 +216,14 @@ export type BodyCompositionRow = {
   muscle_mass_kg: number | null
   bone_mass_kg: number | null
   visceral_fat: number | null
+  fat_mass_kg: number | null
+  lean_mass_kg: number | null
+  lean_mass_pct: number | null
+  waist_hip_ratio: number | null
+  body_density: number | null
+  skinfold_sum_mm: number | null
+  arm_muscle_area: number | null
+  arm_fat_area: number | null
   notes: string | null
 }
 

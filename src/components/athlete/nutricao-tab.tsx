@@ -19,15 +19,30 @@ function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
+/** IMC = peso (kg) / altura² (m) */
+export function calcIMC(weightKg: number | null, heightCm: number | null): number | null {
+  if (!weightKg || !heightCm || heightCm <= 0) return null
+  const h = heightCm / 100
+  return Math.round((weightKg / (h * h)) * 100) / 100
+}
+
+const EMPTY_COMP_FORM = {
+  measured_at: '', weight_kg: '', body_fat_pct: '', muscle_mass_kg: '', bone_mass_kg: '', visceral_fat: '',
+  fat_mass_kg: '', lean_mass_kg: '', lean_mass_pct: '', waist_hip_ratio: '', body_density: '',
+  skinfold_sum_mm: '', arm_muscle_area: '', arm_fat_area: '', notes: '',
+}
+
 interface Props { athleteId: string }
 
 export function NutricaoTab({ athleteId }: Props) {
   const [bodyComp, setBodyComp] = useState<BodyCompositionRow[]>([])
   const [plans, setPlans] = useState<NutritionPlanRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [heightCm, setHeightCm] = useState<number | null>(null)
+  const [heightInput, setHeightInput] = useState('')
 
   const [compOpen, setCompOpen] = useState(false)
-  const [compForm, setCompForm] = useState({ measured_at: '', weight_kg: '', body_fat_pct: '', muscle_mass_kg: '', bone_mass_kg: '', visceral_fat: '', notes: '' })
+  const [compForm, setCompForm] = useState({ ...EMPTY_COMP_FORM })
 
   const [planOpen, setPlanOpen] = useState(false)
   const [planForm, setPlanForm] = useState({ phase: 'base', calories_target: '', protein_g: '', carbs_g: '', fat_g: '', hydration_ml: '', notes: '' })
@@ -38,29 +53,61 @@ export function NutricaoTab({ athleteId }: Props) {
 
   async function load() {
     setLoading(true)
-    const [bc, pl] = await Promise.all([getAthleteBodyComposition(athleteId), getAthleteNutritionPlans(athleteId)])
+    const sb = createClient()
+    const [bc, pl, { data: ath }] = await Promise.all([
+      getAthleteBodyComposition(athleteId),
+      getAthleteNutritionPlans(athleteId),
+      sb.from('athletes').select('height_cm').eq('id', athleteId).single(),
+    ])
     setBodyComp(bc)
     setPlans(pl)
+    const h = (ath as { height_cm: number | null } | null)?.height_cm ?? null
+    setHeightCm(h)
+    setHeightInput(h?.toString() ?? '')
     setLoading(false)
   }
+
+  const num = (s: string) => (s ? parseFloat(s) : null)
 
   async function saveBodyComp() {
     if (!compForm.measured_at) return
     setSaving(true)
     const sb = createClient()
-    await sb.from('body_composition').insert({
+
+    // Altura salva no perfil do atleta (constante entre medições)
+    if (heightInput && parseFloat(heightInput) !== heightCm) {
+      await sb.from('athletes').update({ height_cm: parseFloat(heightInput) }).eq('id', athleteId)
+    }
+
+    // Massa gorda/magra derivadas do peso e % quando não informadas
+    const weight = num(compForm.weight_kg)
+    const fatPct = num(compForm.body_fat_pct)
+    const fatMass = num(compForm.fat_mass_kg) ?? (weight && fatPct ? Math.round(weight * fatPct) / 100 : null)
+    const leanPct = num(compForm.lean_mass_pct) ?? (fatPct != null ? Math.round((100 - fatPct) * 100) / 100 : null)
+    const leanMass = num(compForm.lean_mass_kg) ?? (weight && leanPct ? Math.round(weight * leanPct) / 100 : null)
+
+    const { error } = await sb.from('body_composition').insert({
       athlete_id: athleteId,
       measured_at: compForm.measured_at,
-      weight_kg: compForm.weight_kg ? parseFloat(compForm.weight_kg) : null,
-      body_fat_pct: compForm.body_fat_pct ? parseFloat(compForm.body_fat_pct) : null,
-      muscle_mass_kg: compForm.muscle_mass_kg ? parseFloat(compForm.muscle_mass_kg) : null,
-      bone_mass_kg: compForm.bone_mass_kg ? parseFloat(compForm.bone_mass_kg) : null,
+      weight_kg: weight,
+      body_fat_pct: fatPct,
+      muscle_mass_kg: num(compForm.muscle_mass_kg),
+      bone_mass_kg: num(compForm.bone_mass_kg),
       visceral_fat: compForm.visceral_fat ? parseInt(compForm.visceral_fat) : null,
+      fat_mass_kg: fatMass,
+      lean_mass_kg: leanMass,
+      lean_mass_pct: leanPct,
+      waist_hip_ratio: num(compForm.waist_hip_ratio),
+      body_density: num(compForm.body_density),
+      skinfold_sum_mm: num(compForm.skinfold_sum_mm),
+      arm_muscle_area: num(compForm.arm_muscle_area),
+      arm_fat_area: num(compForm.arm_fat_area),
       notes: compForm.notes || null,
     })
+    if (error) console.error('[nutricao-tab]', error.message)
     setSaving(false)
     setCompOpen(false)
-    setCompForm({ measured_at: '', weight_kg: '', body_fat_pct: '', muscle_mass_kg: '', bone_mass_kg: '', visceral_fat: '', notes: '' })
+    setCompForm({ ...EMPTY_COMP_FORM })
     load()
   }
 
@@ -96,6 +143,7 @@ export function NutricaoTab({ athleteId }: Props) {
     }
     // Pré-preenche o formulário de medição e abre o modal para revisão
     setCompForm({
+      ...EMPTY_COMP_FORM,
       measured_at: extractDateFromText(text) ?? todayLocalISO(),
       weight_kg: comp.weight_kg?.toString() ?? '',
       body_fat_pct: comp.body_fat_pct?.toString() ?? '',
@@ -161,9 +209,9 @@ export function NutricaoTab({ athleteId }: Props) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               {[
                 { label: 'Peso', value: latestComp.weight_kg != null ? `${latestComp.weight_kg} kg` : '—', trend: weightTrend },
-                { label: 'Gordura', value: latestComp.body_fat_pct != null ? `${latestComp.body_fat_pct}%` : '—', trend: null },
-                { label: 'Massa Muscular', value: latestComp.muscle_mass_kg != null ? `${latestComp.muscle_mass_kg} kg` : '—', trend: null },
-                { label: 'Gordura Visceral', value: latestComp.visceral_fat != null ? `Nível ${latestComp.visceral_fat}` : '—', trend: null },
+                { label: 'IMC', value: calcIMC(latestComp.weight_kg, heightCm)?.toFixed(2) ?? '—', trend: null },
+                { label: '% Massa Gorda', value: latestComp.body_fat_pct != null ? `${latestComp.body_fat_pct}%` : '—', trend: null },
+                { label: 'Massa Magra', value: latestComp.lean_mass_kg != null ? `${latestComp.lean_mass_kg} kg` : '—', trend: null },
               ].map(({ label, value, trend }) => (
                 <div key={label} className="rounded-xl px-4 py-3" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
                   <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
@@ -183,25 +231,13 @@ export function NutricaoTab({ athleteId }: Props) {
                 </div>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground mb-2">Última medição: {fmtDate(latestComp.measured_at)}</p>
+            <p className="text-[10px] text-muted-foreground mb-3">
+              Última medição: {fmtDate(latestComp.measured_at)}
+              {heightCm ? ` · Altura: ${(heightCm / 100).toFixed(2).replace('.', ',')} m` : ''}
+            </p>
 
-            {/* History */}
-            {bodyComp.length > 1 && (
-              <div className="mt-3 pt-3 border-t border-border/30">
-                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Histórico</p>
-                <div className="space-y-1.5">
-                  {bodyComp.map(bc => (
-                    <div key={bc.id} className="flex items-center gap-3 text-xs">
-                      <span className="text-muted-foreground/60 w-20 flex-shrink-0">{fmtDate(bc.measured_at)}</span>
-                      <span className="text-foreground font-medium">{bc.weight_kg != null ? `${bc.weight_kg} kg` : '—'}</span>
-                      {bc.body_fat_pct != null && <span className="text-muted-foreground">{bc.body_fat_pct}% gord.</span>}
-                      {bc.muscle_mass_kg != null && <span className="text-muted-foreground">{bc.muscle_mass_kg} kg musc.</span>}
-                      <button onClick={() => deleteBodyComp(bc.id)} className="ml-auto"><X className="w-3 h-3 text-muted-foreground/30 hover:text-muted-foreground/70" /></button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {/* Evolução por data */}
+            <EvolutionTable bodyComp={bodyComp} heightCm={heightCm} onDelete={deleteBodyComp} />
           </div>
         )}
       </div>
@@ -286,36 +322,91 @@ export function NutricaoTab({ athleteId }: Props) {
       {/* Modal Composição */}
       {compOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-sm font-bold">Nova Medição Corporal</h3>
               <button onClick={() => setCompOpen(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
             </div>
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-muted-foreground mb-1">Data da medição *</label>
-                <input type="date" value={compForm.measured_at} onChange={e => setCompForm(v => ({ ...v, measured_at: e.target.value }))} className={inputCls} />
+            <div className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Data *</label>
+                  <input type="date" value={compForm.measured_at} onChange={e => setCompForm(v => ({ ...v, measured_at: e.target.value }))} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Altura (cm)</label>
+                  <input type="number" step="0.1" value={heightInput} onChange={e => setHeightInput(e.target.value)}
+                    placeholder="191" className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs text-muted-foreground mb-1">Peso (kg)</label>
+                  <input type="number" step="0.1" value={compForm.weight_kg} onChange={e => setCompForm(v => ({ ...v, weight_kg: e.target.value }))}
+                    placeholder="108.1" className={inputCls} />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {([
-                  { label: 'Peso (kg)', key: 'weight_kg', placeholder: '75.0' },
-                  { label: '% Gordura', key: 'body_fat_pct', placeholder: '18.5' },
-                  { label: 'Massa Muscular (kg)', key: 'muscle_mass_kg', placeholder: '58.0' },
-                  { label: 'Massa Óssea (kg)', key: 'bone_mass_kg', placeholder: '3.2' },
-                  { label: 'Gordura Visceral (nível)', key: 'visceral_fat', placeholder: '5' },
-                ] as { label: string; key: keyof typeof compForm; placeholder: string }[]).map(({ label, key, placeholder }) => (
-                  <div key={key}>
-                    <label className="block text-xs text-muted-foreground mb-1">{label}</label>
-                    <input type="number" step="0.1" value={compForm[key]} onChange={e => setCompForm(v => ({ ...v, [key]: e.target.value }))}
-                      placeholder={placeholder} className={inputCls} />
+
+              {/* IMC calculado ao vivo */}
+              {(() => {
+                const imc = calcIMC(compForm.weight_kg ? parseFloat(compForm.weight_kg) : null, heightInput ? parseFloat(heightInput) : null)
+                if (imc == null) return null
+                const cls = imc < 18.5 ? ['Abaixo do peso', '#fbbf24'] : imc < 25 ? ['Eutrófico', '#4ade80'] : imc < 30 ? ['Sobrepeso', '#fbbf24'] : ['Obesidade', '#ef4444']
+                return (
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">IMC calculado</span>
+                    <span className="text-lg font-black text-foreground">{imc.toFixed(2).replace('.', ',')}</span>
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: cls[1] + '20', color: cls[1], border: `1px solid ${cls[1]}40` }}>{cls[0]}</span>
                   </div>
-                ))}
+                )
+              })()}
+
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Composição</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { label: 'Massa Gorda (kg)', key: 'fat_mass_kg', placeholder: 'auto: peso × %' },
+                    { label: '% Massa Gorda', key: 'body_fat_pct', placeholder: '22.61' },
+                    { label: 'Massa Magra (kg)', key: 'lean_mass_kg', placeholder: 'auto: peso × %' },
+                    { label: '% Massa Magra', key: 'lean_mass_pct', placeholder: 'auto: 100 − % gorda' },
+                    { label: 'Massa Muscular (kg)', key: 'muscle_mass_kg', placeholder: '58.0' },
+                    { label: 'Massa Óssea (kg)', key: 'bone_mass_kg', placeholder: '3.2' },
+                  ] as { label: string; key: keyof typeof compForm; placeholder: string }[]).map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-xs text-muted-foreground mb-1">{label}</label>
+                      <input type="number" step="0.01" value={compForm[key]} onChange={e => setCompForm(v => ({ ...v, [key]: e.target.value }))}
+                        placeholder={placeholder} className={inputCls} />
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              <div>
+                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Antropometria</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {([
+                    { label: 'Razão cintura/quadril', key: 'waist_hip_ratio', placeholder: '0.88' },
+                    { label: 'Densidade Corporal', key: 'body_density', placeholder: '1.05' },
+                    { label: 'Soma de dobras (mm)', key: 'skinfold_sum_mm', placeholder: '153' },
+                    { label: 'Gordura Visceral (nível)', key: 'visceral_fat', placeholder: '5' },
+                    { label: 'Área Muscular Braço (AMB)', key: 'arm_muscle_area', placeholder: '79.76' },
+                    { label: 'Área Gordura Braço (AGB)', key: 'arm_fat_area', placeholder: '29.18' },
+                  ] as { label: string; key: keyof typeof compForm; placeholder: string }[]).map(({ label, key, placeholder }) => (
+                    <div key={key}>
+                      <label className="block text-xs text-muted-foreground mb-1">{label}</label>
+                      <input type="number" step="0.01" value={compForm[key]} onChange={e => setCompForm(v => ({ ...v, [key]: e.target.value }))}
+                        placeholder={placeholder} className={inputCls} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs text-muted-foreground mb-1">Observações</label>
                 <textarea value={compForm.notes} onChange={e => setCompForm(v => ({ ...v, notes: e.target.value }))}
                   rows={2} className={inputCls + ' resize-none'} />
               </div>
+              <p className="text-[10px] text-muted-foreground/70">
+                💡 Massa gorda/magra em kg e % magra são calculadas automaticamente a partir do peso e % de gordura quando deixadas em branco.
+              </p>
             </div>
             <div className="flex gap-3 mt-5">
               <button onClick={saveBodyComp} disabled={saving || !compForm.measured_at}
@@ -374,6 +465,102 @@ export function NutricaoTab({ athleteId }: Props) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Tabela de evolução por data ─────────────────────────────────────────────
+// Linhas = métricas, colunas = medições ordenadas por data, com delta vs anterior.
+
+type MetricDef = {
+  label: string
+  get: (bc: BodyCompositionRow) => number | null
+  unit: string
+  decimals: number
+  /** 'down' = queda é boa (verde); 'up' = aumento é bom */
+  goodDirection: 'down' | 'up' | null
+}
+
+function EvolutionTable({ bodyComp, heightCm, onDelete }: {
+  bodyComp: BodyCompositionRow[]
+  heightCm: number | null
+  onDelete: (id: string) => void
+}) {
+  const sorted = [...bodyComp].sort((a, b) => a.measured_at.localeCompare(b.measured_at))
+
+  const metrics: MetricDef[] = [
+    { label: 'Peso', get: bc => bc.weight_kg, unit: 'kg', decimals: 1, goodDirection: 'down' },
+    { label: 'IMC', get: bc => calcIMC(bc.weight_kg, heightCm), unit: '', decimals: 2, goodDirection: 'down' },
+    { label: 'Massa Gorda', get: bc => bc.fat_mass_kg, unit: 'kg', decimals: 2, goodDirection: 'down' },
+    { label: '% Massa Gorda', get: bc => bc.body_fat_pct, unit: '%', decimals: 2, goodDirection: 'down' },
+    { label: 'Massa Magra', get: bc => bc.lean_mass_kg, unit: 'kg', decimals: 2, goodDirection: 'up' },
+    { label: '% Massa Magra', get: bc => bc.lean_mass_pct, unit: '%', decimals: 2, goodDirection: 'up' },
+    { label: 'Massa Muscular', get: bc => bc.muscle_mass_kg, unit: 'kg', decimals: 2, goodDirection: 'up' },
+    { label: 'Razão cintura/quadril', get: bc => bc.waist_hip_ratio, unit: '', decimals: 2, goodDirection: 'down' },
+    { label: 'Densidade Corporal', get: bc => bc.body_density, unit: '', decimals: 2, goodDirection: 'up' },
+    { label: 'Soma de dobras', get: bc => bc.skinfold_sum_mm, unit: 'mm', decimals: 0, goodDirection: 'down' },
+    { label: 'Área Muscular do Braço (AMB)', get: bc => bc.arm_muscle_area, unit: '', decimals: 2, goodDirection: 'up' },
+    { label: 'Área de Gordura do Braço (AGB)', get: bc => bc.arm_fat_area, unit: '', decimals: 2, goodDirection: 'down' },
+    { label: 'Gordura Visceral', get: bc => bc.visceral_fat, unit: '', decimals: 0, goodDirection: 'down' },
+  ]
+
+  // Só mostra linhas que têm pelo menos um valor
+  const visibleMetrics = metrics.filter(m => sorted.some(bc => m.get(bc) != null))
+  if (sorted.length === 0 || visibleMetrics.length === 0) return null
+
+  const fmt = (v: number, decimals: number) => v.toFixed(decimals).replace('.', ',')
+
+  return (
+    <div className="mt-2 pt-3 border-t border-border/30">
+      <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-2">Evolução</p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs" style={{ minWidth: 140 + sorted.length * 110 }}>
+          <thead>
+            <tr>
+              <th className="text-left py-2 pr-3 text-[10px] font-bold text-muted-foreground uppercase tracking-wider sticky left-0 bg-card">Data</th>
+              {sorted.map(bc => (
+                <th key={bc.id} className="text-right py-2 px-2 text-[10px] font-bold text-foreground whitespace-nowrap">
+                  {fmtDate(bc.measured_at)}
+                  <button onClick={() => onDelete(bc.id)} className="ml-1 align-middle" title="Excluir medição">
+                    <X className="w-2.5 h-2.5 inline text-muted-foreground/40 hover:text-muted-foreground" />
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/30">
+            {visibleMetrics.map(m => (
+              <tr key={m.label}>
+                <td className="py-2 pr-3 text-[11px] text-muted-foreground whitespace-nowrap sticky left-0 bg-card">{m.label}</td>
+                {sorted.map((bc, i) => {
+                  const v = m.get(bc)
+                  if (v == null) return <td key={bc.id} className="text-right py-2 px-2 text-muted-foreground/30">—</td>
+                  // Delta vs medição anterior que tenha valor
+                  let delta: number | null = null
+                  for (let j = i - 1; j >= 0; j--) {
+                    const prev = m.get(sorted[j])
+                    if (prev != null) { delta = v - prev; break }
+                  }
+                  const deltaGood = delta != null && m.goodDirection != null
+                    ? (m.goodDirection === 'down' ? delta < 0 : delta > 0)
+                    : null
+                  return (
+                    <td key={bc.id} className="text-right py-2 px-2 whitespace-nowrap">
+                      <span className="font-semibold text-foreground">{fmt(v, m.decimals)}{m.unit ? ` ${m.unit}` : ''}</span>
+                      {delta != null && Math.abs(delta) >= 0.005 && (
+                        <span className="block text-[10px]"
+                          style={{ color: deltaGood == null ? '#64748b' : deltaGood ? '#4ade80' : '#fbbf24' }}>
+                          ({delta > 0 ? '+' : ''}{fmt(delta, m.decimals)})
+                        </span>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
