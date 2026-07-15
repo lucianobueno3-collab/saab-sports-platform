@@ -1,5 +1,6 @@
 import FitParser from 'fit-file-parser'
-import { calcActivityTss, type SportThresholds } from '@/lib/calculations/tss'
+import { calcActivityTss, ftpForSport, lthrForSport, type SportThresholds } from '@/lib/calculations/tss'
+import { computeZoneDistribution, type ZoneDistribution } from '@/lib/calculations/zone-distribution'
 
 export interface FitActivity {
   date: string
@@ -12,6 +13,7 @@ export interface FitActivity {
   intensity_factor: number | null
   tss: number | null
   tss_method: 'power' | 'hr' | null
+  zone_data: ZoneDistribution | null
   avg_hr: number | null
   max_hr: number | null
   avg_cadence: number | null
@@ -56,7 +58,7 @@ export async function parseFitFile(
         const calories = session.total_calories ?? null
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const records: { power?: number }[] = sessions.flatMap((s: any) =>
+        const records: { power?: number; heart_rate?: number }[] = sessions.flatMap((s: any) =>
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (s.laps ?? []).flatMap((l: any) => l.records ?? [])
         )
@@ -85,6 +87,13 @@ export async function parseFitFile(
           thresholds,
         })
 
+        // Distribuição de tempo em zonas (potência para bike, FC para os demais)
+        const zoneDist = computeZoneDistribution(records, {
+          ftp: ftpForSport(sportStr, thresholds),
+          lthr: lthrForSport(sportStr, thresholds),
+          sport: sportStr,
+        })
+
         const nameMap: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', swimming: 'Natação', triathlon: 'Triathlon', ride: 'Ciclismo', run: 'Corrida', swim: 'Natação' }
         const sportName = nameMap[sportStr] ?? 'Treino'
 
@@ -99,6 +108,7 @@ export async function parseFitFile(
           intensity_factor: result?.intensityFactor ?? null,
           tss: result?.tss ?? null,
           tss_method: result?.method ?? null,
+          zone_data: zoneDist,
           avg_hr: avgHR ? Math.round(avgHR) : null,
           max_hr: maxHR ? Math.round(maxHR) : null,
           avg_cadence: avgCadence ? Math.round(avgCadence) : null,

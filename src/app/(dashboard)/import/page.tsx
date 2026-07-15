@@ -355,6 +355,7 @@ export default function ImportPage() {
             intensity_factor: act.intensity_factor ?? null,
             tss: act.tss ?? null,
             tss_method: act.tss_method,
+            zone_data: act.zone_data,
             avg_hr_bpm: act.avg_hr ?? null,
             max_hr_bpm: act.max_hr ?? null,
             avg_cadence_rpm: act.avg_cadence ?? null,

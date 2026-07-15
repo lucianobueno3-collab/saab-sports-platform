@@ -22,6 +22,7 @@ import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
+import { ActivityZones } from '@/components/athlete/activity-zones'
 
 function sportLabel(sport: string) {
   const map: Record<string, string> = {
@@ -479,6 +480,15 @@ function AthleteDetailContent() {
                               </div>
                             ))}
                           </div>
+                          {act.zone_data && act.zone_data.seconds?.length > 0 && (
+                            <ActivityZones
+                              zoneData={act.zone_data}
+                              ftp={act.sport.includes('run') ? athlete.ftp_run_watts : athlete.ftp_watts}
+                              lthr={act.sport.includes('swim') ? (athlete.lthr_swim_bpm ?? athlete.lthr_bpm)
+                                : act.sport.includes('run') ? (athlete.lthr_run_bpm ?? athlete.lthr_bpm)
+                                : (athlete.lthr_bike_bpm ?? athlete.lthr_bpm)}
+                            />
+                          )}
                           {act.tss == null && athlete.lthr_bpm && act.avg_hr_bpm && (
                             <p className="text-[10px] text-[#ffa800] flex items-center gap-1">
                               ⚡ FC média disponível — clique em &ldquo;Calcular hrTSS&rdquo; para estimar o TSS via LTHR ({athlete.lthr_bpm} bpm)

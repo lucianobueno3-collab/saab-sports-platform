@@ -51,6 +51,7 @@ export type ActivityRow = {
   distance_meters: number | null
   tss: number | null
   tss_method: 'power' | 'hr' | null
+  zone_data: { basis: 'power' | 'hr'; seconds: number[]; zoneModel: 'coggan' | 'friel' } | null
   normalized_power: number | null
   intensity_factor: number | null
   avg_hr_bpm: number | null
@@ -107,7 +108,7 @@ export async function getAthleteActivities(athleteId: string, limit = 10): Promi
   const sb = createClient()
   const { data, error } = await sb
     .from('activities')
-    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm')
     .eq('athlete_id', athleteId)
     .order('started_at', { ascending: false })
     .limit(limit)
