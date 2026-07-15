@@ -2,14 +2,18 @@
 // e composição corporal em laudos brasileiros. O resultado sempre passa por revisão
 // do usuário antes de salvar — a extração é sugestão, não verdade.
 
-/** Extrai o texto de todas as páginas do PDF, no navegador */
-export async function extractPdfText(file: File): Promise<string> {
+async function loadPdfjs() {
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
     import.meta.url,
   ).toString()
+  return pdfjs
+}
 
+/** Extrai o texto de todas as páginas do PDF, no navegador (só PDFs com camada de texto) */
+export async function extractPdfText(file: File): Promise<string> {
+  const pdfjs = await loadPdfjs()
   const buf = await file.arrayBuffer()
   const doc = await pdfjs.getDocument({ data: buf }).promise
   const pages: string[] = []
@@ -22,6 +26,51 @@ export async function extractPdfText(file: File): Promise<string> {
     pages.push(text)
   }
   return pages.join('\n')
+}
+
+/** Renderiza cada página do PDF em imagem e roda OCR (para PDFs digitalizados sem texto) */
+export async function ocrPdf(
+  file: File,
+  onProgress?: (info: { page: number; totalPages: number; status: string }) => void,
+): Promise<string> {
+  const pdfjs = await loadPdfjs()
+  const { createWorker } = await import('tesseract.js')
+
+  const buf = await file.arrayBuffer()
+  const doc = await pdfjs.getDocument({ data: buf }).promise
+  // Modelos português + inglês (laudos costumam misturar unidades em inglês)
+  const worker = await createWorker(['por', 'eng'])
+  const pages: string[] = []
+
+  try {
+    for (let i = 1; i <= doc.numPages; i++) {
+      onProgress?.({ page: i, totalPages: doc.numPages, status: 'renderizando' })
+      const page = await doc.getPage(i)
+      // Escala 2x melhora a acurácia do OCR em laudos com fonte pequena
+      const viewport = page.getViewport({ scale: 2 })
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) continue
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await page.render({ canvasContext: ctx, viewport, canvas } as any).promise
+
+      onProgress?.({ page: i, totalPages: doc.numPages, status: 'lendo (OCR)' })
+      const { data } = await worker.recognize(canvas)
+      pages.push(data.text)
+      canvas.width = 0; canvas.height = 0 // libera memória
+    }
+  } finally {
+    await worker.terminate()
+  }
+  return pages.join('\n')
+}
+
+/** Conta caracteres "úteis" (letras/números) — decide se o PDF tem texto ou precisa de OCR */
+export function hasExtractableText(text: string): boolean {
+  const useful = text.replace(/[^a-zA-Z0-9À-ÿ]/g, '')
+  return useful.length >= 20
 }
 
 // ─── Exames laboratoriais ────────────────────────────────────────────────────

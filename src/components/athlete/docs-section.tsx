@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { getAthleteDocuments, type AthleteDocumentRow } from '@/lib/supabase/queries'
-import { extractPdfText } from '@/lib/parsers/pdf-parser'
-import { FileText, Upload, Download, X, Loader2, Sparkles } from 'lucide-react'
+import { extractPdfText, ocrPdf, hasExtractableText } from '@/lib/parsers/pdf-parser'
+import { FileText, Upload, Download, X, Loader2, Sparkles, ScanText } from 'lucide-react'
 
 interface Props {
   athleteId: string
@@ -19,6 +19,8 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
   const [docs, setDocs] = useState<AthleteDocumentRow[]>([])
   const [uploading, setUploading] = useState(false)
   const [extracting, setExtracting] = useState<string | null>(null)
+  const [ocrDoc, setOcrDoc] = useState<AthleteDocumentRow | null>(null)
+  const [ocrProgress, setOcrProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -73,8 +75,9 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
       if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
       const file = new File([data], doc.file_name, { type: 'application/pdf' })
       const text = await extractPdfText(file)
-      if (!text.trim()) {
-        setError('O PDF não contém texto extraível (pode ser digitalizado como imagem).')
+      if (!hasExtractableText(text)) {
+        // PDF sem camada de texto (digitalizado) → oferece OCR
+        setOcrDoc(doc)
       } else {
         onExtractText(text, doc.file_name)
       }
@@ -82,6 +85,29 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
       setError(`Falha ao ler o PDF: ${String(e)}`)
     }
     setExtracting(null)
+  }
+
+  async function runOcr(doc: AthleteDocumentRow) {
+    setError(null)
+    setOcrProgress('Preparando OCR...')
+    try {
+      const sb = createClient()
+      const { data, error: dlErr } = await sb.storage.from('athlete-docs').download(doc.storage_path)
+      if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
+      const file = new File([data], doc.file_name, { type: 'application/pdf' })
+      const text = await ocrPdf(file, ({ page, totalPages, status }) =>
+        setOcrProgress(`Página ${page}/${totalPages} — ${status}`))
+      setOcrProgress(null)
+      setOcrDoc(null)
+      if (!hasExtractableText(text)) {
+        setError('O OCR não conseguiu reconhecer texto neste PDF. Preencha manualmente.')
+      } else {
+        onExtractText(text, doc.file_name)
+      }
+    } catch (e) {
+      setOcrProgress(null)
+      setError(`Falha no OCR: ${String(e)}`)
+    }
   }
 
   return (
@@ -108,6 +134,33 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
 
       {error && (
         <p className="text-[11px] text-[#ef4444] px-5 py-2 border-b border-border/30">{error}</p>
+      )}
+
+      {/* Prompt de OCR para PDF escaneado */}
+      {ocrDoc && (
+        <div className="px-5 py-3 border-b border-border/30" style={{ background: '#a78bfa14' }}>
+          {ocrProgress ? (
+            <div className="flex items-center gap-2 text-[11px] text-[#a78bfa]">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Reconhecendo texto — {ocrProgress}. Isso pode levar até 1 min por página.</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-[11px] text-muted-foreground flex-1 min-w-[200px]">
+                <span className="font-semibold text-foreground">{ocrDoc.file_name}</span> parece ser digitalizado (sem texto). Rodar OCR para tentar ler? É mais lento e roda no seu navegador.
+              </p>
+              <button onClick={() => runOcr(ocrDoc)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition-colors"
+                style={{ background: '#a78bfa22', border: '1px solid #a78bfa55', color: '#a78bfa' }}>
+                <ScanText className="w-3.5 h-3.5" /> Rodar OCR
+              </button>
+              <button onClick={() => setOcrDoc(null)}
+                className="px-3 py-1.5 text-xs text-muted-foreground rounded-lg hover:bg-secondary">
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
       )}
 
       {docs.length === 0 ? (
