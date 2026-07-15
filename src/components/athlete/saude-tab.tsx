@@ -294,7 +294,7 @@ export function SaudeTab({ athleteId }: Props) {
             {Object.entries(examGroups).map(([name, rows]) => {
               const latest = rows[0]
               return (
-                <div key={name} className="rounded-xl p-4" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                <div key={name} className="rounded-xl p-4" style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}>
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <p className="text-xs font-bold text-foreground">{name}</p>
                     <ExamStatus value={latest.value} min={latest.reference_min} max={latest.reference_max} />
@@ -361,7 +361,7 @@ export function SaudeTab({ athleteId }: Props) {
             <div className="space-y-2">
               {detected.exams.map((e, i) => (
                 <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2.5"
-                  style={{ background: '#12121e', border: '1px solid #1e1e2e', opacity: e.include ? 1 : 0.45 }}>
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--border)', opacity: e.include ? 1 : 0.45 }}>
                   <input type="checkbox" checked={e.include}
                     onChange={ev => setDetected(d => {
                       if (!d) return d

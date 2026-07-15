@@ -44,15 +44,15 @@ export function PMCChart({ data }: PMCChartProps) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <ComposedChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
-        <XAxis dataKey="label" tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
-        <YAxis tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
         <Tooltip content={<CustomTooltip />} />
         <Legend
           wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-          formatter={(v) => <span style={{ color: '#888899' }}>{v}</span>}
+          formatter={(v) => <span style={{ color: 'var(--muted-foreground)' }}>{v}</span>}
         />
-        <ReferenceLine y={0} stroke="#2a2a3a" />
+        <ReferenceLine y={0} stroke="var(--border)" />
         {/* TSS bars */}
         <Bar dataKey="tss" name="TSS" fill="#1a1a24" radius={[2, 2, 0, 0]} yAxisId={0} />
         <Line type="monotone" dataKey="ctl" name="CTL/Fitness" stroke="#0088ff" strokeWidth={2} dot={false} />

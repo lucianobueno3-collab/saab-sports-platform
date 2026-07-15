@@ -54,7 +54,7 @@ export default function LoginPage() {
     <div className="w-full max-w-sm">
       {/* Logo */}
       <div className="flex flex-col items-center gap-2 mb-8">
-        <Image src="/logo-saab.png" alt="SAAB Sports" width={210} height={54} priority className="h-auto w-[210px] max-w-[65vw]" />
+        <Image src="/logo-saab.png" alt="SAAB Sports" width={210} height={54} priority className="h-auto w-[210px] max-w-[65vw] invert dark:invert-0" />
         <p className="text-xs text-muted-foreground uppercase tracking-widest">Performance Platform</p>
       </div>
 

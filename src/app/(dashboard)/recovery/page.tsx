@@ -55,7 +55,7 @@ const KPI_STATE_BG: Record<string, string> = {
 const ChartTip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0d0d14] border border-border rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-popover border border-border rounded-lg p-3 text-xs shadow-xl">
       <p className="text-muted-foreground mb-1 font-medium">{label}</p>
       {payload.map(p => (
         <div key={p.name} className="flex items-center gap-2">
@@ -267,9 +267,9 @@ export default function RecoveryPage() {
                 <p className="text-xs text-muted-foreground mb-4">ms · verde ≥{t.hrv.green_min} · amarelo {t.hrv.yellow_min}–{t.hrv.green_min - 1} · vermelho &lt;{t.hrv.yellow_min}</p>
                 <ResponsiveContainer width="100%" height={200}>
                   <ComposedChart data={chartData.filter(m => m.hrv_ms)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                     <Tooltip content={<ChartTip />} />
                     <ReferenceLine y={t.hrv.green_min} stroke="#00d084" strokeDasharray="3 2" label={{ value: `${t.hrv.green_min}`, fill: '#00d084', fontSize: 9 }} />
                     <ReferenceLine y={t.hrv.yellow_min} stroke="#ffa800" strokeDasharray="3 2" label={{ value: `${t.hrv.yellow_min}`, fill: '#ffa800', fontSize: 9 }} />
@@ -300,9 +300,9 @@ export default function RecoveryPage() {
                         <stop offset="95%" stopColor="#ffa800" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                     <Tooltip content={<ChartTip />} />
                     <ReferenceLine y={t.bodyBattery.target_min} stroke="#00d084" strokeDasharray="3 2" label={{ value: 'Meta 50', fill: '#00d084', fontSize: 9 }} />
                     <ReferenceLine y={t.bodyBattery.exhaustion_max} stroke="#ffa800" strokeDasharray="3 2" label={{ value: 'Exaustão', fill: '#ffa800', fontSize: 9 }} />
@@ -321,9 +321,9 @@ export default function RecoveryPage() {
                   <p className="text-xs text-muted-foreground mb-4">horas · meta {t.sleep.target_hours}h · risco lesão &lt;{t.sleep.injury_risk_below}h</p>
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={chartData.filter(m => m.sleep_hours)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 10]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 10]} />
                       <Tooltip content={<ChartTip />} />
                       <ReferenceLine y={t.sleep.target_hours} stroke="#00d084" strokeDasharray="4 2" label={{ value: `${t.sleep.target_hours}h`, fill: '#00d084', fontSize: 9, position: 'insideTopRight' }} />
                       <ReferenceLine y={t.sleep.injury_risk_below} stroke="#ffa800" strokeDasharray="4 2" label={{ value: `${t.sleep.injury_risk_below}h`, fill: '#ffa800', fontSize: 9, position: 'insideTopRight' }} />
@@ -343,9 +343,9 @@ export default function RecoveryPage() {
                           <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 30]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 30]} />
                       <Tooltip content={<ChartTip />} />
                       <ReferenceLine y={t.rem.target_pct_min} stroke="#00d084" strokeDasharray="3 2" label={{ value: `${t.rem.target_pct_min}%`, fill: '#00d084', fontSize: 9 }} />
                       <ReferenceLine y={t.rem.safety_floor_pct} stroke="#e8001c" strokeDasharray="3 2" label={{ value: `${t.rem.safety_floor_pct}%`, fill: '#e8001c', fontSize: 9 }} />
@@ -370,9 +370,9 @@ export default function RecoveryPage() {
                           <stop offset="95%" stopColor="#e8001c" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                       <Tooltip content={<ChartTip />} />
                       <ReferenceLine y={t.rhr.warning_bpm} stroke="#ffa800" strokeDasharray="3 2" label={{ value: `${t.rhr.warning_bpm}`, fill: '#ffa800', fontSize: 9 }} />
                       <ReferenceLine y={t.rhr.clinical_bpm} stroke="#e8001c" strokeDasharray="3 2" label={{ value: `${t.rhr.clinical_bpm}`, fill: '#e8001c', fontSize: 9 }} />
@@ -388,9 +388,9 @@ export default function RecoveryPage() {
                   <p className="text-xs text-muted-foreground mb-4">0–100 · meta &lt;{t.stress.target_max} · bloqueia sono profundo acima de {t.stress.blocks_deep_sleep_above}</p>
                   <ResponsiveContainer width="100%" height={180}>
                     <ComposedChart data={chartData.filter(m => m.stress_avg)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                       <Tooltip content={<ChartTip />} />
                       <ReferenceLine y={t.stress.target_max} stroke="#00d084" strokeDasharray="3 2" label={{ value: `Meta ${t.stress.target_max}`, fill: '#00d084', fontSize: 9 }} />
                       <ReferenceLine y={t.stress.blocks_deep_sleep_above} stroke="#ffa800" strokeDasharray="3 2" label={{ value: 'Bloqueia sono', fill: '#ffa800', fontSize: 9 }} />

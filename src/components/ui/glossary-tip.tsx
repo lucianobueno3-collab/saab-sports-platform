@@ -33,7 +33,7 @@ export function GlossaryTip({ term, children }: GlossaryTipProps) {
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <span className="absolute bottom-full left-0 mb-2 z-50 w-64 bg-[#0d0d14] border border-border rounded-xl p-3 shadow-2xl text-xs text-muted-foreground leading-relaxed pointer-events-none">
+        <span className="absolute bottom-full left-0 mb-2 z-50 w-64 bg-popover border border-border rounded-xl p-3 shadow-2xl text-xs text-muted-foreground leading-relaxed pointer-events-none">
           <span className="font-semibold text-foreground text-sm block mb-1">{term}</span>
           {children}
           <span className="absolute top-full left-3 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-border" />
@@ -72,7 +72,7 @@ export function InfoTip({ children }: InfoTipProps) {
         <HelpCircle className="w-3.5 h-3.5" />
       </button>
       {open && (
-        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-72 bg-[#0d0d14] border border-border rounded-xl p-3 shadow-2xl text-xs text-muted-foreground leading-relaxed pointer-events-none">
+        <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 w-72 bg-popover border border-border rounded-xl p-3 shadow-2xl text-xs text-muted-foreground leading-relaxed pointer-events-none">
           {children}
           <span className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-border" />
         </span>

@@ -18,7 +18,7 @@ type ActivityRow = { started_at: string; tss: number | null; sport: string; dura
 
 const SPORT_COLORS: Record<string, string> = {
   cycling: '#0088ff', running: '#00d084', swimming: '#a855f7',
-  triathlon: '#ffa800', other: '#888899',
+  triathlon: '#ffa800', other: 'var(--muted-foreground)',
 }
 
 function weekKey(dateStr: string) {
@@ -36,7 +36,7 @@ function fmtDate(str: string) {
 const Tip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0d0d14] border border-border rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-popover border border-border rounded-lg p-3 text-xs shadow-xl">
       <p className="text-muted-foreground mb-2 font-medium">{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2 mb-0.5">
@@ -119,7 +119,7 @@ export default function AnalyticsPage() {
   const sportData = Object.entries(sportMap).map(([sport, sec]) => ({
     sport: sport === 'cycling' ? 'Ciclismo' : sport === 'running' ? 'Corrida' : sport === 'swimming' ? 'Natação' : sport,
     horas: Math.round(sec / 3600 * 10) / 10,
-    fill: SPORT_COLORS[sport] ?? '#888899',
+    fill: SPORT_COLORS[sport] ?? 'var(--muted-foreground)',
   })).sort((a, b) => b.horas - a.horas)
 
   // NP trend (cycling only)
@@ -201,13 +201,13 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-muted-foreground mb-4">CTL (Fitness) · ATL (Fadiga) · TSB (Forma) · TSS diário</p>
                 <ResponsiveContainer width="100%" height={260}>
                   <ComposedChart data={pmcData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                    <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
                     <Tooltip content={<Tip />} />
-                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => <span style={{ color: '#888899' }}>{v}</span>} />
-                    <ReferenceLine y={0} stroke="#2a2a3a" />
-                    <Bar dataKey="TSS" fill="#1e1e2e" radius={[2, 2, 0, 0]} />
+                    <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => <span style={{ color: 'var(--muted-foreground)' }}>{v}</span>} />
+                    <ReferenceLine y={0} stroke="var(--border)" />
+                    <Bar dataKey="TSS" fill="var(--border)" radius={[2, 2, 0, 0]} />
                     <Line type="monotone" dataKey="CTL" stroke="#0088ff" strokeWidth={2.5} dot={false} />
                     <Line type="monotone" dataKey="ATL" stroke="#e8001c" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="TSB" stroke="#00d084" strokeWidth={2} dot={false} strokeDasharray="4 2" />
@@ -224,11 +224,11 @@ export default function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground mb-4">TSS e horas por semana</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={weeklyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                      <XAxis dataKey="semana" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                      <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="semana" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
                       <Tooltip content={<Tip />} />
-                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => <span style={{ color: '#888899' }}>{v}</span>} />
+                      <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => <span style={{ color: 'var(--muted-foreground)' }}>{v}</span>} />
                       <Bar dataKey="TSS" fill="#0088ff" radius={[3, 3, 0, 0]} />
                       <Bar dataKey="Horas" fill="#00d084" radius={[3, 3, 0, 0]} />
                     </BarChart>
@@ -242,8 +242,8 @@ export default function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground mb-4">Horas totais no período</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={sportData} layout="vertical" margin={{ top: 4, right: 8, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" horizontal={false} />
-                      <XAxis type="number" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
+                      <XAxis type="number" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis dataKey="sport" type="category" tick={{ fill: '#aaaacc', fontSize: 11 }} tickLine={false} axisLine={false} width={70} />
                       <Tooltip content={<Tip />} />
                       <Bar dataKey="horas" name="Horas" radius={[0, 4, 4, 0]}>
@@ -272,9 +272,9 @@ export default function AnalyticsPage() {
                         <stop offset="95%" stopColor="#0088ff" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
-                    <XAxis dataKey="data" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="data" tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fill: "var(--muted-foreground)", fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                     <Tooltip content={<Tip />} />
                     {athlete?.ftp_watts && <ReferenceLine y={athlete.ftp_watts} stroke="#ffa800" strokeDasharray="4 2" label={{ value: 'FTP', fill: '#ffa800', fontSize: 10 }} />}
                     <Area type="monotone" dataKey="NP" stroke="#0088ff" strokeWidth={2} fill="url(#npGrad)" dot={{ fill: '#0088ff', r: 3 }} />
