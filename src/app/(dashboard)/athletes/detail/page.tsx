@@ -305,7 +305,7 @@ function AthleteDetailContent() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }}>
+        <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
           {([
             { key: 'performance', label: 'Performance', icon: TrendingUp },
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
@@ -463,7 +463,7 @@ function AthleteDetailContent() {
                       </button>
 
                       {isExpanded && (
-                        <div className="px-5 pb-4 pt-0 ml-8 space-y-3" style={{ background: '#0a0a0f' }}>
+                        <div className="px-5 pb-4 pt-0 ml-8 space-y-3" style={{ background: 'var(--background)' }}>
                           <div className="grid grid-cols-2 gap-2 pt-3">
                             {[
                               { label: 'Duração', value: formatDuration(act.duration_seconds) },
@@ -473,7 +473,7 @@ function AthleteDetailContent() {
                               { label: 'NP', value: act.normalized_power ? `${act.normalized_power}W` : '—' },
                               { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? '—' },
                             ].map(({ label, value, highlight }) => (
-                              <div key={label} className="rounded-lg px-3 py-2" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                              <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
                                 <p className={`text-sm font-bold mt-0.5 ${highlight ? 'text-[#ffa800]' : 'text-foreground'}`}>{value}</p>
                               </div>
@@ -583,7 +583,7 @@ function AthleteDetailContent() {
               <div className="pt-3 border-t border-border">
                 <p className="text-xs font-bold text-foreground mb-1">Calibração PMC <span className="text-muted-foreground font-normal">(corrigir CTL/ATL inicial)</span></p>
                 {athlete.initial_ctl && athlete.initial_date && (
-                  <div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{ background: '#071410', border: '1px solid #0f3024' }}>
+                  <div className="flex items-center gap-3 mb-3 px-3 py-2 rounded-lg" style={{ background: '#00d08414', border: '1px solid #00d08433' }}>
                     <div className="text-[9px] text-[#00d084] font-black uppercase tracking-wider">Calibração atual</div>
                     <div className="flex gap-3 text-[10px] text-[#aabbcc]">
                       <span>CTL <strong>{athlete.initial_ctl}</strong></span>

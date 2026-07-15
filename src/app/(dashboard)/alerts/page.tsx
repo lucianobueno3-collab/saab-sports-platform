@@ -140,10 +140,10 @@ function severityOrder(s: AlertSeverity) {
 }
 
 const SEVERITY_CONFIG = {
-  critical: { color: '#e8001c', bg: '#120505', border: '#3a0a0a', badge: 'CRÍTICO', label: 'Crítico' },
-  warning:  { color: '#ffa800', bg: '#120f05', border: '#3a2a0a', badge: 'ATENÇÃO', label: 'Atenção' },
-  ok:       { color: '#00d084', bg: '#071410', border: '#0f3024', badge: 'OK',      label: 'OK' },
-  nodata:   { color: '#6677aa', bg: '#0d0d18', border: '#1a1a28', badge: 'SEM DADOS', label: 'Sem dados' },
+  critical: { color: '#e8001c', bg: '#e8001c14', border: '#e8001c33', badge: 'CRÍTICO', label: 'Crítico' },
+  warning:  { color: '#ffa800', bg: '#ffa80014', border: '#ffa80033', badge: 'ATENÇÃO', label: 'Atenção' },
+  ok:       { color: '#00d084', bg: '#00d08414', border: '#00d08433', badge: 'OK',      label: 'OK' },
+  nodata:   { color: '#6677aa', bg: '#6677aa14', border: 'var(--border)', badge: 'SEM DADOS', label: 'Sem dados' },
 }
 
 type Filter = 'all' | 'critical' | 'warning' | 'ok' | 'nodata'
@@ -195,7 +195,7 @@ function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () 
             { icon: Moon, label: 'Sono', value: a.sleep_hours != null ? a.sleep_hours.toFixed(1) + 'h' : '—', ok: a.sleep_hours != null && a.sleep_hours >= T.sleep.injury_risk_below },
             { icon: Activity, label: 'TSB', value: (tsb >= 0 ? '+' : '') + tsb.toFixed(0), ok: tsb >= -10 },
           ].map(({ icon: Icon, label, value, ok }) => (
-            <div key={label} className="rounded-lg px-3 py-2 text-center" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+            <div key={label} className="rounded-lg px-3 py-2 text-center" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
               <Icon className="w-3 h-3 mx-auto mb-1" style={{ color: value === '—' ? '#445566' : ok ? '#00d084' : '#e8001c' }} />
               <p className="text-[10px] font-black" style={{ color: value === '—' ? '#445566' : ok ? '#00d084' : '#e8001c' }}>{value}</p>
               <p className="text-[8px] text-[#445566] mt-0.5">{label}</p>
@@ -237,7 +237,7 @@ function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () 
             </Link>
             <button onClick={onWhatsApp}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors"
-              style={{ background: '#071a0e', border: '1px solid #1a4a25', color: '#25d366' }}>
+              style={{ background: '#25d36614', border: '1px solid #25d36633', color: '#25d366' }}>
               <MessageCircle className="w-3 h-3" /> Enviar
             </button>
           </div>
@@ -337,7 +337,7 @@ export default function AlertsPage() {
 
         {/* Coach phone missing banner */}
         {!loading && !coachPhone && (
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: '#0d0f07', border: '1px solid #2a3a10' }}>
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: '#84cc1614', border: '1px solid #84cc1633' }}>
             <Settings className="w-4 h-4 flex-shrink-0" style={{ color: '#a3c040' }} />
             <p className="text-[11px] flex-1" style={{ color: '#a3c040' }}>
               Configure seu WhatsApp em{' '}
@@ -351,10 +351,10 @@ export default function AlertsPage() {
         {!loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { key: 'critical', label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#120505', border: '#3a0a0a', icon: AlertTriangle },
-              { key: 'warning',  label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#120f05', border: '#3a2a0a', icon: AlertTriangle },
-              { key: 'ok',       label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#071410', border: '#0f3024', icon: CheckCircle },
-              { key: 'nodata',   label: 'Sem dados', count: counts.nodata,   color: '#6677aa', bg: '#0d0d18', border: '#1a1a28', icon: Clock },
+              { key: 'critical', label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#e8001c14', border: '#e8001c33', icon: AlertTriangle },
+              { key: 'warning',  label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#ffa80014', border: '#ffa80033', icon: AlertTriangle },
+              { key: 'ok',       label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#00d08414', border: '#00d08433', icon: CheckCircle },
+              { key: 'nodata',   label: 'Sem dados', count: counts.nodata,   color: '#6677aa', bg: '#6677aa14', border: 'var(--border)', icon: Clock },
             ].map(({ key, label, count, color, bg, border, icon: Icon }) => (
               <button key={key}
                 onClick={() => setFilter(filter === key as Filter ? 'all' : key as Filter)}
@@ -380,7 +380,7 @@ export default function AlertsPage() {
                 className="px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors"
                 style={filter === f
                   ? { background: '#e8001c', color: '#fff', border: '1px solid #e8001c' }
-                  : { background: '#0d0d14', color: '#6677aa', border: '1px solid #1e1e2e' }}>
+                  : { background: 'var(--sidebar)', color: '#6677aa', border: '1px solid var(--panel-border)' }}>
                 {f === 'all' ? 'Todos' : f === 'critical' ? 'Críticos' : f === 'warning' ? 'Atenção' : f === 'ok' ? 'OK' : 'Sem dados'}
               </button>
             ))}
@@ -398,13 +398,13 @@ export default function AlertsPage() {
               onClick={sendCoachBriefing}
               title={!coachPhone ? 'Configure seu WhatsApp em Configurações para receber direto no seu número' : undefined}
               className="flex items-center gap-2 px-4 py-2 text-[11px] font-bold rounded-lg transition-colors"
-              style={{ background: '#071a0e', border: '1px solid #1a4a25', color: '#25d366' }}>
+              style={{ background: '#25d36614', border: '1px solid #25d36633', color: '#25d366' }}>
               <MessageCircle className="w-3.5 h-3.5" />
               {coachPhone ? 'Receber meu briefing' : 'Briefing p/ WhatsApp'}
             </button>
             <button onClick={load} disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold rounded-lg transition-colors"
-              style={{ background: '#0d0d14', border: '1px solid #1e1e2e', color: '#6677aa' }}>
+              style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)', color: '#6677aa' }}>
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               Atualizar
             </button>
@@ -412,13 +412,13 @@ export default function AlertsPage() {
         </div>
 
         {/* Legend */}
-        <details className="group rounded-xl overflow-hidden" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }}>
+        <details className="group rounded-xl overflow-hidden" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
           <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer select-none list-none">
             <Info className="w-3.5 h-3.5 text-[#6677aa]" />
             <span className="text-[11px] font-semibold text-[#6677aa]">Como os alertas são calculados</span>
             <ChevronRight className="w-3 h-3 text-[#445566] ml-auto group-open:rotate-90 transition-transform" />
           </summary>
-          <div className="px-4 pb-4 space-y-4 border-t border-[#1e1e2e] pt-4">
+          <div className="px-4 pb-4 space-y-4 border-t border-[var(--panel-border)] pt-4">
 
             {/* Origem dos dados */}
             <div>
@@ -435,7 +435,7 @@ export default function AlertsPage() {
                   { label: 'FC Repouso', src: 'Garmin Connect → tabela daily_metrics · campo resting_hr', detail: 'Frequência cardíaca de repouso ao acordar (bpm)' },
                   { label: 'Stress médio', src: 'Garmin Connect → tabela daily_metrics · campo stress_avg', detail: 'Nível médio de estresse ao longo do dia (0–100)' },
                 ].map(({ label, src, detail }) => (
-                  <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+                  <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
                     <p className="text-[10px] font-black text-[#aabbcc] mb-0.5">{label}</p>
                     <p className="text-[9px] text-[#445566] font-mono leading-relaxed">{src}</p>
                     <p className="text-[9px] text-[#6677aa] mt-1 leading-relaxed">{detail}</p>
@@ -450,7 +450,7 @@ export default function AlertsPage() {
                 <CalendarClock className="w-3 h-3 text-[#6677aa]" />
                 <p className="text-[10px] font-black text-[#aabbcc] uppercase tracking-wider">Quando é calculado</p>
               </div>
-              <div className="rounded-lg px-3 py-3 space-y-2" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+              <div className="rounded-lg px-3 py-3 space-y-2" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
                 {[
                   { step: '1', text: 'Atleta sincroniza o Garmin Connect (automático ou manual)', when: 'A qualquer hora do dia' },
                   { step: '2', text: 'Importação manual via tela "Importar Dados" processa o arquivo .fit e grava daily_metrics', when: 'Sob demanda — você clica em importar' },
@@ -477,10 +477,10 @@ export default function AlertsPage() {
               </div>
               <div className="space-y-1.5">
                 {[
-                  { badge: 'CRÍTICO', color: '#e8001c', bg: '#120505', border: '#3a0a0a', rule: 'HRV < 34ms (zona vermelha) OU Body Battery < 25 (piso de segurança) OU Sono < 5.5h OU Protocolo de parada ativado (2+ sinais críticos por 3+ dias consecutivos)' },
-                  { badge: 'ATENÇÃO', color: '#ffa800', bg: '#120f05', border: '#3a2a0a', rule: 'HRV entre 34–44ms (zona amarela) OU Body Battery < 40 OU Sono < 6.5h — treino deve ser reduzido 30–40%' },
-                  { badge: 'OK', color: '#00d084', bg: '#071410', border: '#0f3024', rule: 'HRV ≥ 44ms + Body Battery ≥ 40 + Sono ≥ 6.5h — todos os indicadores dentro do alvo' },
-                  { badge: 'SEM DADOS', color: '#6677aa', bg: '#0d0d18', border: '#1a1a28', rule: 'Nenhuma métrica registrada nas últimas 48h — o atleta não sincronizou o dispositivo' },
+                  { badge: 'CRÍTICO', color: '#e8001c', bg: '#e8001c14', border: '#e8001c33', rule: 'HRV < 34ms (zona vermelha) OU Body Battery < 25 (piso de segurança) OU Sono < 5.5h OU Protocolo de parada ativado (2+ sinais críticos por 3+ dias consecutivos)' },
+                  { badge: 'ATENÇÃO', color: '#ffa800', bg: '#ffa80014', border: '#ffa80033', rule: 'HRV entre 34–44ms (zona amarela) OU Body Battery < 40 OU Sono < 6.5h — treino deve ser reduzido 30–40%' },
+                  { badge: 'OK', color: '#00d084', bg: '#00d08414', border: '#00d08433', rule: 'HRV ≥ 44ms + Body Battery ≥ 40 + Sono ≥ 6.5h — todos os indicadores dentro do alvo' },
+                  { badge: 'SEM DADOS', color: '#6677aa', bg: '#6677aa14', border: 'var(--border)', rule: 'Nenhuma métrica registrada nas últimas 48h — o atleta não sincronizou o dispositivo' },
                 ].map(({ badge, color, bg, border, rule }) => (
                   <div key={badge} className="flex items-start gap-3 rounded-lg px-3 py-2.5" style={{ background: bg, border: `1px solid ${border}` }}>
                     <span className="text-[9px] font-black px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
@@ -498,7 +498,7 @@ export default function AlertsPage() {
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[1,2,3,4].map(i => (
-              <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }} />
+              <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }} />
             ))}
           </div>
         ) : filtered.length === 0 ? (

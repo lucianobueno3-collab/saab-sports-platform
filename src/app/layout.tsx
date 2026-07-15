@@ -12,7 +12,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark h-full">
+    <html lang="pt-BR" className="dark h-full" suppressHydrationWarning>
+      <head>
+        {/* Aplica o tema salvo antes da primeira pintura para evitar flash */}
+        <script dangerouslySetInnerHTML={{ __html:
+          `try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.remove('dark')}catch(e){}`
+        }} />
+      </head>
       <body className={`${inter.variable} font-sans antialiased min-h-full`}>
         <AuthProvider>
           {children}

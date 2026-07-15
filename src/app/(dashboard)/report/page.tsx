@@ -149,8 +149,8 @@ function buildPrintHTML(opts: {
     .page { page-break-after: avoid; }
     .no-print { display: none !important; }
   }
-  body { background: #0a0a0f; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e0e8f0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .page { width: 210mm; min-height: 297mm; background: #0a0a0f; padding: 0; display: flex; flex-direction: column; }
+  body { background: var(--background); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e0e8f0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 210mm; min-height: 297mm; background: var(--background); padding: 0; display: flex; flex-direction: column; }
 </style>
 </head>
 <body>
@@ -400,7 +400,7 @@ function ReportContent() {
         try {
           const html2canvas = (await import('html2canvas')).default
           const canvas = await html2canvas(doc.body, {
-            backgroundColor: '#0a0a0f', scale: 2, useCORS: true, logging: false,
+            backgroundColor: 'var(--background)', scale: 2, useCORS: true, logging: false,
             width: 794, height: doc.body.scrollHeight,
             windowWidth: 794, windowHeight: doc.body.scrollHeight,
           })
@@ -467,7 +467,7 @@ function ReportContent() {
           </Link>
         </div>
 
-        <div ref={reportRef} className="rounded-2xl overflow-hidden" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+        <div ref={reportRef} className="rounded-2xl overflow-hidden" style={{ background: 'var(--background)', border: '1px solid #1a1a28' }}>
 
           {/* Header */}
           <div className="flex items-center justify-between px-8 py-6" style={{ background: 'linear-gradient(135deg,#0d0d18,#120c14)', borderBottom: '1px solid #1a1a28' }}>
@@ -634,7 +634,7 @@ function ReportContent() {
               <div className="flex gap-2">
                 <button onClick={handleDownloadPDF} disabled={exporting}
                   className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold rounded-lg disabled:opacity-40 transition-colors"
-                  style={{ background: '#131320', border: '1px solid #2a2a3a', color: '#aabbcc' }}>
+                  style={{ background: '#131320', border: '1px solid var(--border)', color: '#aabbcc' }}>
                   {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Printer className="w-3.5 h-3.5" />}
                   {exporting ? 'Gerando...' : 'Baixar PDF'}
                 </button>

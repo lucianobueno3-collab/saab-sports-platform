@@ -44,7 +44,7 @@ export function PMCChart({ data }: PMCChartProps) {
   return (
     <ResponsiveContainer width="100%" height={240}>
       <ComposedChart data={formatted} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
         <XAxis dataKey="label" tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
         <YAxis tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
         <Tooltip content={<CustomTooltip />} />
@@ -52,9 +52,9 @@ export function PMCChart({ data }: PMCChartProps) {
           wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
           formatter={(v) => <span style={{ color: '#888899' }}>{v}</span>}
         />
-        <ReferenceLine y={0} stroke="#2a2a3a" />
+        <ReferenceLine y={0} stroke="var(--border)" />
         {/* TSS bars */}
-        <Bar dataKey="tss" name="TSS" fill="#1a1a24" radius={[2, 2, 0, 0]} yAxisId={0} />
+        <Bar dataKey="tss" name="TSS" fill="var(--secondary)" radius={[2, 2, 0, 0]} yAxisId={0} />
         <Line type="monotone" dataKey="ctl" name="CTL/Fitness" stroke="#0088ff" strokeWidth={2} dot={false} />
         <Line type="monotone" dataKey="atl" name="ATL/Fadiga" stroke="#e8001c" strokeWidth={2} dot={false} />
         <Line type="monotone" dataKey="tsb" name="TSB/Forma" stroke="#00d084" strokeWidth={2} dot={false} strokeDasharray="4 2" />

@@ -469,10 +469,10 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
 
       {/* Sheet */}
       <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md flex flex-col shadow-2xl"
-        style={{ background: '#0d0d14', borderLeft: '1px solid #1e1e2e' }}>
+        style={{ background: 'var(--sidebar)', borderLeft: '1px solid var(--panel-border)' }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--panel-border)]">
           <div className="flex items-center gap-3">
             <span className="p-2 rounded-lg" style={{ background: def.color + '20', color: def.color }}>
               {def.icon}
@@ -482,7 +482,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
               <p className="text-[10px] text-muted-foreground">{def.fullName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#1e1e2e] rounded-lg transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-[var(--panel-border)] rounded-lg transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -514,7 +514,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
           {def.formula && (
             <div>
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">Fórmula</p>
-              <div className="rounded-lg px-4 py-3 font-mono text-xs" style={{ background: '#0a0a0f', border: '1px solid #1a1a28', color: def.color }}>
+              <div className="rounded-lg px-4 py-3 font-mono text-xs" style={{ background: 'var(--background)', border: '1px solid var(--border)', color: def.color }}>
                 {def.formula}
               </div>
             </div>
@@ -526,7 +526,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Sequência do cálculo</p>
               <div className="space-y-2">
                 {steps.map((step, i) => (
-                  <div key={i} className="rounded-lg px-4 py-3" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+                  <div key={i} className="rounded-lg px-4 py-3" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5 flex-1 min-w-0">
                         <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black mt-0.5"
@@ -566,7 +566,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
           )}
 
           {/* Source */}
-          <div className="rounded-lg px-4 py-3" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+          <div className="rounded-lg px-4 py-3" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Origem dos dados</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">{def.source}</p>
             {def.reference && (

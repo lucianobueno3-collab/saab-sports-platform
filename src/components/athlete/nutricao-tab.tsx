@@ -260,7 +260,7 @@ export function NutricaoTab({ athleteId }: Props) {
                 { label: '% Massa Gorda', value: latestComp.body_fat_pct != null ? `${latestComp.body_fat_pct}%` : '—', trend: null },
                 { label: 'Massa Magra', value: latestComp.lean_mass_kg != null ? `${latestComp.lean_mass_kg} kg` : '—', trend: null },
               ].map(({ label, value, trend }) => (
-                <div key={label} className="rounded-xl px-4 py-3" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                <div key={label} className="rounded-xl px-4 py-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                   <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
                   <div className="flex items-center gap-1.5">
                     <span className="text-xl font-black text-foreground">{value}</span>
@@ -311,7 +311,7 @@ export function NutricaoTab({ athleteId }: Props) {
               const color = PHASE_COLOR[plan.phase] ?? '#94a3b8'
               const total = (plan.protein_g ?? 0) * 4 + (plan.carbs_g ?? 0) * 4 + (plan.fat_g ?? 0) * 9
               return (
-                <div key={plan.id} className="rounded-xl p-4" style={{ background: '#12121e', border: `1px solid ${plan.active ? color + '40' : '#1e1e2e'}` }}>
+                <div key={plan.id} className="rounded-xl p-4" style={{ background: 'var(--panel)', border: `1px solid ${plan.active ? color + '40' : 'var(--panel-border)'}` }}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold px-2 py-0.5 rounded-full"
@@ -401,7 +401,7 @@ export function NutricaoTab({ athleteId }: Props) {
                 if (imc == null) return null
                 const cls = imc < 18.5 ? ['Abaixo do peso', '#fbbf24'] : imc < 25 ? ['Eutrófico', '#4ade80'] : imc < 30 ? ['Sobrepeso', '#fbbf24'] : ['Obesidade', '#ef4444']
                 return (
-                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+                  <div className="flex items-center gap-3 px-3 py-2 rounded-lg" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                     <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">IMC calculado</span>
                     <span className="text-lg font-black text-foreground">{imc.toFixed(2).replace('.', ',')}</span>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{ background: cls[1] + '20', color: cls[1], border: `1px solid ${cls[1]}40` }}>{cls[0]}</span>

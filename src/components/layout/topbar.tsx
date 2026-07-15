@@ -2,6 +2,7 @@
 
 import { Bell, Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 interface TopbarProps {
   title: string
@@ -23,6 +24,7 @@ export function Topbar({ title, subtitle }: TopbarProps) {
             className="pl-8 h-8 w-52 bg-secondary border-border text-sm"
           />
         </div>
+        <ThemeToggle />
         <button className="relative p-2 rounded-lg hover:bg-secondary transition-colors">
           <Bell className="w-4 h-4 text-muted-foreground" />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-primary rounded-full" />

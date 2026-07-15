@@ -36,7 +36,7 @@ function fmtDate(str: string) {
 const Tip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0d0d14] border border-border rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-[var(--sidebar)] border border-border rounded-lg p-3 text-xs shadow-xl">
       <p className="text-muted-foreground mb-2 font-medium">{label}</p>
       {payload.map((p) => (
         <div key={p.name} className="flex items-center gap-2 mb-0.5">
@@ -201,13 +201,13 @@ export default function AnalyticsPage() {
                 <p className="text-xs text-muted-foreground mb-4">CTL (Fitness) · ATL (Fadiga) · TSB (Forma) · TSS diário</p>
                 <ResponsiveContainer width="100%" height={260}>
                   <ComposedChart data={pmcData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                     <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                     <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                     <Tooltip content={<Tip />} />
                     <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} formatter={(v) => <span style={{ color: '#888899' }}>{v}</span>} />
-                    <ReferenceLine y={0} stroke="#2a2a3a" />
-                    <Bar dataKey="TSS" fill="#1e1e2e" radius={[2, 2, 0, 0]} />
+                    <ReferenceLine y={0} stroke="var(--border)" />
+                    <Bar dataKey="TSS" fill="var(--panel-border)" radius={[2, 2, 0, 0]} />
                     <Line type="monotone" dataKey="CTL" stroke="#0088ff" strokeWidth={2.5} dot={false} />
                     <Line type="monotone" dataKey="ATL" stroke="#e8001c" strokeWidth={2} dot={false} />
                     <Line type="monotone" dataKey="TSB" stroke="#00d084" strokeWidth={2} dot={false} strokeDasharray="4 2" />
@@ -224,7 +224,7 @@ export default function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground mb-4">TSS e horas por semana</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={weeklyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                       <XAxis dataKey="semana" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <Tooltip content={<Tip />} />
@@ -242,7 +242,7 @@ export default function AnalyticsPage() {
                   <p className="text-xs text-muted-foreground mb-4">Horas totais no período</p>
                   <ResponsiveContainer width="100%" height={220}>
                     <BarChart data={sportData} layout="vertical" margin={{ top: 4, right: 8, left: 10, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" horizontal={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" horizontal={false} />
                       <XAxis type="number" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis dataKey="sport" type="category" tick={{ fill: '#aaaacc', fontSize: 11 }} tickLine={false} axisLine={false} width={70} />
                       <Tooltip content={<Tip />} />
@@ -272,7 +272,7 @@ export default function AnalyticsPage() {
                         <stop offset="95%" stopColor="#0088ff" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                     <XAxis dataKey="data" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                     <Tooltip content={<Tip />} />

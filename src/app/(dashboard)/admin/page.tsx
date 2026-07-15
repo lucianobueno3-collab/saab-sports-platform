@@ -25,53 +25,53 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading
 
   return (
     <div className="rounded-xl overflow-hidden transition-all" style={{
-      background: coach.active ? '#0d0d14' : '#09090f',
-      border: `1px solid ${coach.active ? '#1e1e2e' : '#141420'}`,
+      background: coach.active ? 'var(--sidebar)' : 'var(--panel)',
+      border: `1px solid ${coach.active ? 'var(--panel-border)' : 'var(--panel-border)'}`,
       opacity: coach.active ? 1 : 0.6,
     }}>
-      <div className={`h-0.5 w-full ${isAdmin ? 'bg-[#e8001c]' : 'bg-[#2a2a3a]'}`} />
+      <div className={`h-0.5 w-full ${isAdmin ? 'bg-[#e8001c]' : 'bg-[var(--border)]'}`} />
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0"
               style={isAdmin
                 ? { background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }
-                : { background: '#1e1e2e', border: '1.5px solid #2a2a3a', color: '#aabbcc' }}>
+                : { background: 'var(--panel-border)', border: '1.5px solid var(--border)', color: '#aabbcc' }}>
               {initials}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-sm font-bold text-foreground">{coach.full_name ?? '—'}</p>
                 {isAdmin && <Crown className="w-3 h-3 text-[#e8001c]" />}
-                {isSelf && <span className="text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: '#1e1e2e', color: '#6677aa' }}>você</span>}
+                {isSelf && <span className="text-[9px] font-black px-1.5 py-0.5 rounded" style={{ background: 'var(--panel-border)', color: '#6677aa' }}>você</span>}
               </div>
               <p className="text-[10px] text-muted-foreground">{coach.email}</p>
             </div>
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className="text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider"
-              style={{ background: '#1e1e2e', color: '#6677aa', border: '1px solid #2a2a3a' }}>
+              style={{ background: 'var(--panel-border)', color: '#6677aa', border: '1px solid var(--border)' }}>
               {planLabel(coach.plan)}
             </span>
             <span className={`text-[9px] font-semibold px-2 py-0.5 rounded ${coach.active ? 'text-[#00d084]' : 'text-[#445566]'}`}
-              style={{ background: coach.active ? '#00d08415' : '#1e1e2e' }}>
+              style={{ background: coach.active ? '#00d08415' : 'var(--panel-border)' }}>
               {coach.active ? 'Ativo' : 'Inativo'}
             </span>
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="rounded-lg px-3 py-2 text-center" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+          <div className="rounded-lg px-3 py-2 text-center" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
             <Users className="w-3 h-3 mx-auto mb-1 text-[#445566]" />
             <p className="text-[11px] font-black text-foreground">{coach.athlete_count ?? 0}</p>
             <p className="text-[8px] text-[#445566]">Atletas</p>
           </div>
-          <div className="rounded-lg px-3 py-2 text-center" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+          <div className="rounded-lg px-3 py-2 text-center" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
             <Mail className="w-3 h-3 mx-auto mb-1 text-[#445566]" />
             <p className="text-[10px] font-black text-foreground truncate">{isAdmin ? 'Admin' : 'Coach'}</p>
             <p className="text-[8px] text-[#445566]">Função</p>
           </div>
-          <div className="rounded-lg px-3 py-2 text-center" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+          <div className="rounded-lg px-3 py-2 text-center" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
             <Phone className="w-3 h-3 mx-auto mb-1 text-[#445566]" />
             <p className="text-[10px] font-black" style={{ color: coach.phone ? '#aabbcc' : '#445566' }}>
               {coach.phone ? '✓' : '—'}
@@ -81,14 +81,14 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading
         </div>
 
         {!isSelf && (
-          <div className="flex items-center gap-2 pt-1 border-t border-[#1a1a28]">
+          <div className="flex items-center gap-2 pt-1 border-t border-border">
             <button
               onClick={() => onToggleActive(coach.id, !coach.active)}
               disabled={loading === coach.id}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex-1 justify-center disabled:opacity-50"
               style={coach.active
-                ? { background: '#1e1e2e', border: '1px solid #2a2a3a', color: '#6677aa' }
-                : { background: '#071410', border: '1px solid #0f3024', color: '#00d084' }}>
+                ? { background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }
+                : { background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }}>
               {loading === coach.id ? <Loader2 className="w-3 h-3 animate-spin" /> :
                 coach.active ? <XCircle className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
               {coach.active ? 'Desativar' : 'Reativar'}
@@ -98,8 +98,8 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading
               disabled={loading === coach.id}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex-1 justify-center disabled:opacity-50"
               style={isAdmin
-                ? { background: '#1e1e2e', border: '1px solid #2a2a3a', color: '#6677aa' }
-                : { background: '#120505', border: '1px solid #3a0a0a', color: '#e8001c' }}>
+                ? { background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }
+                : { background: '#e8001c14', border: '1px solid #e8001c33', color: '#e8001c' }}>
               {isAdmin ? <ShieldOff className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
               {isAdmin ? 'Remover admin' : 'Tornar admin'}
             </button>
@@ -213,7 +213,7 @@ export default function AdminPage() {
             { label: 'Total de atletas', value: totalAthletes, color: '#aabbcc' },
             { label: 'Administradores', value: coaches.filter(c => c.role === 'admin').length, color: '#e8001c' },
           ].map(({ label, value, color }) => (
-            <div key={label} className="rounded-xl p-4" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }}>
+            <div key={label} className="rounded-xl p-4" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
               <p className="text-2xl font-black" style={{ color }}>{value}</p>
               <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">{label}</p>
             </div>
@@ -221,7 +221,7 @@ export default function AdminPage() {
         </div>
 
         {/* Invite form */}
-        <div className="rounded-xl p-5" style={{ background: '#0d0d14', border: '1px solid #1e1e2e' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
           <div className="flex items-center gap-2 mb-4">
             <UserPlus className="w-4 h-4 text-primary" />
             <p className="text-sm font-bold text-foreground">Convidar novo treinador</p>
@@ -250,8 +250,8 @@ export default function AdminPage() {
           {inviteResult && (
             <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold px-3 py-2 rounded-lg"
               style={inviteResult.ok
-                ? { background: '#071410', border: '1px solid #0f3024', color: '#00d084' }
-                : { background: '#120505', border: '1px solid #3a0a0a', color: '#e8001c' }}>
+                ? { background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }
+                : { background: '#e8001c14', border: '1px solid #e8001c33', color: '#e8001c' }}>
               {inviteResult.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
               {inviteResult.msg}
             </div>

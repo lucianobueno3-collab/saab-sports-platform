@@ -54,7 +54,7 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#0d0d14] border-r border-border">
+    <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[var(--sidebar)] border-r border-border">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
         <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white font-black text-sm tracking-tight">

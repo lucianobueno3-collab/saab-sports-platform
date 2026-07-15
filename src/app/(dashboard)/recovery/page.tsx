@@ -55,7 +55,7 @@ const KPI_STATE_BG: Record<string, string> = {
 const ChartTip = ({ active, payload, label }: { active?: boolean; payload?: { color: string; name: string; value: number }[]; label?: string }) => {
   if (!active || !payload?.length) return null
   return (
-    <div className="bg-[#0d0d14] border border-border rounded-lg p-3 text-xs shadow-xl">
+    <div className="bg-[var(--sidebar)] border border-border rounded-lg p-3 text-xs shadow-xl">
       <p className="text-muted-foreground mb-1 font-medium">{label}</p>
       {payload.map(p => (
         <div key={p.name} className="flex items-center gap-2">
@@ -267,7 +267,7 @@ export default function RecoveryPage() {
                 <p className="text-xs text-muted-foreground mb-4">ms · verde ≥{t.hrv.green_min} · amarelo {t.hrv.yellow_min}–{t.hrv.green_min - 1} · vermelho &lt;{t.hrv.yellow_min}</p>
                 <ResponsiveContainer width="100%" height={200}>
                   <ComposedChart data={chartData.filter(m => m.hrv_ms)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                     <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                     <Tooltip content={<ChartTip />} />
@@ -300,7 +300,7 @@ export default function RecoveryPage() {
                         <stop offset="95%" stopColor="#ffa800" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                     <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                     <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                     <Tooltip content={<ChartTip />} />
@@ -321,7 +321,7 @@ export default function RecoveryPage() {
                   <p className="text-xs text-muted-foreground mb-4">horas · meta {t.sleep.target_hours}h · risco lesão &lt;{t.sleep.injury_risk_below}h</p>
                   <ResponsiveContainer width="100%" height={180}>
                     <BarChart data={chartData.filter(m => m.sleep_hours)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                       <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 10]} />
                       <Tooltip content={<ChartTip />} />
@@ -343,7 +343,7 @@ export default function RecoveryPage() {
                           <stop offset="95%" stopColor="#a855f7" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                       <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 30]} />
                       <Tooltip content={<ChartTip />} />
@@ -370,7 +370,7 @@ export default function RecoveryPage() {
                           <stop offset="95%" stopColor="#e8001c" stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                       <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
                       <Tooltip content={<ChartTip />} />
@@ -388,7 +388,7 @@ export default function RecoveryPage() {
                   <p className="text-xs text-muted-foreground mb-4">0–100 · meta &lt;{t.stress.target_max} · bloqueia sono profundo acima de {t.stress.blocks_deep_sleep_above}</p>
                   <ResponsiveContainer width="100%" height={180}>
                     <ComposedChart data={chartData.filter(m => m.stress_avg)} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" vertical={false} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--panel-border)" vertical={false} />
                       <XAxis dataKey="date" tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis tick={{ fill: '#666680', fontSize: 10 }} tickLine={false} axisLine={false} domain={[0, 100]} />
                       <Tooltip content={<ChartTip />} />

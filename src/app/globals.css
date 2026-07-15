@@ -48,25 +48,25 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-/* Saab Sports — dark theme always on */
+/* Saab Sports — tema claro (padrão sem a classe .dark) */
 :root {
-  --background: #0a0a0f;
-  --foreground: #e8e8f0;
-  --card: #111118;
-  --card-foreground: #e8e8f0;
-  --popover: #111118;
-  --popover-foreground: #e8e8f0;
+  --background: #f4f4f7;
+  --foreground: #16161f;
+  --card: #ffffff;
+  --card-foreground: #16161f;
+  --popover: #ffffff;
+  --popover-foreground: #16161f;
   --primary: #e8001c;
   --primary-foreground: #ffffff;
-  --secondary: #1a1a24;
-  --secondary-foreground: #e8e8f0;
-  --muted: #1a1a24;
-  --muted-foreground: #888899;
-  --accent: #1a1a24;
-  --accent-foreground: #e8e8f0;
+  --secondary: #ececf2;
+  --secondary-foreground: #16161f;
+  --muted: #ececf2;
+  --muted-foreground: #5f6070;
+  --accent: #ececf2;
+  --accent-foreground: #16161f;
   --destructive: #e8001c;
-  --border: #2a2a3a;
-  --input: #2a2a3a;
+  --border: #d9d9e3;
+  --input: #d9d9e3;
   --ring: #e8001c;
   --chart-1: #e8001c;
   --chart-2: #0088ff;
@@ -74,14 +74,19 @@
   --chart-4: #ffa800;
   --chart-5: #8b5cf6;
   --radius: 0.5rem;
-  --sidebar: #0d0d14;
-  --sidebar-foreground: #e8e8f0;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #16161f;
   --sidebar-primary: #e8001c;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1a1a24;
-  --sidebar-accent-foreground: #e8e8f0;
-  --sidebar-border: #2a2a3a;
+  --sidebar-accent: #ececf2;
+  --sidebar-accent-foreground: #16161f;
+  --sidebar-border: #d9d9e3;
   --sidebar-ring: #e8001c;
+  /* painéis internos (cards aninhados) */
+  --panel: #f7f7fa;
+  --panel-border: #e3e3ec;
+  --scrollbar-thumb: #c5c5d2;
+  --scrollbar-thumb-hover: #adadbd;
   /* brand extras */
   --brand-green: #00d084;
   --brand-blue: #0088ff;
@@ -89,7 +94,7 @@
   --brand-purple: #8b5cf6;
 }
 
-/* keep dark class working if shadcn adds it */
+/* Saab Sports — tema escuro (padrão do app) */
 .dark {
   --background: #0a0a0f;
   --foreground: #e8e8f0;
@@ -117,13 +122,17 @@
   --sidebar-accent-foreground: #e8e8f0;
   --sidebar-border: #2a2a3a;
   --sidebar-ring: #e8001c;
+  --panel: #12121e;
+  --panel-border: #1e1e2e;
+  --scrollbar-thumb: #2a2a3a;
+  --scrollbar-thumb-hover: #3a3a4a;
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--background); }
-::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3a3a4a; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
 @layer base {
   * {

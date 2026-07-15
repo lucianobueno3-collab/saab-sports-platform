@@ -30,11 +30,11 @@ export function HRVChart({ data, baseline }: HRVChartProps) {
             <stop offset="95%" stopColor="#00d084" stopOpacity={0} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#2a2a3a" vertical={false} />
+        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
         <XAxis dataKey="label" tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
         <YAxis tick={{ fill: '#888899', fontSize: 10 }} tickLine={false} axisLine={false} />
         <Tooltip
-          contentStyle={{ background: '#111118', border: '1px solid #2a2a3a', borderRadius: 8, fontSize: 11 }}
+          contentStyle={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 11 }}
           labelStyle={{ color: '#888899' }}
           itemStyle={{ color: '#00d084' }}
         />
