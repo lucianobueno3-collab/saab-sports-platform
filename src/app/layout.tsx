@@ -23,10 +23,14 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 }
 
+// aplica o tema salvo antes da hidratação para não piscar na troca de página
+const themeInit = `(function(){try{var t=localStorage.getItem('saab-theme');if(t==='light'){document.documentElement.classList.remove('dark')}var m=document.querySelector('meta[name="theme-color"]');if(m){m.setAttribute('content',t==='light'?'#f5f5f8':'#0a0a0f')}}catch(e){}})()`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className="dark h-full">
+    <html lang="pt-BR" className="dark h-full" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased min-h-full`}>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
         <AuthProvider>
           {children}
         </AuthProvider>

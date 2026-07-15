@@ -23,7 +23,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
             width={220}
             height={57}
             priority
-            className="h-auto w-[220px] max-w-[60vw] animate-logo-breathe"
+            className="h-auto w-[220px] max-w-[60vw] animate-logo-breathe invert dark:invert-0"
           />
           <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>

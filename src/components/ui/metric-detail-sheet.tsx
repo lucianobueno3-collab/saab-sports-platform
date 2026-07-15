@@ -62,7 +62,7 @@ const METRICS: Record<MetricKey, MetricDef> = {
       ]
     },
     thresholds: [
-      { label: 'Iniciante', range: '< 30', color: '#6677aa' },
+      { label: 'Iniciante', range: '< 30', color: 'var(--muted-foreground)' },
       { label: 'Recreativo', range: '30 – 60', color: '#0088ff' },
       { label: 'Competitivo', range: '60 – 100', color: '#00d084' },
       { label: 'Elite', range: '> 100', color: '#ffa800' },
@@ -122,7 +122,7 @@ const METRICS: Record<MetricKey, MetricDef> = {
       { label: 'Zona saudável', range: '0 a +5', color: '#0088ff' },
       { label: 'Cansado (normal)', range: '−10 a 0', color: '#ffa800' },
       { label: 'Sobrecarga', range: '< −10', color: '#e8001c' },
-      { label: 'Destreinado', range: '> +25', color: '#6677aa' },
+      { label: 'Destreinado', range: '> +25', color: 'var(--muted-foreground)' },
     ],
     source: 'Derivado do CTL e ATL calculados em daily_metrics',
     reference: 'Coggan & Allen (2006) — Training and Racing with a Power Meter',
@@ -384,7 +384,7 @@ const METRICS: Record<MetricKey, MetricDef> = {
       ]
     },
     thresholds: [
-      { label: 'Iniciante', range: '< 2.5', color: '#6677aa' },
+      { label: 'Iniciante', range: '< 2.5', color: 'var(--muted-foreground)' },
       { label: 'Recreativo', range: '2.5 – 3.5', color: '#0088ff' },
       { label: 'Competitivo', range: '3.5 – 4.5', color: '#00d084' },
       { label: 'Elite', range: '> 4.5', color: '#ffa800' },
@@ -404,7 +404,7 @@ const METRICS: Record<MetricKey, MetricDef> = {
       { label: 'Estimativa via FTP', note: 'VO2max ≈ FTP × 10.8 / Peso + 7 (aproximação Coggan)' },
     ],
     thresholds: [
-      { label: 'Abaixo da média', range: '< 45', color: '#6677aa' },
+      { label: 'Abaixo da média', range: '< 45', color: 'var(--muted-foreground)' },
       { label: 'Médio', range: '45 – 55', color: '#0088ff' },
       { label: 'Bom', range: '55 – 65', color: '#00d084' },
       { label: 'Excelente', range: '> 65', color: '#ffa800' },
@@ -468,11 +468,10 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
       />
 
       {/* Sheet */}
-      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md flex flex-col shadow-2xl"
-        style={{ background: '#0d0d14', borderLeft: '1px solid #1e1e2e' }}>
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md flex flex-col shadow-2xl bg-popover border-l border-border">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1e1e2e]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <div className="flex items-center gap-3">
             <span className="p-2 rounded-lg" style={{ background: def.color + '20', color: def.color }}>
               {def.icon}
@@ -482,7 +481,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
               <p className="text-[10px] text-muted-foreground">{def.fullName}</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-[#1e1e2e] rounded-lg transition-colors">
+          <button onClick={onClose} className="p-2 hover:bg-secondary rounded-lg transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
         </div>
@@ -514,7 +513,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
           {def.formula && (
             <div>
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-2">Fórmula</p>
-              <div className="rounded-lg px-4 py-3 font-mono text-xs" style={{ background: '#0a0a0f', border: '1px solid #1a1a28', color: def.color }}>
+              <div className="rounded-lg px-4 py-3 font-mono text-xs" style={{ background: 'var(--background)', border: '1px solid var(--border)', color: def.color }}>
                 {def.formula}
               </div>
             </div>
@@ -526,7 +525,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-3">Sequência do cálculo</p>
               <div className="space-y-2">
                 {steps.map((step, i) => (
-                  <div key={i} className="rounded-lg px-4 py-3" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+                  <div key={i} className="rounded-lg px-4 py-3" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-2.5 flex-1 min-w-0">
                         <span className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black mt-0.5"
@@ -566,7 +565,7 @@ export function MetricDetailSheet({ metricKey, value, context = {}, onClose }: M
           )}
 
           {/* Source */}
-          <div className="rounded-lg px-4 py-3" style={{ background: '#0a0a0f', border: '1px solid #1a1a28' }}>
+          <div className="rounded-lg px-4 py-3" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
             <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest mb-1">Origem dos dados</p>
             <p className="text-[11px] text-muted-foreground leading-relaxed">{def.source}</p>
             {def.reference && (

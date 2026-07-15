@@ -138,7 +138,7 @@ export function ProvasTab({ athleteId }: Props) {
             { label: 'Próximas', value: upcoming.length },
             { label: 'Concluídas', value: past.filter(c => !c.dnf).length },
           ].map(({ label, value }) => (
-            <div key={label} className="rounded-xl px-4 py-3 text-center" style={{ background: '#12121e', border: '1px solid #1e1e2e' }}>
+            <div key={label} className="rounded-xl px-4 py-3 text-center" style={{ background: 'var(--secondary)', border: '1px solid var(--border)' }}>
               <p className="text-2xl font-black text-foreground">{value}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
             </div>
