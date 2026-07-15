@@ -55,10 +55,10 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#0d0d14] border-r border-border">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 overflow-y-auto bg-[#0d0d14] border-r border-border">
       {/* Logo */}
       <div className="flex flex-col gap-1.5 px-5 py-5 border-b border-border">
-        <Image src="/logo-saab.png" alt="SAAB Sports" width={150} height={39} priority />
+        <Image src="/logo-saab.png" alt="SAAB Sports" width={150} height={39} priority className="h-auto w-[150px] max-w-full" />
         <p className="text-xs text-muted-foreground">Performance Platform</p>
       </div>
 
