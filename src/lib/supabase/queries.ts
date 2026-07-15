@@ -144,6 +144,8 @@ export type AthleteAlertRow = {
   rem_pct: number | null
   resting_hr: number | null
   stress_avg: number | null
+  // último treino registrado (tabela activities, janela de 30 dias)
+  last_activity_at: string | null
   // previous 7 days for stop protocol
   week_metrics: {
     date: string; hrv_ms: number | null; body_battery: number | null
@@ -160,12 +162,24 @@ export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
   if (!athletes?.length) return []
 
   const since = new Date(); since.setDate(since.getDate() - 7)
-  const { data: metrics } = await sb
-    .from('daily_metrics')
-    .select('athlete_id, date, hrv_ms, body_battery, sleep_hours, rem_pct, resting_hr, stress_avg')
-    .in('athlete_id', athletes.map(a => a.id))
-    .gte('date', since.toISOString().slice(0, 10))
-    .order('date', { ascending: false })
+  const activitySince = new Date(); activitySince.setDate(activitySince.getDate() - 30)
+  const [{ data: metrics }, { data: recentActivities }] = await Promise.all([
+    sb.from('daily_metrics')
+      .select('athlete_id, date, hrv_ms, body_battery, sleep_hours, rem_pct, resting_hr, stress_avg')
+      .in('athlete_id', athletes.map(a => a.id))
+      .gte('date', since.toISOString().slice(0, 10))
+      .order('date', { ascending: false }),
+    sb.from('activities')
+      .select('athlete_id, started_at')
+      .in('athlete_id', athletes.map(a => a.id))
+      .gte('started_at', activitySince.toISOString())
+      .order('started_at', { ascending: false }),
+  ])
+
+  const lastActivityByAthlete = new Map<string, string>()
+  for (const act of recentActivities ?? []) {
+    if (!lastActivityByAthlete.has(act.athlete_id)) lastActivityByAthlete.set(act.athlete_id, act.started_at)
+  }
 
   return athletes.map(a => {
     const rows = (metrics ?? []).filter(m => m.athlete_id === a.id).sort((x, y) => y.date.localeCompare(x.date))
@@ -177,6 +191,7 @@ export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
       hrv_ms: latest?.hrv_ms ?? null, body_battery: latest?.body_battery ?? null,
       sleep_hours: latest?.sleep_hours ?? null, rem_pct: latest?.rem_pct ?? null,
       resting_hr: latest?.resting_hr ?? null, stress_avg: latest?.stress_avg ?? null,
+      last_activity_at: lastActivityByAthlete.get(a.id) ?? null,
       week_metrics: rows.map(r => ({ date: r.date, hrv_ms: r.hrv_ms, body_battery: r.body_battery, sleep_hours: r.sleep_hours, resting_hr: r.resting_hr })),
     }
   })

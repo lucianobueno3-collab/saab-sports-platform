@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
-import { MessageCircle, RefreshCw, AlertTriangle, CheckCircle, Clock, Zap, Moon, Heart, Activity, ChevronRight, Info, Database, Cpu, CalendarClock, Settings } from 'lucide-react'
+import { MessageCircle, RefreshCw, AlertTriangle, CheckCircle, Clock, Zap, Moon, Heart, Activity, ChevronRight, Info, Database, Cpu, CalendarClock, Settings, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
 import { getAthletesForAlerts, getCoachProfile, type AthleteAlertRow } from '@/lib/supabase/queries'
+import { trainingGap, trainingGapLabel, type TrainingGap } from '@/lib/training-gap'
 import { trainingReadiness, stopProtocol, type DailyMetrics } from '@/lib/readiness'
 import { THRESHOLDS } from '@/lib/thresholds'
 
@@ -26,6 +27,7 @@ type AthleteAlert = {
   clinicalFlag: boolean
   whatsappMessage: string
   syncDaysAgo: number | null
+  gap: TrainingGap
 }
 
 function daysSince(dateStr: string | null): number | null {
@@ -51,12 +53,13 @@ function buildAlert(a: AthleteAlertRow): AthleteAlert {
   const today = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
   const syncDaysAgo = daysSince(a.latest_date)
   const hasData = a.latest_date !== null && (syncDaysAgo ?? 99) <= 2
+  const gap = trainingGap(a.last_activity_at)
 
   if (!hasData) {
     return {
       athlete: a, severity: 'nodata', readinessLevel: 'NODATA',
-      triggers: ['Sem dados de recuperação nos últimos 2 dias'],
-      stopSignals: [], clinicalFlag: false, syncDaysAgo,
+      triggers: ['Sem dados de recuperação nos últimos 2 dias', ...(gap.flagged ? [trainingGapLabel(gap)] : [])],
+      stopSignals: [], clinicalFlag: false, syncDaysAgo, gap,
       whatsappMessage: `Oi ${a.full_name.split(' ')[0]}! 👋\n\nNão estou conseguindo ver seus dados de recuperação.\n\n_Poderia sincronizar o Garmin Connect hoje?_\n\n_SAAB Sports_`,
     }
   }
@@ -93,9 +96,12 @@ function buildAlert(a: AthleteAlertRow): AthleteAlert {
   }))
   const stop = stopProtocol(weekDM)
 
+  // Sem treino nas últimas 48h: sinaliza para o treinador e nunca deixa o card como "OK"
+  if (gap.flagged) triggers.push(trainingGapLabel(gap))
+
   const severity: AlertSeverity =
     readiness.level === 'VALVULA' || readiness.level === 'VERMELHO' || stop.abort ? 'critical'
-    : readiness.level === 'AMARELO' ? 'warning'
+    : readiness.level === 'AMARELO' || gap.flagged ? 'warning'
     : 'ok'
 
   // Build personalized WhatsApp message
@@ -131,7 +137,7 @@ function buildAlert(a: AthleteAlertRow): AthleteAlert {
     athlete: a, severity, readinessLevel: readiness.level,
     triggers: triggers.length ? triggers : ['Dados dentro dos parâmetros'],
     stopSignals: stop.signals, clinicalFlag: stop.clinicalFlag,
-    syncDaysAgo, whatsappMessage: msg,
+    syncDaysAgo, gap, whatsappMessage: msg,
   }
 }
 
@@ -140,9 +146,9 @@ function severityOrder(s: AlertSeverity) {
 }
 
 const SEVERITY_CONFIG = {
-  critical: { color: '#e8001c', bg: '#120505', border: '#3a0a0a', badge: 'CRÍTICO', label: 'Crítico' },
-  warning:  { color: '#ffa800', bg: '#120f05', border: '#3a2a0a', badge: 'ATENÇÃO', label: 'Atenção' },
-  ok:       { color: '#00d084', bg: '#071410', border: '#0f3024', badge: 'OK',      label: 'OK' },
+  critical: { color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', badge: 'CRÍTICO', label: 'Crítico' },
+  warning:  { color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', badge: 'ATENÇÃO', label: 'Atenção' },
+  ok:       { color: '#00d084', bg: '#00d0840f', border: '#00d08438', badge: 'OK',      label: 'OK' },
   nodata:   { color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', badge: 'SEM DADOS', label: 'Sem dados' },
 }
 
@@ -174,6 +180,13 @@ function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () 
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {alert.gap.flagged && (
+              <span className="flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider"
+                style={{ background: '#8b5cf622', border: '1px solid #8b5cf655', color: '#8b5cf6' }}
+                title={trainingGapLabel(alert.gap)}>
+                <Dumbbell className="w-2.5 h-2.5" /> Sem treino 48h
+              </span>
+            )}
             {alert.clinicalFlag && (
               <span className="flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-wider"
                 style={{ background: '#e8001c22', border: '1px solid #e8001c55', color: '#e8001c' }}>
@@ -221,14 +234,25 @@ function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () 
 
         {/* Footer */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Clock className="w-3 h-3 text-muted-foreground" />
-            <p className="text-[9px] text-muted-foreground">
-              {alert.syncDaysAgo === null ? 'Nunca sincronizado'
-                : alert.syncDaysAgo === 0 ? 'Sincronizado hoje'
-                : alert.syncDaysAgo === 1 ? 'Sincronizado ontem'
-                : `Sincronizado há ${alert.syncDaysAgo} dias`}
-            </p>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-3 h-3 text-muted-foreground" />
+              <p className="text-[9px] text-muted-foreground">
+                {alert.syncDaysAgo === null ? 'Nunca sincronizado'
+                  : alert.syncDaysAgo === 0 ? 'Sincronizado hoje'
+                  : alert.syncDaysAgo === 1 ? 'Sincronizado ontem'
+                  : `Sincronizado há ${alert.syncDaysAgo} dias`}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <Dumbbell className="w-3 h-3" style={{ color: alert.gap.flagged ? '#8b5cf6' : 'var(--muted-foreground)' }} />
+              <p className="text-[9px]" style={{ color: alert.gap.flagged ? '#8b5cf6' : 'var(--muted-foreground)' }}>
+                {alert.gap.daysSince == null ? 'Sem treino em 30 dias'
+                  : alert.gap.daysSince === 0 ? 'Treinou hoje'
+                  : alert.gap.daysSince === 1 ? 'Treinou ontem'
+                  : `Último treino há ${alert.gap.daysSince} dias`}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Link href={`/athletes/detail?id=${a.id}`}
@@ -304,6 +328,12 @@ export default function AlertsPage() {
     if (nodata.length) msg += `\n\n⚫ *${nodata.length} sem dados* (sem sincronização nas últimas 48h)`
     if (nodata.length) msg += `\n${nodata.map(a => `• ${a.athlete.full_name}`).join('\n')}`
 
+    const noTraining = alerts.filter(a => a.gap.flagged)
+    if (noTraining.length) {
+      msg += `\n\n🏋️ *${noTraining.length} sem treino nas últimas 48h*`
+      msg += `\n${noTraining.map(a => `• ${a.athlete.full_name}${a.gap.daysSince != null && a.gap.daysSince > 2 ? ` — há ${a.gap.daysSince} dias` : ''}`).join('\n')}`
+    }
+
     if (criticals.some(a => a.clinicalFlag)) {
       msg += `\n\n⚠️ *Atenção clínica:* ${criticals.filter(a => a.clinicalFlag).map(a => a.athlete.full_name).join(', ')} — FC repouso elevada`
     }
@@ -351,9 +381,9 @@ export default function AlertsPage() {
         {!loading && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { key: 'critical', label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#120505', border: '#3a0a0a', icon: AlertTriangle },
-              { key: 'warning',  label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#120f05', border: '#3a2a0a', icon: AlertTriangle },
-              { key: 'ok',       label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#071410', border: '#0f3024', icon: CheckCircle },
+              { key: 'critical', label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', icon: AlertTriangle },
+              { key: 'warning',  label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', icon: AlertTriangle },
+              { key: 'ok',       label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#00d0840f', border: '#00d08438', icon: CheckCircle },
               { key: 'nodata',   label: 'Sem dados', count: counts.nodata,   color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', icon: Clock },
             ].map(({ key, label, count, color, bg, border, icon: Icon }) => (
               <button key={key}
@@ -434,6 +464,7 @@ export default function AlertsPage() {
                   { label: 'TSB (Form)', src: 'Supabase view v_athlete_summary · campo tsb', detail: 'CTL – ATL: forma atual pelo modelo PMC. Calculado diariamente pelo pipeline de importação' },
                   { label: 'FC Repouso', src: 'Garmin Connect → tabela daily_metrics · campo resting_hr', detail: 'Frequência cardíaca de repouso ao acordar (bpm)' },
                   { label: 'Stress médio', src: 'Garmin Connect → tabela daily_metrics · campo stress_avg', detail: 'Nível médio de estresse ao longo do dia (0–100)' },
+                  { label: 'Último treino', src: 'Importação FIT/CSV → tabela activities · campo started_at', detail: 'Data do treino mais recente registrado — usado no selo "Sem treino 48h"' },
                 ].map(({ label, src, detail }) => (
                   <div key={label} className="rounded-lg px-3 py-2.5" style={{ background: 'var(--background)', border: '1px solid var(--border)' }}>
                     <p className="text-[10px] font-black text-foreground/70 mb-0.5">{label}</p>
@@ -477,9 +508,10 @@ export default function AlertsPage() {
               </div>
               <div className="space-y-1.5">
                 {[
-                  { badge: 'CRÍTICO', color: '#e8001c', bg: '#120505', border: '#3a0a0a', rule: 'HRV < 34ms (zona vermelha) OU Body Battery < 25 (piso de segurança) OU Sono < 5.5h OU Protocolo de parada ativado (2+ sinais críticos por 3+ dias consecutivos)' },
-                  { badge: 'ATENÇÃO', color: '#ffa800', bg: '#120f05', border: '#3a2a0a', rule: 'HRV entre 34–44ms (zona amarela) OU Body Battery < 40 OU Sono < 6.5h — treino deve ser reduzido 30–40%' },
-                  { badge: 'OK', color: '#00d084', bg: '#071410', border: '#0f3024', rule: 'HRV ≥ 44ms + Body Battery ≥ 40 + Sono ≥ 6.5h — todos os indicadores dentro do alvo' },
+                  { badge: 'CRÍTICO', color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', rule: 'HRV < 34ms (zona vermelha) OU Body Battery < 25 (piso de segurança) OU Sono < 5.5h OU Protocolo de parada ativado (2+ sinais críticos por 3+ dias consecutivos)' },
+                  { badge: 'ATENÇÃO', color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', rule: 'HRV entre 34–44ms (zona amarela) OU Body Battery < 40 OU Sono < 6.5h — treino deve ser reduzido 30–40%. Também entra aqui quem está sem treino registrado há mais de 48h' },
+                  { badge: 'OK', color: '#00d084', bg: '#00d0840f', border: '#00d08438', rule: 'HRV ≥ 44ms + Body Battery ≥ 40 + Sono ≥ 6.5h — todos os indicadores dentro do alvo' },
+                  { badge: 'SEM TREINO 48H', color: '#8b5cf6', bg: '#8b5cf60f', border: '#8b5cf638', rule: 'Nenhum treino registrado na tabela activities nas últimas 48h — selo roxo no cartão do atleta e destaque no briefing do treinador. Verifique se o atleta pulou as sessões ou se os arquivos não foram importados' },
                   { badge: 'SEM DADOS', color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', rule: 'Nenhuma métrica registrada nas últimas 48h — o atleta não sincronizou o dispositivo' },
                 ].map(({ badge, color, bg, border, rule }) => (
                   <div key={badge} className="flex items-start gap-3 rounded-lg px-3 py-2.5" style={{ background: bg, border: `1px solid ${border}` }}>
