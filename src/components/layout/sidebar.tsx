@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -54,16 +55,11 @@ export function Sidebar() {
   }, [])
 
   return (
-    <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[#0d0d14] border-r border-border">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 overflow-y-auto bg-[#0d0d14] border-r border-border">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white font-black text-sm tracking-tight">
-          SS
-        </div>
-        <div>
-          <p className="text-sm font-bold text-foreground tracking-wide uppercase">Saab Sports</p>
-          <p className="text-xs text-muted-foreground">Performance Platform</p>
-        </div>
+      <div className="flex flex-col gap-1.5 px-5 py-5 border-b border-border">
+        <Image src="/logo-saab.png" alt="SAAB Sports" width={150} height={39} priority className="h-auto w-[150px] max-w-full" />
+        <p className="text-xs text-muted-foreground">Performance Platform</p>
       </div>
 
       {/* Nav */}

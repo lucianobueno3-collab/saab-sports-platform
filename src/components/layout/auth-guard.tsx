@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import Image from 'next/image'
 import { useAuth } from '@/context/auth-context'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -15,9 +16,16 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-muted-foreground">Carregando...</p>
+        <div className="flex flex-col items-center gap-6">
+          <Image
+            src="/logo-saab.png"
+            alt="SAAB Sports"
+            width={220}
+            height={57}
+            priority
+            className="h-auto w-[220px] max-w-[60vw] animate-logo-breathe"
+          />
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       </div>
     )

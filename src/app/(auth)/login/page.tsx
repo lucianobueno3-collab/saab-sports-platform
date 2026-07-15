@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Zap } from 'lucide-react'
+import Image from 'next/image'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
@@ -53,14 +53,9 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-sm">
       {/* Logo */}
-      <div className="flex items-center gap-3 mb-8 justify-center">
-        <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
-          <Zap className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground uppercase tracking-widest">Saab Sports</p>
-          <h1 className="text-base font-black text-foreground leading-none">PLATFORM</h1>
-        </div>
+      <div className="flex flex-col items-center gap-2 mb-8">
+        <Image src="/logo-saab.png" alt="SAAB Sports" width={210} height={54} priority className="h-auto w-[210px] max-w-[65vw]" />
+        <p className="text-xs text-muted-foreground uppercase tracking-widest">Performance Platform</p>
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-7">
