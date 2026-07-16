@@ -145,3 +145,13 @@
     @apply font-sans;
   }
 }
+/* Safe areas (notch / barra home em modo app instalado) */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+/* Splash: pulso suave da logo no carregamento */
+@keyframes logo-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.97); }
+}
+.animate-logo-breathe { animation: logo-breathe 1.6s ease-in-out infinite; }
