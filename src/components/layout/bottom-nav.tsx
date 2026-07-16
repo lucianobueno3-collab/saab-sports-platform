@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { LayoutDashboard, Users, Upload, TrendingUp, BellDot } from 'lucide-react'
 import { getAthletesForAlerts } from '@/lib/supabase/queries'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
+import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
 const navItems = [
   { href: '/dashboard', label: 'Início', icon: LayoutDashboard },
@@ -20,7 +21,7 @@ export function BottomNav() {
   const pathname = usePathname()
   const [criticalCount, setCriticalCount] = useState(0)
 
-  useEffect(() => {
+  const refreshCriticalCount = () => {
     getAthletesForAlerts().then(rows => {
       let count = 0
       for (const a of rows) {
@@ -37,10 +38,16 @@ export function BottomNav() {
       }
       setCriticalCount(count)
     }).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshCriticalCount()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useAutoRefresh(refreshCriticalCount)
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-[var(--sidebar)] border-t border-border safe-bottom">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-sidebar border-t border-border safe-bottom">
       <div className="flex items-center justify-around px-2 py-2">
         {navItems.map(item => {
           const Icon = item.icon
