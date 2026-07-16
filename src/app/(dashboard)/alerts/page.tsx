@@ -152,7 +152,7 @@ const SEVERITY_CONFIG = {
   nodata:   { color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', badge: 'SEM DADOS', label: 'Sem dados' },
 }
 
-type Filter = 'all' | 'critical' | 'warning' | 'ok' | 'nodata'
+type Filter = 'all' | 'critical' | 'warning' | 'ok' | 'nodata' | 'notraining'
 
 function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () => void }) {
   const cfg = SEVERITY_CONFIG[alert.severity]
@@ -296,9 +296,12 @@ export default function AlertsPage() {
     warning:  alerts.filter(a => a.severity === 'warning').length,
     ok:       alerts.filter(a => a.severity === 'ok').length,
     nodata:   alerts.filter(a => a.severity === 'nodata').length,
+    notraining: alerts.filter(a => a.gap.flagged).length,
   }
 
-  const filtered = filter === 'all' ? alerts : alerts.filter(a => a.severity === filter)
+  const filtered = filter === 'all' ? alerts
+    : filter === 'notraining' ? alerts.filter(a => a.gap.flagged)
+    : alerts.filter(a => a.severity === filter)
 
   function sendWhatsApp(alert: AthleteAlert) {
     const phone = alert.athlete.phone?.replace(/\D/g, '') ?? ''
@@ -379,12 +382,13 @@ export default function AlertsPage() {
 
         {/* Summary banner */}
         {!loading && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
-              { key: 'critical', label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', icon: AlertTriangle },
-              { key: 'warning',  label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', icon: AlertTriangle },
-              { key: 'ok',       label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#00d0840f', border: '#00d08438', icon: CheckCircle },
-              { key: 'nodata',   label: 'Sem dados', count: counts.nodata,   color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', icon: Clock },
+              { key: 'critical',   label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', icon: AlertTriangle },
+              { key: 'warning',    label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', icon: AlertTriangle },
+              { key: 'ok',         label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#00d0840f', border: '#00d08438', icon: CheckCircle },
+              { key: 'notraining', label: 'Sem treino 48h', count: counts.notraining, color: '#8b5cf6', bg: '#8b5cf60f', border: '#8b5cf638', icon: Dumbbell },
+              { key: 'nodata',     label: 'Sem dados', count: counts.nodata,   color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', icon: Clock },
             ].map(({ key, label, count, color, bg, border, icon: Icon }) => (
               <button key={key}
                 onClick={() => setFilter(filter === key as Filter ? 'all' : key as Filter)}
@@ -404,14 +408,14 @@ export default function AlertsPage() {
         {/* Actions bar */}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            {(['all', 'critical', 'warning', 'ok', 'nodata'] as Filter[]).map(f => (
+            {(['all', 'critical', 'warning', 'ok', 'notraining', 'nodata'] as Filter[]).map(f => (
               <button key={f}
                 onClick={() => setFilter(f)}
                 className="px-3 py-1.5 text-[11px] font-semibold rounded-lg transition-colors"
                 style={filter === f
                   ? { background: '#e8001c', color: '#fff', border: '1px solid #e8001c' }
                   : { background: 'var(--secondary)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }}>
-                {f === 'all' ? 'Todos' : f === 'critical' ? 'Críticos' : f === 'warning' ? 'Atenção' : f === 'ok' ? 'OK' : 'Sem dados'}
+                {f === 'all' ? 'Todos' : f === 'critical' ? 'Críticos' : f === 'warning' ? 'Atenção' : f === 'ok' ? 'OK' : f === 'notraining' ? 'Sem treino' : 'Sem dados'}
               </button>
             ))}
           </div>
