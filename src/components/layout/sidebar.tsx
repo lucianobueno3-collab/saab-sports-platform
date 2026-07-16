@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { getAthletesForAlerts, getMyRole } from '@/lib/supabase/queries'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
+import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
 const navItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
@@ -34,7 +35,7 @@ export function Sidebar() {
     : user?.email?.slice(0, 2).toUpperCase() ?? 'CO'
   const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Coach'
 
-  useEffect(() => {
+  const refreshCriticalCount = () => {
     getAthletesForAlerts().then(rows => {
       let count = 0
       for (const a of rows) {
@@ -51,8 +52,14 @@ export function Sidebar() {
       }
       setCriticalCount(count)
     }).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshCriticalCount()
     getMyRole().then(role => setIsAdmin(role === 'admin')).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useAutoRefresh(refreshCriticalCount)
 
   return (
     <aside className="hidden md:flex flex-col w-64 shrink-0 overflow-y-auto bg-sidebar border-r border-border">
