@@ -158,12 +158,9 @@ function buildPrintHTML(opts: {
 
   <!-- HEADER -->
   <div style="background:linear-gradient(135deg,#0d0d18,#120c14);border-bottom:1px solid #1a1a28;padding:20px 32px;display:flex;align-items:center;justify-content:space-between">
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="width:40px;height:40px;background:#e8001c;border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:13px;letter-spacing:-.5px">SS</div>
-      <div>
-        <div style="font-size:14px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#fff">Saab Sports</div>
-        <div style="font-size:10px;color:#6677aa;margin-top:1px">Performance Platform</div>
-      </div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <img src="/logo-saab.png" alt="SAAB Sports" style="width:140px;height:auto;display:block" />
+      <div style="font-size:10px;color:#6677aa;letter-spacing:.08em">PERFORMANCE PLATFORM</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:18px;font-weight:900;color:#fff">${athlete.full_name}</div>
@@ -471,12 +468,10 @@ function ReportContent() {
 
           {/* Header */}
           <div className="flex items-center justify-between px-8 py-6" style={{ background: 'linear-gradient(135deg,#0d0d18,#120c14)', borderBottom: '1px solid #1a1a28' }}>
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-[#e8001c] flex items-center justify-center text-white font-black text-sm">SS</div>
-              <div>
-                <p className="text-sm font-black text-white tracking-widest uppercase">Saab Sports</p>
-                <p className="text-[10px] text-[#6677aa] mt-0.5">Performance Platform</p>
-              </div>
+            <div className="flex flex-col gap-1">
+              {/* eslint-disable-next-line @next/next/no-img-element -- html2canvas captura melhor <img> puro */}
+              <img src="/logo-saab.png" alt="SAAB Sports" className="w-[120px] md:w-[140px] h-auto" />
+              <p className="text-[10px] text-[#6677aa] tracking-wider">PERFORMANCE PLATFORM</p>
             </div>
             <div className="text-right">
               <p className="text-lg font-black text-white">{athlete.full_name}</p>

@@ -57,7 +57,7 @@ const ALL_TERMS: Record<string, GlossaryTerm> = {
     abbr: 'PMC',
     full: 'Performance Management Chart',
     description: 'Gráfico que mostra a evolução de CTL (fitness), ATL (fadiga) e TSB (forma) ao longo do tempo. Ferramenta central do planejamento de periodização.',
-    color: '#888899',
+    color: 'var(--muted-foreground)',
   },
   LTHR: {
     abbr: 'LTHR',

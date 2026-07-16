@@ -114,7 +114,7 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-border/50">
         <div className="flex items-center gap-2">
-          <FileText className="w-4 h-4 text-[#94a3b8]" />
+          <FileText className="w-4 h-4 text-muted-foreground" />
           <h3 className="text-sm font-bold text-foreground">Documentos (PDF)</h3>
         </div>
         <button
