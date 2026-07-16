@@ -6,6 +6,7 @@ import { MessageCircle, RefreshCw, AlertTriangle, CheckCircle, Clock, Zap, Moon,
 import Link from 'next/link'
 import { getAthletesForAlerts, getCoachProfile, type AthleteAlertRow } from '@/lib/supabase/queries'
 import { trainingGap, trainingGapLabel, type TrainingGap } from '@/lib/training-gap'
+import { useAutoRefresh } from '@/lib/use-auto-refresh'
 import { trainingReadiness, stopProtocol, type DailyMetrics } from '@/lib/readiness'
 import { THRESHOLDS } from '@/lib/thresholds'
 
@@ -278,18 +279,22 @@ export default function AlertsPage() {
   const [sending, setSending] = useState<string | null>(null)
   const [coachPhone, setCoachPhone] = useState<string | null>(null)
   const [coachName, setCoachName] = useState<string | null>(null)
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
 
-  const load = async () => {
-    setLoading(true)
+  const load = async (silent = false) => {
+    if (!silent) setLoading(true)
     const [rows, profile] = await Promise.all([getAthletesForAlerts(), getCoachProfile()])
     const built = rows.map(buildAlert).sort((a, b) => severityOrder(a.severity) - severityOrder(b.severity))
     setAlerts(built)
     setCoachPhone(profile?.phone ?? null)
     setCoachName(profile?.full_name ?? null)
+    setUpdatedAt(new Date())
     setLoading(false)
   }
 
   useEffect(() => { load() }, [])
+  // recalcula ao voltar do segundo plano e a cada 1h com a página aberta
+  useAutoRefresh(() => load(true))
 
   const counts = {
     critical: alerts.filter(a => a.severity === 'critical').length,
@@ -436,11 +441,14 @@ export default function AlertsPage() {
               <MessageCircle className="w-3.5 h-3.5" />
               {coachPhone ? 'Receber meu briefing' : 'Briefing p/ WhatsApp'}
             </button>
-            <button onClick={load} disabled={loading}
+            <button onClick={() => load()} disabled={loading}
               className="flex items-center gap-1.5 px-3 py-2 text-[11px] font-semibold rounded-lg transition-colors"
-              style={{ background: 'var(--secondary)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
+              style={{ background: 'var(--secondary)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}
+              title="Também atualiza sozinho: ao abrir, ao voltar para o app e a cada 1h">
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Atualizar
+              {updatedAt
+                ? `Atualizado às ${updatedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                : 'Atualizar'}
             </button>
           </div>
         </div>
@@ -489,7 +497,7 @@ export default function AlertsPage() {
                 {[
                   { step: '1', text: 'Atleta sincroniza o Garmin Connect (automático ou manual)', when: 'A qualquer hora do dia' },
                   { step: '2', text: 'Importação manual via tela "Importar Dados" processa o arquivo .fit e grava daily_metrics', when: 'Sob demanda — você clica em importar' },
-                  { step: '3', text: 'Central de Alertas consulta daily_metrics em tempo real ao abrir a página ou clicar "Atualizar"', when: 'Ao abrir a Central de Alertas' },
+                  { step: '3', text: 'Central de Alertas recalcula tudo em tempo real: ao abrir a página, ao voltar do segundo plano, a cada 1 hora com a página aberta, ou ao tocar em "Atualizar"', when: 'Automático — o horário da última atualização aparece no botão' },
                   { step: '4', text: 'Alertas consideram apenas dados com ≤ 2 dias de defasagem — dados mais antigos geram "Sem dados"', when: 'Janela: últimas 48h' },
                 ].map(({ step, text, when }) => (
                   <div key={step} className="flex gap-3">
