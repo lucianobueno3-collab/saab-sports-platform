@@ -8,14 +8,14 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2 } from 'lucide-react'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV,
-  type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow,
+  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV, getAthleteCheckins,
+  type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow, type CheckinRow,
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
 import { SaudeTab } from '@/components/athlete/saude-tab'
@@ -56,6 +56,8 @@ function AthleteDetailContent() {
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
   const [activeTab, setActiveTab] = useState<'performance' | 'saude' | 'nutricao' | 'provas' | 'evolucao'>('performance')
+  const [portalCopied, setPortalCopied] = useState(false)
+  const [checkins, setCheckins] = useState<CheckinRow[]>([])
 
   useEffect(() => {
     if (!id) return
@@ -65,8 +67,10 @@ function AthleteDetailContent() {
       getAthletePMC(id, 90),
       getAthleteActivities(id, 6),
       getAthleteHRV(id, 30),
-    ]).then(([a, p, acts, h]) => {
+      getAthleteCheckins(id, 30),
+    ]).then(([a, p, acts, h, ci]) => {
       setAthlete(a)
+      setCheckins(ci)
       if (a) setEditValues({
         ftp_watts: a.ftp_watts?.toString() ?? '',
         ftp_run_watts: a.ftp_run_watts?.toString() ?? '',
@@ -155,6 +159,15 @@ function AthleteDetailContent() {
     setAthlete({ ...athlete, ...updates } as AthleteRow)
     setSaving(false)
     setEditOpen(false)
+  }
+
+  function handleSharePortal() {
+    if (!athlete?.portal_token) { window.alert('Token do portal não encontrado. Rode a migration 012.'); return }
+    const url = `${window.location.origin}/portal?token=${athlete.portal_token}`
+    navigator.clipboard.writeText(url).then(() => {
+      setPortalCopied(true)
+      setTimeout(() => setPortalCopied(false), 2500)
+    }).catch(() => window.prompt('Copie o link do portal do aluno:', url))
   }
 
   function handleWhatsApp() {
@@ -294,6 +307,12 @@ function AthleteDetailContent() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
               >
                 <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
+              </button>
+              <button
+                onClick={handleSharePortal}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#a78bfa] border border-[#a78bfa]/30 bg-[#a78bfa]/10 rounded-lg hover:bg-[#a78bfa]/20 transition-colors"
+              >
+                <Share2 className="w-3.5 h-3.5" /> {portalCopied ? 'Link copiado!' : 'Portal do Aluno'}
               </button>
               <button
                 onClick={() => setEditOpen(true)}
@@ -508,6 +527,53 @@ function AthleteDetailContent() {
             )}
           </div>
         </div>
+
+        {/* Check-ins do atleta (reportados no portal) */}
+        {checkins.length > 0 && (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-4 border-b border-border/50">
+              <Share2 className="w-4 h-4 text-[#a78bfa]" />
+              <h3 className="text-sm font-bold text-foreground">Check-ins do Atleta</h3>
+              <span className="text-[10px] text-muted-foreground">(reportados no portal)</span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                    <th className="text-left px-5 py-2">Data</th>
+                    <th className="text-center px-2 py-2">RPE</th>
+                    <th className="text-center px-2 py-2">Dor</th>
+                    <th className="text-center px-2 py-2">Sono</th>
+                    <th className="text-center px-2 py-2">Humor</th>
+                    <th className="text-left px-3 py-2">Local dor / Notas</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {checkins.map((c, i) => {
+                    const cell = (v: number | null, invert: boolean) => {
+                      if (v == null) return <span className="text-muted-foreground/40">—</span>
+                      const good = invert ? v <= 3 : v >= 7
+                      const bad = invert ? v >= 7 : v <= 3
+                      return <span className="font-bold" style={{ color: good ? '#4ade80' : bad ? '#ef4444' : '#fbbf24' }}>{v}</span>
+                    }
+                    return (
+                      <tr key={i}>
+                        <td className="px-5 py-2 text-muted-foreground whitespace-nowrap">{new Date(c.checkin_date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                        <td className="text-center px-2 py-2">{cell(c.rpe, true)}</td>
+                        <td className="text-center px-2 py-2">{cell(c.soreness, true)}</td>
+                        <td className="text-center px-2 py-2">{cell(c.sleep_quality, false)}</td>
+                        <td className="text-center px-2 py-2">{cell(c.mood, false)}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {[c.pain_location, c.notes].filter(Boolean).join(' · ') || '—'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
           </>
         )}
 

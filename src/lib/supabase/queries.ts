@@ -32,6 +32,7 @@ export type AthleteRow = {
   initial_ctl: number | null
   initial_atl: number | null
   initial_date: string | null
+  portal_token: string | null
 }
 
 export type PMCRow = {
@@ -84,7 +85,7 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, { data: extra }] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token').eq('id', id).single(),
   ])
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
@@ -324,6 +325,70 @@ export async function getAthleteDocuments(athleteId: string, area: 'saude' | 'nu
     .order('uploaded_at', { ascending: false })
   if (error) { console.error('[queries]', error.message); return [] }
   return (data ?? []) as AthleteDocumentRow[]
+}
+
+// ─── Portal do Aluno (acesso por token) ──────────────────────────────────────
+
+export type PortalAthlete = {
+  full_name: string
+  primary_sport: string
+  metrics: {
+    date: string; ctl: number | null; atl: number | null; tsb: number | null
+    hrv_ms: number | null; body_battery: number | null; sleep_hours: number | null
+    rem_pct: number | null; resting_hr: number | null
+  } | null
+  activities: { name: string | null; sport: string; started_at: string; duration_seconds: number; distance_meters: number | null; tss: number | null }[]
+}
+
+export type CheckinRow = {
+  checkin_date: string
+  rpe: number | null
+  soreness: number | null
+  sleep_quality: number | null
+  mood: number | null
+  pain_location: string | null
+  notes: string | null
+}
+
+export async function portalGetAthlete(token: string): Promise<PortalAthlete | null> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_athlete', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return null }
+  return data as PortalAthlete | null
+}
+
+export async function portalGetCheckins(token: string): Promise<CheckinRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_checkins', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return [] }
+  return (data ?? []) as CheckinRow[]
+}
+
+export async function portalSubmitCheckin(token: string, c: {
+  rpe: number | null; soreness: number | null; sleep_quality: number | null
+  mood: number | null; pain_location: string | null; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_submit_checkin', {
+    p_token: token, p_rpe: c.rpe, p_soreness: c.soreness, p_sleep_quality: c.sleep_quality,
+    p_mood: c.mood, p_pain_location: c.pain_location, p_notes: c.notes,
+  })
+  if (error) { console.error('[portal]', error.message); return false }
+  return data === true
+}
+
+/** Check-ins de um atleta, para o coach (lado autenticado) */
+export async function getAthleteCheckins(athleteId: string, days = 30): Promise<CheckinRow[]> {
+  const sb = createClient()
+  const from = new Date(); from.setDate(from.getDate() - days)
+  const { data, error } = await sb
+    .from('athlete_checkins')
+    .select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes')
+    .eq('athlete_id', athleteId)
+    .gte('checkin_date', from.toISOString().slice(0, 10))
+    .order('checkin_date', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as CheckinRow[]
 }
 
 // ─── Coach Profile ────────────────────────────────────────────────────────────
