@@ -406,6 +406,62 @@ export async function getStrengthPRs(athleteId: string): Promise<StrengthPRRow[]
   return (data ?? []) as StrengthPRRow[]
 }
 
+export type StrengthLogExercise = { name: string; done: boolean; load?: string; reps?: string; notes?: string }
+export type StrengthLogRow = {
+  id: string
+  day_label: string | null
+  performed_at: string
+  rpe: number | null
+  completed: StrengthLogExercise[]
+  notes: string | null
+}
+
+/** Registros de força do atleta, lado do coach (migração 015). null se a tabela não existe. */
+export async function getStrengthLogs(athleteId: string): Promise<StrengthLogRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_logs')
+    .select('id, day_label, performed_at, rpe, completed, notes')
+    .eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30)
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as StrengthLogRow[]
+}
+
+// ─── Portal do atleta: treino de força (RPCs da migração 015) ───────────────
+
+export type PortalStrengthProgram = {
+  id: string
+  name: string
+  goal: string | null
+  structure: import('@/lib/strength-templates').StrengthDay[]
+}
+
+export async function portalGetStrengthProgram(token: string): Promise<PortalStrengthProgram | null> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_strength_program', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return null }
+  return data as PortalStrengthProgram | null
+}
+
+export async function portalLogStrength(token: string, log: {
+  program_id: string | null; day_label: string | null; rpe: number | null
+  completed: StrengthLogExercise[]; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_log_strength', {
+    p_token: token, p_program_id: log.program_id, p_day_label: log.day_label,
+    p_rpe: log.rpe, p_completed: log.completed, p_notes: log.notes,
+  })
+  if (error) { console.error('[portal]', error.message); return false }
+  return data === true
+}
+
+export async function portalGetStrengthLogs(token: string): Promise<StrengthLogRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_strength_logs', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return [] }
+  return (data ?? []) as StrengthLogRow[]
+}
+
 export async function getAthleteBodyComposition(athleteId: string): Promise<BodyCompositionRow[]> {
   const sb = createClient()
   const { data } = await sb.from('body_composition').select('*').eq('athlete_id', athleteId).order('measured_at', { ascending: false })

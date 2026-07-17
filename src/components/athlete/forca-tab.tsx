@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getStrengthPrograms, getStrengthPRs,
-  type StrengthProgramRow, type StrengthPRRow,
+  getStrengthPrograms, getStrengthPRs, getStrengthLogs,
+  type StrengthProgramRow, type StrengthPRRow, type StrengthLogRow,
 } from '@/lib/supabase/queries'
 import { todayLocalISO } from '@/lib/dates'
 import {
@@ -13,8 +13,9 @@ import {
 } from '@/lib/strength-templates'
 import {
   Plus, X, Dumbbell, Info, Trophy, Calculator, Trash2, ChevronDown,
-  Clock, Repeat, Gauge,
+  Clock, Repeat, Gauge, LineChart as LineChartIcon, ClipboardCheck,
 } from 'lucide-react'
+import { TrendChart } from './trend-chart'
 
 function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
@@ -25,6 +26,7 @@ interface Props { athleteId: string; weightKg: number | null }
 export function ForcaTab({ athleteId, weightKg }: Props) {
   const [programs, setPrograms] = useState<StrengthProgramRow[] | null>([])
   const [prs, setPrs] = useState<StrengthPRRow[]>([])
+  const [logs, setLogs] = useState<StrengthLogRow[]>([])
   const [migrationMissing, setMigrationMissing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [openProgram, setOpenProgram] = useState<string | null>(null)
@@ -35,10 +37,13 @@ export function ForcaTab({ athleteId, weightKg }: Props) {
   useEffect(() => { load() }, [athleteId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function load() {
-    const [progs, records] = await Promise.all([getStrengthPrograms(athleteId), getStrengthPRs(athleteId)])
+    const [progs, records, sessionLogs] = await Promise.all([
+      getStrengthPrograms(athleteId), getStrengthPRs(athleteId), getStrengthLogs(athleteId),
+    ])
     setMigrationMissing(progs === null)
     setPrograms(progs)
     setPrs(records)
+    setLogs(sessionLogs ?? [])
   }
 
   async function createFromTemplate(t: StrengthTemplate) {
@@ -111,6 +116,37 @@ export function ForcaTab({ athleteId, weightKg }: Props) {
       {prs.length > 0 && <PRPanel prs={prs} weightKg={weightKg} onDelete={async (id) => {
         const sb = createClient(); await sb.from('strength_prs').delete().eq('id', id); load()
       }} />}
+
+      {/* Aderência — treinos registrados pelo atleta no portal */}
+      {logs.length > 0 && (
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-border/50">
+            <ClipboardCheck className="w-4 h-4 text-[#00d084]" />
+            <h4 className="text-xs font-bold text-foreground">Treinos registrados pelo atleta</h4>
+            <span className="text-[10px] text-muted-foreground">via portal</span>
+          </div>
+          <div className="divide-y divide-border/40">
+            {logs.slice(0, 8).map(l => {
+              const doneN = l.completed.filter(e => e.done).length
+              const withLoad = l.completed.filter(e => e.done && e.load)
+              return (
+                <div key={l.id} className="px-5 py-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-foreground">{l.day_label ?? 'Treino'}</span>
+                    <span className="text-[10px] text-muted-foreground">{fmtDate(l.performed_at)}</span>
+                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase ml-auto" style={{ background: '#00d08420', color: '#00d084' }}>{doneN} exercícios</span>
+                    {l.rpe != null && <span className="text-[9px] font-black px-1.5 py-0.5 rounded uppercase" style={{ background: '#ffa80020', color: '#ffa800' }}>RPE {l.rpe}</span>}
+                  </div>
+                  {withLoad.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-1">{withLoad.map(e => `${e.name}: ${e.load}`).join(' · ')}</p>
+                  )}
+                  {l.notes && <p className="text-[10px] text-muted-foreground/80 mt-1 italic">{l.notes}</p>}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Programas */}
       {progs.length === 0 ? (
@@ -202,11 +238,13 @@ function DayBlock({ day, color }: { day: StrengthDay; color: string }) {
 }
 
 function PRPanel({ prs, weightKg, onDelete }: { prs: StrengthPRRow[]; weightKg: number | null; onDelete: (id: string) => void }) {
-  // último 1RM por exercício
-  const latest = useMemo(() => {
-    const m = new Map<string, StrengthPRRow>()
-    for (const r of prs) if (!m.has(r.exercise)) m.set(r.exercise, r)
-    return [...m.values()]
+  const [openEx, setOpenEx] = useState<string | null>(null)
+
+  // agrupa por exercício; latest primeiro (prs já vem ordenado desc)
+  const byExercise = useMemo(() => {
+    const m = new Map<string, StrengthPRRow[]>()
+    for (const r of prs) (m.get(r.exercise) ?? m.set(r.exercise, []).get(r.exercise)!).push(r)
+    return m
   }, [prs])
 
   return (
@@ -214,20 +252,35 @@ function PRPanel({ prs, weightKg, onDelete }: { prs: StrengthPRRow[]; weightKg: 
       <div className="flex items-center gap-2 px-5 py-3 border-b border-border/50">
         <Trophy className="w-4 h-4 text-[#ffa800]" />
         <h4 className="text-xs font-bold text-foreground">Recordes de força (1RM)</h4>
+        <span className="text-[10px] text-muted-foreground">toque para ver evolução</span>
       </div>
       <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-        {latest.map(r => (
-          <div key={r.id} className="rounded-lg p-3 relative group" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-            <p className="text-[10px] font-bold text-foreground truncate pr-4">{r.exercise}</p>
-            <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-xl font-black text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.one_rm_kg}</span>
-              <span className="text-[10px] text-muted-foreground">kg</span>
+        {[...byExercise.entries()].map(([exercise, rows]) => {
+          const r = rows[0]
+          const isOpen = openEx === exercise
+          const best = Math.max(...rows.map(x => x.one_rm_kg))
+          return (
+            <div key={exercise} className={`rounded-lg p-3 relative group ${isOpen ? 'col-span-2 lg:col-span-2' : ''}`}
+              style={{ background: 'var(--panel)', border: `1px solid ${isOpen ? '#ffa80055' : 'var(--panel-border)'}` }}>
+              <button onClick={() => setOpenEx(isOpen ? null : exercise)} className="w-full text-left">
+                <p className="text-[10px] font-bold text-foreground truncate pr-4">{r.exercise}</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-xl font-black text-foreground" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.one_rm_kg}</span>
+                  <span className="text-[10px] text-muted-foreground">kg</span>
+                  {rows.length > 1 && <LineChartIcon className="w-3 h-3 ml-auto text-muted-foreground/50" />}
+                </div>
+                {weightKg ? <p className="text-[9px] text-[#ffa800] font-bold mt-0.5">{(r.one_rm_kg / weightKg).toFixed(2)}× peso corporal</p> : null}
+                <p className="text-[9px] text-muted-foreground/60 mt-0.5">{fmtDate(r.measured_at)}{r.estimated ? ' · estimado' : ''}{rows.length > 1 ? ` · recorde ${best}kg` : ''}</p>
+              </button>
+              <button onClick={() => onDelete(r.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3 text-muted-foreground/50 hover:text-[#e8001c]" /></button>
+              {isOpen && rows.length > 1 && (
+                <div className="mt-2 pt-2 border-t border-border/30">
+                  <TrendChart points={rows.map(x => ({ date: x.measured_at, value: x.one_rm_kg }))} color="#ffa800" unit="kg" height={120} />
+                </div>
+              )}
             </div>
-            {weightKg ? <p className="text-[9px] text-[#ffa800] font-bold mt-0.5">{(r.one_rm_kg / weightKg).toFixed(2)}× peso corporal</p> : null}
-            <p className="text-[9px] text-muted-foreground/60 mt-0.5">{fmtDate(r.measured_at)}{r.estimated ? ' · estimado' : ''}</p>
-            <button onClick={() => onDelete(r.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-3 h-3 text-muted-foreground/50 hover:text-[#e8001c]" /></button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

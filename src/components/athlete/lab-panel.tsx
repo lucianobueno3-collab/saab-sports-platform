@@ -1,8 +1,9 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { Pencil, X, ChevronDown, Info, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { Pencil, X, ChevronDown, Info, TrendingUp, TrendingDown, Minus, LineChart as LineChartIcon } from 'lucide-react'
 import type { MedicalExamRow } from '@/lib/supabase/queries'
+import { TrendChart } from './trend-chart'
 import {
   LAB_MARKERS, CATEGORY_LABEL, CATEGORY_COLOR, findMarker, markerRef,
   classifyValue, STATUS_STYLE, type MarkerCategory, type Sex, type MarkerStatus,
@@ -183,6 +184,21 @@ function MarkerCard({ name, rows, sex, open, onToggle, onEdit, onDelete }: {
 
       {open && rows.length > 1 && (
         <div className="mt-2 pt-2 border-t border-border/30 space-y-1">
+          {rows.length >= 2 && (
+            <div className="mb-2">
+              <p className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-muted-foreground mb-1">
+                <LineChartIcon className="w-2.5 h-2.5" /> Evolução
+              </p>
+              <TrendChart
+                points={rows.filter(r => r.value != null).map(r => ({ date: r.exam_date, value: r.value as number }))}
+                color={st.color === 'var(--muted-foreground)' ? '#0088ff' : st.color}
+                unit={unit}
+                refMin={ref.min}
+                refMax={ref.max}
+                height={120}
+              />
+            </div>
+          )}
           {rows.slice(1).map(r => (
             <div key={r.id} className="flex justify-between items-center">
               <span className="text-[10px] text-muted-foreground/60">{fmtDate(r.exam_date)}</span>
