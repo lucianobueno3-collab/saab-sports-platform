@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { todayLocalISO } from '@/lib/dates'
 
 export type AthleteRow = {
   id: string
@@ -592,6 +593,69 @@ export async function getMyRole(): Promise<string | null> {
   const { data, error } = await sb.rpc('get_my_role')
   if (error || data === null) return null
   return data as string
+}
+
+// ─── Login do atleta (migração 016) ─────────────────────────────────────────
+
+/** id do atleta vinculado à conta logada; null se a conta for de treinador */
+export async function getMyAthleteId(): Promise<string | null> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('my_athlete_id')
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data as string | null) ?? null
+}
+
+/** Vincula a conta logada a um atleta pelo código de acesso (portal_token) */
+export async function claimAthleteProfile(token: string): Promise<{ ok: boolean; error?: string; full_name?: string }> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('claim_athlete_profile', { p_token: token })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: 'falha' } }
+  return data as { ok: boolean; error?: string; full_name?: string }
+}
+
+/** Dados que o atleta logado vê de si mesmo (via RLS de autoacesso) */
+export async function getAthleteSelf(athleteId: string) {
+  const sb = createClient()
+  const since = new Date(); since.setDate(since.getDate() - 30)
+  const [summary, metrics, activities, checkins, programs, logs] = await Promise.all([
+    sb.from('v_athlete_summary').select('id, full_name, primary_sport, ctl, atl, tsb').eq('id', athleteId).maybeSingle(),
+    sb.from('daily_metrics').select('date, hrv_ms, body_battery, sleep_hours, resting_hr').eq('athlete_id', athleteId).order('date', { ascending: false }).limit(1),
+    sb.from('activities').select('name, sport, started_at, duration_seconds, distance_meters, tss').eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(5),
+    sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
+    sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
+    sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
+  ])
+  return {
+    summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
+    latestMetrics: (metrics.data?.[0] ?? null) as { date: string; hrv_ms: number | null; body_battery: number | null; sleep_hours: number | null; resting_hr: number | null } | null,
+    activities: (activities.data ?? []) as { name: string | null; sport: string; started_at: string; duration_seconds: number; distance_meters: number | null; tss: number | null }[],
+    checkins: (checkins.data ?? []) as CheckinRow[],
+    program: (programs.data?.[0] ?? null) as PortalStrengthProgram | null,
+    strengthLogs: (logs.data ?? []) as StrengthLogRow[],
+  }
+}
+
+/** Check-in do atleta logado (substitui o de hoje) */
+export async function submitCheckinSelf(athleteId: string, c: {
+  rpe: number | null; soreness: number | null; sleep_quality: number | null
+  mood: number | null; pain_location: string | null; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  await sb.from('athlete_checkins').delete().eq('athlete_id', athleteId).eq('checkin_date', todayLocalISO()).eq('source', 'portal')
+  const { error } = await sb.from('athlete_checkins').insert({ athlete_id: athleteId, ...c, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Registro de treino de força do atleta logado */
+export async function logStrengthSelf(athleteId: string, log: {
+  program_id: string | null; day_label: string | null; rpe: number | null
+  completed: StrengthLogExercise[]; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('strength_logs').insert({ athlete_id: athleteId, ...log, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
 }
 
 export type CoachRow = {
