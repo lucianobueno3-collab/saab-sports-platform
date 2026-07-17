@@ -42,12 +42,15 @@ function ScaleInput({ label, value, onChange, hint, invert }: {
 
 function PortalContent() {
   const params = useSearchParams()
+  // token via ?token= ; fallback: lê da URL bruta (cobre casos de redirect estranho)
   const token = params.get('token')
+    ?? (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('token') : null)
 
   const [athlete, setAthlete] = useState<PortalAthlete | null>(null)
   const [checkins, setCheckins] = useState<CheckinRow[]>([])
   const [loading, setLoading] = useState(true)
   const [invalid, setInvalid] = useState(false)
+  const [reason, setReason] = useState<'no-token' | 'not-found'>('not-found')
 
   const [rpe, setRpe] = useState(5)
   const [soreness, setSoreness] = useState(3)
@@ -62,12 +65,12 @@ function PortalContent() {
   const [strengthLogs, setStrengthLogs] = useState<StrengthLogRow[]>([])
 
   useEffect(() => {
-    if (!token) { setInvalid(true); setLoading(false); return }
+    if (!token) { setReason('no-token'); setInvalid(true); setLoading(false); return }
     Promise.all([
       portalGetAthlete(token), portalGetCheckins(token),
       portalGetStrengthProgram(token), portalGetStrengthLogs(token),
     ]).then(([a, c, p, sl]) => {
-      if (!a) setInvalid(true)
+      if (!a) { setReason('not-found'); setInvalid(true) }
       else { setAthlete(a); setCheckins(c); setProgram(p); setStrengthLogs(sl) }
       setLoading(false)
     })
@@ -105,7 +108,11 @@ function PortalContent() {
     <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
       <Dumbbell className="w-10 h-10 text-muted-foreground/40 mb-3" />
       <p className="text-sm font-semibold text-foreground">Link inválido ou expirado</p>
-      <p className="text-xs text-muted-foreground mt-1">Peça um novo link de acesso ao seu treinador.</p>
+      <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+        {reason === 'no-token'
+          ? 'O link veio sem o código de acesso. Peça ao treinador para copiar o link novamente pelo botão "Portal do Aluno".'
+          : 'Não encontramos este atleta. Confirme com o treinador se o link está completo e atualizado.'}
+      </p>
     </div>
   )
 

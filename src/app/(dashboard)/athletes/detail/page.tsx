@@ -164,7 +164,9 @@ function AthleteDetailContent() {
 
   function handleSharePortal() {
     if (!athlete?.portal_token) { window.alert('Token do portal não encontrado. Rode a migration 012.'); return }
-    const url = `${window.location.origin}/portal?token=${athlete.portal_token}`
+    // barra final antes do ?token — o site usa export estático com trailingSlash,
+    // e sem a barra o Netlify redireciona /portal → /portal/ e derruba o token
+    const url = `${window.location.origin}/portal/?token=${athlete.portal_token}`
     navigator.clipboard.writeText(url).then(() => {
       setPortalCopied(true)
       setTimeout(() => setPortalCopied(false), 2500)
