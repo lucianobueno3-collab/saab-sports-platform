@@ -1,19 +1,25 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/context/auth-context'
+import { getMyAthleteId } from '@/lib/supabase/queries'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  const [checkingRole, setCheckingRole] = useState(true)
 
   useEffect(() => {
-    if (!loading && !user) {
-      window.location.href = '/login'
-    }
+    if (loading) return
+    if (!user) { window.location.href = '/login'; return }
+    // atleta não acessa o painel do treinador — redireciona para a área dele
+    getMyAthleteId().then(athleteId => {
+      if (athleteId) window.location.href = '/atleta'
+      else setCheckingRole(false)
+    }).catch(() => setCheckingRole(false))
   }, [user, loading])
 
-  if (loading) {
+  if (loading || (user && checkingRole)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-6">

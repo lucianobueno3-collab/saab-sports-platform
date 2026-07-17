@@ -164,11 +164,15 @@ function AthleteDetailContent() {
 
   function handleSharePortal() {
     if (!athlete?.portal_token) { window.alert('Token do portal não encontrado. Rode a migration 012.'); return }
-    const url = `${window.location.origin}/portal?token=${athlete.portal_token}`
-    navigator.clipboard.writeText(url).then(() => {
+    // barra final antes do ?token — o site usa export estático com trailingSlash,
+    // e sem a barra o Netlify redireciona /portal → /portal/ e derruba o token
+    const url = `${window.location.origin}/portal/?token=${athlete.portal_token}`
+    // instruções para o atleta: link direto (sem senha) OU login no app com o código
+    const msg = `Olá! Seu acesso ao SAAB Sports:\n\n📲 Acesso rápido (sem senha):\n${url}\n\n🔐 Ou crie seu login no app (${window.location.origin}) escolhendo "Sou atleta" e usando o código de acesso:\n${athlete.portal_token}`
+    navigator.clipboard.writeText(msg).then(() => {
       setPortalCopied(true)
       setTimeout(() => setPortalCopied(false), 2500)
-    }).catch(() => window.prompt('Copie o link do portal do aluno:', url))
+    }).catch(() => window.prompt('Copie e envie ao atleta:', msg))
   }
 
   function handleWhatsApp() {
