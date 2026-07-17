@@ -2,8 +2,8 @@
 
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { portalGetAthlete, portalGetCheckins, portalSubmitCheckin, type PortalAthlete, type CheckinRow } from '@/lib/supabase/queries'
-import { Activity, Heart, Moon, Battery, TrendingUp, Loader2, CheckCircle2, Dumbbell } from 'lucide-react'
+import { portalGetAthlete, portalGetCheckins, portalSubmitCheckin, portalGetStrengthProgram, portalLogStrength, portalGetStrengthLogs, type PortalAthlete, type CheckinRow, type PortalStrengthProgram, type StrengthLogRow, type StrengthLogExercise } from '@/lib/supabase/queries'
+import { Activity, Heart, Moon, Battery, TrendingUp, Loader2, CheckCircle2, Dumbbell, ClipboardCheck } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -58,14 +58,25 @@ function PortalContent() {
   const [submitting, setSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
 
+  const [program, setProgram] = useState<PortalStrengthProgram | null>(null)
+  const [strengthLogs, setStrengthLogs] = useState<StrengthLogRow[]>([])
+
   useEffect(() => {
     if (!token) { setInvalid(true); setLoading(false); return }
-    Promise.all([portalGetAthlete(token), portalGetCheckins(token)]).then(([a, c]) => {
+    Promise.all([
+      portalGetAthlete(token), portalGetCheckins(token),
+      portalGetStrengthProgram(token), portalGetStrengthLogs(token),
+    ]).then(([a, c, p, sl]) => {
       if (!a) setInvalid(true)
-      else { setAthlete(a); setCheckins(c) }
+      else { setAthlete(a); setCheckins(c); setProgram(p); setStrengthLogs(sl) }
       setLoading(false)
     })
   }, [token])
+
+  async function reloadStrength() {
+    if (!token) return
+    setStrengthLogs(await portalGetStrengthLogs(token))
+  }
 
   async function submit() {
     if (!token) return
@@ -204,6 +215,11 @@ function PortalContent() {
         </div>
       )}
 
+      {/* Treino de força */}
+      {token && program && (
+        <StrengthLogger token={token} program={program} logs={strengthLogs} onLogged={reloadStrength} />
+      )}
+
       {/* Histórico de check-ins */}
       {checkins.length > 0 && (
         <div className="bg-card border border-border rounded-2xl p-5">
@@ -225,6 +241,118 @@ function PortalContent() {
       )}
 
       <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
+    </div>
+  )
+}
+
+function StrengthLogger({ token, program, logs, onLogged }: {
+  token: string; program: PortalStrengthProgram; logs: StrengthLogRow[]; onLogged: () => void
+}) {
+  const [dayIdx, setDayIdx] = useState(0)
+  const [done, setDone] = useState<Record<string, boolean>>({})
+  const [loads, setLoads] = useState<Record<string, string>>({})
+  const [rpe, setRpe] = useState(7)
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const day = program.structure[dayIdx]
+  if (!day) return null
+
+  async function save() {
+    setSaving(true)
+    const completed: StrengthLogExercise[] = day.exercises.map(ex => ({
+      name: ex.name, done: !!done[ex.name], load: loads[ex.name] || undefined,
+    }))
+    const ok = await portalLogStrength(token, {
+      program_id: program.id, day_label: day.label, rpe, completed, notes: notes || null,
+    })
+    setSaving(false)
+    if (ok) {
+      setSaved(true); setDone({}); setLoads({}); setNotes('')
+      onLogged()
+      setTimeout(() => setSaved(false), 2500)
+    }
+  }
+
+  const doneCount = day.exercises.filter(ex => done[ex.name]).length
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-1">
+        <Dumbbell className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-bold text-foreground">Treino de força</h2>
+      </div>
+      <p className="text-[11px] text-muted-foreground mb-3">{program.name}</p>
+
+      {/* Seletor de dia */}
+      {program.structure.length > 1 && (
+        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
+          {program.structure.map((d, i) => (
+            <button key={i} onClick={() => { setDayIdx(i); setDone({}); setLoads({}) }}
+              className="px-3 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap flex-shrink-0"
+              style={i === dayIdx ? { background: '#e8001c', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Checklist de exercícios */}
+      <div className="space-y-2">
+        {day.exercises.map((ex, i) => {
+          const isDone = !!done[ex.name]
+          return (
+            <div key={i} className="rounded-xl p-3" style={{ background: 'var(--panel)', border: `1px solid ${isDone ? '#00d08455' : 'var(--panel-border)'}` }}>
+              <div className="flex items-start gap-3">
+                <button onClick={() => setDone(s => ({ ...s, [ex.name]: !s[ex.name] }))}
+                  className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center transition-colors"
+                  style={{ background: isDone ? '#00d084' : 'transparent', border: `1.5px solid ${isDone ? '#00d084' : 'var(--border)'}` }}>
+                  {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{ex.name}</p>
+                  <p className="text-[11px] text-muted-foreground">{ex.sets} × {ex.reps}{ex.load ? ` · ${ex.load}` : ''}{ex.rest_s ? ` · ${ex.rest_s}s desc.` : ''}</p>
+                </div>
+                <input value={loads[ex.name] ?? ''} onChange={e => setLoads(s => ({ ...s, [ex.name]: e.target.value }))}
+                  placeholder="carga" className="w-16 px-2 py-1 text-xs rounded-lg bg-background border border-border text-foreground text-right outline-none focus:border-primary flex-shrink-0" />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* RPE da sessão */}
+      <div className="mt-4">
+        <ScaleInput label="Esforço do treino (RPE)" value={rpe} onChange={setRpe} hint="0 = muito leve · 10 = máximo" invert />
+      </div>
+      <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Observações (opcional)"
+        className="w-full mt-3 px-3 py-2 text-sm rounded-lg bg-background border border-border text-foreground outline-none focus:border-primary resize-none" />
+
+      <button onClick={save} disabled={saving || doneCount === 0}
+        className="w-full mt-3 py-3 text-sm font-bold rounded-xl bg-primary text-white disabled:opacity-50 flex items-center justify-center gap-2">
+        {saved ? <><CheckCircle2 className="w-4 h-4" /> Treino registrado!</> : saving ? 'Salvando...' : <><ClipboardCheck className="w-4 h-4" /> Registrar treino ({doneCount}/{day.exercises.length})</>}
+      </button>
+
+      {/* Últimos treinos */}
+      {logs.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-border/40">
+          <p className="text-[11px] font-bold text-muted-foreground mb-2">Últimos treinos de força</p>
+          <div className="space-y-1.5">
+            {logs.slice(0, 5).map(l => {
+              const doneN = l.completed.filter(e => e.done).length
+              return (
+                <div key={l.id} className="flex items-center gap-2 text-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" />
+                  <span className="text-muted-foreground w-16 flex-shrink-0">{fmtDate(l.performed_at)}</span>
+                  <span className="text-foreground flex-1 min-w-0 truncate">{l.day_label ?? 'Treino'}</span>
+                  <span className="text-muted-foreground flex-shrink-0">{doneN} ex.{l.rpe != null ? ` · RPE ${l.rpe}` : ''}</span>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
