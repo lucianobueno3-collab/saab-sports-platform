@@ -83,10 +83,17 @@ export async function getAthletes(): Promise<AthleteRow[]> {
 
 export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
-  const [{ data: summary }, { data: extra }] = await Promise.all([
+  const [{ data: summary }, extraRes] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
     sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token').eq('id', id).single(),
   ])
+  let extra = extraRes.data
+  if (extraRes.error) {
+    // banco sem a migração 012 (portal_token não existe): repete sem a coluna
+    console.error('[queries]', extraRes.error.message)
+    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm').eq('id', id).single()
+    extra = retry.data ? { ...retry.data, portal_token: null } : null
+  }
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
 }
@@ -113,7 +120,19 @@ export async function getAthleteActivities(athleteId: string, limit = 10): Promi
     .eq('athlete_id', athleteId)
     .order('started_at', { ascending: false })
     .limit(limit)
-  if (error) { console.error("[queries]", error.message); return [] }
+  if (error) {
+    // banco sem a migração 011 (zone_data não existe): repete sem a coluna
+    // para os treinos continuarem visíveis mesmo com o banco desatualizado
+    console.error('[queries]', error.message)
+    const retry = await sb
+      .from('activities')
+      .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+      .eq('athlete_id', athleteId)
+      .order('started_at', { ascending: false })
+      .limit(limit)
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+  }
   return data ?? []
 }
 

@@ -343,7 +343,7 @@ export default function ImportPage() {
       if (uf.ext === 'fit') {
         try {
           const act = await parseFitFile(uf.buffer!, athleteThresholds(athlete))
-          const { error } = await sb.from('activities').insert({
+          const payload = {
             athlete_id: selectedAthlete,
             name: act.name,
             sport: sportToDb(act.sport),
@@ -364,7 +364,14 @@ export default function ImportPage() {
             source: 'fit' as const,
             external_id: uf.name,
             ftp_used: athlete.ftp_watts ?? null,
-          })
+          }
+          let { error } = await sb.from('activities').insert(payload)
+          if (error && (error.code === '42703' || error.message?.includes('zone_data'))) {
+            // banco sem a migração 011: importa sem as zonas para não perder o treino
+            const { zone_data: _omit, ...withoutZones } = payload
+            void _omit
+            ;({ error } = await sb.from('activities').insert(withoutZones))
+          }
           if (error) {
             const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
             if (isDuplicate) { totalSkipped++; details.push(`⏭ Duplicata: ${uf.name}`) }
