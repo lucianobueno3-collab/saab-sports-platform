@@ -6,6 +6,7 @@ import { getAthleteInjuries, getAthleteMedicalExams, type InjuryRow, type Medica
 import { todayLocalISO } from '@/lib/dates'
 import { extractExamsFromText, extractDateFromText, type ExtractedExam } from '@/lib/parsers/pdf-parser'
 import { DocsSection } from './docs-section'
+import { ProntuarioSection } from './prontuario-section'
 import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle, Sparkles, Pencil } from 'lucide-react'
 
 const SEVERITY_LABEL = { mild: 'Leve', moderate: 'Moderada', severe: 'Grave' }
@@ -195,6 +196,9 @@ export function SaudeTab({ athleteId }: Props) {
 
   return (
     <div className="space-y-6">
+      {/* Prontuário: aptidão, validades, anamnese e comparativo */}
+      <ProntuarioSection athleteId={athleteId} exams={exams} />
+
       {/* Documentos PDF */}
       <DocsSection
         athleteId={athleteId}

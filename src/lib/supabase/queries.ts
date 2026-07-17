@@ -324,6 +324,47 @@ export async function getAthleteMedicalExams(athleteId: string): Promise<Medical
   return (data ?? []) as MedicalExamRow[]
 }
 
+// ─── Prontuário médico (migração 013) ───────────────────────────────────────
+
+export type MedicalRecordRow = {
+  id: string
+  athlete_id: string
+  record_type: string
+  title: string | null
+  performed_at: string
+  expires_at: string | null
+  doctor_name: string | null
+  lab_name: string | null
+  result: string | null
+  notes: string | null
+}
+
+export type MedicalProfileRow = {
+  athlete_id: string
+  blood_type: string | null
+  allergies: string | null
+  medications: string | null
+  surgeries: string | null
+  conditions: string | null
+  family_history: string | null
+  emergency_contact: string | null
+}
+
+/** Retorna null quando a tabela ainda não existe (migração 013 não aplicada) */
+export async function getMedicalRecords(athleteId: string): Promise<MedicalRecordRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_records').select('*').eq('athlete_id', athleteId).order('performed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as MedicalRecordRow[]
+}
+
+export async function getMedicalProfile(athleteId: string): Promise<MedicalProfileRow | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athlete_medical_profile').select('*').eq('athlete_id', athleteId).maybeSingle()
+  if (error) { console.error('[queries]', error.message); return null }
+  return data as MedicalProfileRow | null
+}
+
 export async function getAthleteBodyComposition(athleteId: string): Promise<BodyCompositionRow[]> {
   const sb = createClient()
   const { data } = await sb.from('body_composition').select('*').eq('athlete_id', athleteId).order('measured_at', { ascending: false })
