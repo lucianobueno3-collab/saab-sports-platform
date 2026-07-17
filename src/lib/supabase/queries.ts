@@ -15,6 +15,7 @@ export type AthleteRow = {
   vo2max_ml_kg_min: number | null
   weight_kg: number | null
   height_cm: number | null
+  gender: 'M' | 'F' | 'other' | null
   active: boolean
   ctl: number | null
   atl: number | null
@@ -85,13 +86,13 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, extraRes] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token').eq('id', id).single(),
   ])
   let extra = extraRes.data
   if (extraRes.error) {
     // banco sem a migração 012 (portal_token não existe): repete sem a coluna
     console.error('[queries]', extraRes.error.message)
-    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm').eq('id', id).single()
+    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender').eq('id', id).single()
     extra = retry.data ? { ...retry.data, portal_token: null } : null
   }
   if (!summary) return null
@@ -363,6 +364,46 @@ export async function getMedicalProfile(athleteId: string): Promise<MedicalProfi
   const { data, error } = await sb.from('athlete_medical_profile').select('*').eq('athlete_id', athleteId).maybeSingle()
   if (error) { console.error('[queries]', error.message); return null }
   return data as MedicalProfileRow | null
+}
+
+// ─── Treino de força (migração 014) ─────────────────────────────────────────
+
+export type StrengthProgramRow = {
+  id: string
+  athlete_id: string
+  name: string
+  template_key: string | null
+  goal: string | null
+  phase: string | null
+  active: boolean
+  structure: import('@/lib/strength-templates').StrengthDay[]
+  notes: string | null
+  created_at: string
+}
+
+export type StrengthPRRow = {
+  id: string
+  athlete_id: string
+  exercise: string
+  measured_at: string
+  one_rm_kg: number
+  estimated: boolean
+  notes: string | null
+}
+
+/** null quando a tabela não existe (migração 014 não aplicada) */
+export async function getStrengthPrograms(athleteId: string): Promise<StrengthProgramRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_programs').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as StrengthProgramRow[]
+}
+
+export async function getStrengthPRs(athleteId: string): Promise<StrengthPRRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_prs').select('*').eq('athlete_id', athleteId).order('measured_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as StrengthPRRow[]
 }
 
 export async function getAthleteBodyComposition(athleteId: string): Promise<BodyCompositionRow[]> {

@@ -110,6 +110,16 @@ const KNOWN_EXAMS: { name: string; patterns: RegExp[] }[] = [
   { name: 'CPK', patterns: [/\bcpk\b|creatinoquinase|creatina\s*quinase/i] },
   { name: 'Magnésio', patterns: [/magn[ée]sio/i] },
   { name: 'Zinco', patterns: [/\bzinco\b/i] },
+  { name: 'Saturação de Transferrina', patterns: [/satura[çc][ãa]o\s*(?:de\s*)?transferrina|[íi]ndice\s*de\s*satura[çc][ãa]o/i] },
+  { name: 'Transferrina', patterns: [/transferrina(?!\s)/i] },
+  { name: 'LDH', patterns: [/\bldh\b|desidrogenase\s*l[áa]ctica/i] },
+  { name: 'GGT', patterns: [/\bggt\b|gama\s*gt|gama\s*glutamil/i] },
+  { name: 'Ácido Úrico', patterns: [/[áa]cido\s*[úu]rico/i] },
+  { name: 'Ácido Fólico', patterns: [/[áa]cido\s*f[óo]lico|folato/i] },
+  { name: 'Plaquetas', patterns: [/plaquetas/i] },
+  { name: 'VCM', patterns: [/\bvcm\b|volume\s*corpuscular/i] },
+  { name: 'Insulina', patterns: [/insulina(?!\s*p[óo]s)/i] },
+  { name: 'IGF-1', patterns: [/\bigf[\s-]*1\b|somatomedina/i] },
 ]
 
 const UNIT_RE = 'ng/mL|pg/mL|mg/dL|g/dL|µg/dL|ug/dL|mcg/dL|U/L|UI/L|µUI/mL|uUI/mL|mUI/L|nmol/L|ng/dL|mil/mm3|/mm3|%'
