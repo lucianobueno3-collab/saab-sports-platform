@@ -7,6 +7,8 @@ import { todayLocalISO } from '@/lib/dates'
 import { extractExamsFromText, extractDateFromText, type ExtractedExam } from '@/lib/parsers/pdf-parser'
 import { DocsSection } from './docs-section'
 import { ProntuarioSection } from './prontuario-section'
+import { LabPanel, MARKER_OPTIONS } from './lab-panel'
+import { findMarker, markerRef, type Sex } from '@/lib/lab-markers'
 import { Plus, X, AlertTriangle, FlaskConical, CheckCircle2, Circle, Sparkles, Pencil } from 'lucide-react'
 
 const SEVERITY_LABEL = { mild: 'Leve', moderate: 'Moderada', severe: 'Grave' }
@@ -16,16 +18,9 @@ function fmtDate(d: string) {
   return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
-function ExamStatus({ value, min, max }: { value: number | null; min: number | null; max: number | null }) {
-  if (value == null) return null
-  if (min != null && value < min) return <span className="text-xs font-bold" style={{ color: '#ef4444' }}>↓ Baixo</span>
-  if (max != null && value > max) return <span className="text-xs font-bold" style={{ color: '#fbbf24' }}>↑ Alto</span>
-  return <span className="text-xs font-bold" style={{ color: '#4ade80' }}>✓ Normal</span>
-}
+interface Props { athleteId: string; sex?: Sex | null }
 
-interface Props { athleteId: string }
-
-export function SaudeTab({ athleteId }: Props) {
+export function SaudeTab({ athleteId, sex = null }: Props) {
   const [injuries, setInjuries] = useState<InjuryRow[]>([])
   const [exams, setExams] = useState<MedicalExamRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -185,13 +180,6 @@ export function SaudeTab({ athleteId }: Props) {
   const activeInjuries = injuries.filter(i => !i.resolved_at)
   const resolvedInjuries = injuries.filter(i => i.resolved_at)
 
-  // Group exams by name, show latest value + history
-  const examGroups = exams.reduce<Record<string, MedicalExamRow[]>>((acc, e) => {
-    if (!acc[e.exam_name]) acc[e.exam_name] = []
-    acc[e.exam_name].push(e)
-    return acc
-  }, {})
-
   if (loading) return <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">Carregando...</div>
 
   return (
@@ -291,56 +279,9 @@ export function SaudeTab({ athleteId }: Props) {
             <Plus className="w-3 h-3" /> Adicionar Exame
           </button>
         </div>
-        {Object.keys(examGroups).length === 0 ? (
-          <p className="text-xs text-muted-foreground text-center py-8">Nenhum exame registrado</p>
-        ) : (
-          <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {Object.entries(examGroups).map(([name, rows]) => {
-              const latest = rows[0]
-              return (
-                <div key={name} className="rounded-xl p-4" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <p className="text-xs font-bold text-foreground">{name}</p>
-                    <ExamStatus value={latest.value} min={latest.reference_min} max={latest.reference_max} />
-                  </div>
-                  <div className="flex items-baseline gap-1.5 mb-1">
-                    <span className="text-2xl font-black text-foreground">{latest.value ?? '—'}</span>
-                    {latest.unit && <span className="text-xs text-muted-foreground">{latest.unit}</span>}
-                  </div>
-                  {(latest.reference_min != null || latest.reference_max != null) && (
-                    <p className="text-[10px] text-muted-foreground mb-1">
-                      Ref: {latest.reference_min ?? '?'} – {latest.reference_max ?? '?'} {latest.unit ?? ''}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground/60">{fmtDate(latest.exam_date)}</p>
-                  {rows.length > 1 && (
-                    <div className="mt-2 pt-2 border-t border-border/30">
-                      <p className="text-[9px] text-muted-foreground/50 mb-1">Histórico</p>
-                      <div className="space-y-1">
-                        {rows.slice(1, 4).map(r => (
-                          <div key={r.id} className="flex justify-between items-center">
-                            <span className="text-[10px] text-muted-foreground/60">{fmtDate(r.exam_date)}</span>
-                            <span className="text-[10px] text-muted-foreground">{r.value} {r.unit}</span>
-                            <span className="flex items-center gap-1">
-                              <button onClick={() => openEditExam(r)} className="p-0.5 hover:opacity-70" title="Editar"><Pencil className="w-2.5 h-2.5 text-muted-foreground/30" /></button>
-                              <button onClick={() => deleteExam(r.id)} className="p-0.5 hover:opacity-70"><X className="w-2.5 h-2.5 text-muted-foreground/30" /></button>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="mt-2 flex items-center gap-3">
-                    <button onClick={() => openEditExam(latest)} className="text-[9px] text-muted-foreground/40 hover:text-[#818cf8] transition-colors flex items-center gap-0.5">
-                      <Pencil className="w-2.5 h-2.5" /> editar último
-                    </button>
-                    <button onClick={() => deleteExam(latest.id)} className="text-[9px] text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">remover último</button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        <div className="p-5">
+          <LabPanel exams={exams} sex={sex} onEdit={openEditExam} onDelete={deleteExam} />
+        </div>
       </div>
 
       {/* Modal revisão de exames detectados no PDF */}
@@ -467,12 +408,27 @@ export function SaudeTab({ athleteId }: Props) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs text-muted-foreground mb-1">Nome do Exame *</label>
-                  <input value={examForm.exam_name} onChange={e => setExamForm(v => ({ ...v, exam_name: e.target.value }))}
+                  <input value={examForm.exam_name}
+                    onChange={e => {
+                      const val = e.target.value
+                      const m = findMarker(val)
+                      setExamForm(v => {
+                        // auto-preenche unidade e referência do catálogo (só se ainda vazios)
+                        if (m) {
+                          const ref = markerRef(m, sex)
+                          return {
+                            ...v, exam_name: m.name,
+                            unit: v.unit || m.unit,
+                            reference_min: v.reference_min || (ref.min != null ? String(ref.min) : ''),
+                            reference_max: v.reference_max || (ref.max != null ? String(ref.max) : ''),
+                          }
+                        }
+                        return { ...v, exam_name: val }
+                      })
+                    }}
                     placeholder="ex: Ferritina, Vit. D" className={inputCls} list="exam-suggestions" />
                   <datalist id="exam-suggestions">
-                    {['Ferritina', 'Hemoglobina', 'Hematócrito', 'Vitamina D', 'Vitamina B12', 'TSH', 'Testosterona', 'Cortisol', 'Creatinina', 'PCR', 'TGO', 'TGP'].map(s => (
-                      <option key={s} value={s} />
-                    ))}
+                    {MARKER_OPTIONS.map(s => <option key={s} value={s} />)}
                   </datalist>
                 </div>
                 <div>
