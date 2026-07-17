@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { MessageCircle, RefreshCw, AlertTriangle, CheckCircle, Clock, Zap, Moon, Heart, Activity, ChevronRight, Info, Database, Cpu, CalendarClock, Settings, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
@@ -155,6 +155,23 @@ const SEVERITY_CONFIG = {
 
 type Filter = 'all' | 'critical' | 'warning' | 'ok' | 'nodata' | 'notraining'
 
+// Cartões-resumo: título, o que o número significa e cor de cada grupo
+const SUMMARY_CARDS: {
+  key: Exclude<Filter, 'all'>
+  label: string
+  desc: string
+  color: string
+  bg: string
+  border: string
+  icon: typeof AlertTriangle
+}[] = [
+  { key: 'critical',   label: 'Críticos',       desc: 'Recuperação crítica — não devem treinar hoje',                color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', icon: AlertTriangle },
+  { key: 'warning',    label: 'Atenção',        desc: 'Recuperação limitada ou sem treino — reduzir a carga',        color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', icon: AlertTriangle },
+  { key: 'ok',         label: 'OK',             desc: 'Recuperação em dia — treino liberado',                        color: '#00d084', bg: '#00d0840f', border: '#00d08438', icon: CheckCircle },
+  { key: 'notraining', label: 'Sem treino 48h', desc: 'Nenhum treino registrado nas últimas 48 horas',               color: '#8b5cf6', bg: '#8b5cf60f', border: '#8b5cf638', icon: Dumbbell },
+  { key: 'nodata',     label: 'Sem dados',      desc: 'Dispositivo sem sincronizar há mais de 48 horas',             color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', icon: Clock },
+]
+
 function AlertCard({ alert, onWhatsApp }: { alert: AthleteAlert; onWhatsApp: () => void }) {
   const cfg = SEVERITY_CONFIG[alert.severity]
   const a = alert.athlete
@@ -280,6 +297,13 @@ export default function AlertsPage() {
   const [coachPhone, setCoachPhone] = useState<string | null>(null)
   const [coachName, setCoachName] = useState<string | null>(null)
   const [updatedAt, setUpdatedAt] = useState<Date | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+
+  // tocar num cartão-resumo filtra a lista e rola até ela
+  function selectFilter(f: Filter) {
+    setFilter(f)
+    setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60)
+  }
 
   const load = async (silent = false) => {
     if (!silent) setLoading(true)
@@ -387,26 +411,28 @@ export default function AlertsPage() {
 
         {/* Summary banner */}
         {!loading && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {[
-              { key: 'critical',   label: 'Críticos', count: counts.critical, color: '#e8001c', bg: '#e8001c0f', border: '#e8001c38', icon: AlertTriangle },
-              { key: 'warning',    label: 'Atenção',  count: counts.warning,  color: '#ffa800', bg: '#ffa8000f', border: '#ffa80038', icon: AlertTriangle },
-              { key: 'ok',         label: 'OK',        count: counts.ok,       color: '#00d084', bg: '#00d0840f', border: '#00d08438', icon: CheckCircle },
-              { key: 'notraining', label: 'Sem treino 48h', count: counts.notraining, color: '#8b5cf6', bg: '#8b5cf60f', border: '#8b5cf638', icon: Dumbbell },
-              { key: 'nodata',     label: 'Sem dados', count: counts.nodata,   color: 'var(--muted-foreground)', bg: 'var(--secondary)', border: 'var(--border)', icon: Clock },
-            ].map(({ key, label, count, color, bg, border, icon: Icon }) => (
-              <button key={key}
-                onClick={() => setFilter(filter === key as Filter ? 'all' : key as Filter)}
-                className="rounded-xl p-4 text-left transition-all hover:scale-[1.02]"
-                style={{ background: bg, border: `1px solid ${filter === key ? color : border}` }}>
-                <div className="flex items-center justify-between mb-2">
-                  <Icon className="w-4 h-4" style={{ color }} />
-                  {filter === key && <div className="w-1.5 h-1.5 rounded-full" style={{ background: color }} />}
-                </div>
-                <p className="text-2xl font-black" style={{ color }}>{count}</p>
-                <p className="text-[10px] font-semibold text-muted-foreground mt-0.5">{label}</p>
-              </button>
-            ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+            {SUMMARY_CARDS.map(({ key, label, desc, color, bg, border, icon: Icon }) => {
+              const count = counts[key]
+              const active = filter === key
+              return (
+                <button key={key}
+                  onClick={() => selectFilter(active ? 'all' : key)}
+                  className="rounded-xl p-4 text-left transition-all hover:scale-[1.02]"
+                  style={{ background: bg, border: `1px solid ${active ? color : border}` }}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <Icon className="w-4 h-4 flex-shrink-0" style={{ color }} />
+                    <p className="text-[11px] font-black uppercase tracking-wider" style={{ color }}>{label}</p>
+                    {active && <div className="w-1.5 h-1.5 rounded-full ml-auto" style={{ background: color }} />}
+                  </div>
+                  <p className="text-3xl font-black" style={{ color }}>{count}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">{desc}</p>
+                  <p className="flex items-center gap-0.5 text-[10px] font-bold mt-2" style={{ color }}>
+                    {active ? 'Mostrando abaixo — toque p/ limpar' : 'Toque para ver a lista'} <ChevronRight className="w-3 h-3" />
+                  </p>
+                </button>
+              )
+            })}
           </div>
         )}
 
@@ -539,29 +565,61 @@ export default function AlertsPage() {
         </details>
 
         {/* Alert cards */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {[1,2,3,4].map(i => (
-              <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: 'var(--card)', border: '1px solid var(--border)' }} />
-            ))}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <CheckCircle className="w-12 h-12 text-[#00d084] mb-3 opacity-50" />
-            <p className="text-sm font-semibold text-foreground">Nenhum alerta nessa categoria</p>
-            <p className="text-xs text-muted-foreground mt-1">Todos os atletas estão dentro dos parâmetros</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {filtered.map(alert => (
-              <AlertCard
-                key={alert.athlete.id}
-                alert={alert}
-                onWhatsApp={() => sendWhatsApp(alert)}
-              />
-            ))}
-          </div>
-        )}
+        <div ref={listRef} className="scroll-mt-4">
+          {/* Cabeçalho da lista: qual grupo está sendo mostrado */}
+          {!loading && filter !== 'all' && (() => {
+            const card = SUMMARY_CARDS.find(c => c.key === filter)!
+            const Icon = card.icon
+            return (
+              <div className="flex items-center justify-between gap-3 mb-3 px-4 py-3 rounded-xl"
+                style={{ background: card.bg, border: `1px solid ${card.border}` }}>
+                <div className="flex items-center gap-2 min-w-0">
+                  <Icon className="w-4 h-4 flex-shrink-0" style={{ color: card.color }} />
+                  <p className="text-xs font-black uppercase tracking-wider truncate" style={{ color: card.color }}>
+                    {card.label} — {filtered.length} atleta{filtered.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <button onClick={() => setFilter('all')}
+                  className="text-[11px] font-bold flex-shrink-0 px-3 py-1.5 rounded-lg"
+                  style={{ background: 'var(--secondary)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
+                  Mostrar todos
+                </button>
+              </div>
+            )
+          })()}
+
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="h-48 rounded-xl animate-pulse" style={{ background: 'var(--card)', border: '1px solid var(--border)' }} />
+              ))}
+            </div>
+          ) : alerts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Info className="w-12 h-12 text-muted-foreground mb-3 opacity-50" />
+              <p className="text-sm font-semibold text-foreground">Nenhum atleta encontrado</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                Verifique se você está logado na conta de treinador que cadastrou os atletas, e toque em Atualizar.
+              </p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <CheckCircle className="w-12 h-12 text-[#00d084] mb-3 opacity-50" />
+              <p className="text-sm font-semibold text-foreground">Nenhum alerta nessa categoria</p>
+              <p className="text-xs text-muted-foreground mt-1">Todos os atletas estão dentro dos parâmetros</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filtered.map(alert => (
+                <AlertCard
+                  key={alert.athlete.id}
+                  alert={alert}
+                  onWhatsApp={() => sendWhatsApp(alert)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
       </div>
     </div>

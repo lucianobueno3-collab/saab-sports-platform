@@ -176,15 +176,18 @@ export type AthleteAlertRow = {
 
 export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
   const sb = createClient()
-  const { data: athletes } = await sb
+  // IMPORTANTE: a view v_athlete_summary NÃO expõe a coluna phone — pedir
+  // phone aqui fazia a consulta inteira falhar e a Central de Alertas zerar.
+  const { data: athletes, error: athletesError } = await sb
     .from('v_athlete_summary')
-    .select('id, full_name, primary_sport, phone, ctl, atl, tsb')
+    .select('id, full_name, primary_sport, ctl, atl, tsb')
     .order('full_name')
+  if (athletesError) console.error('[queries]', athletesError.message)
   if (!athletes?.length) return []
 
   const since = new Date(); since.setDate(since.getDate() - 7)
   const activitySince = new Date(); activitySince.setDate(activitySince.getDate() - 30)
-  const [{ data: metrics }, { data: recentActivities }] = await Promise.all([
+  const [{ data: metrics }, { data: recentActivities }, { data: phones }] = await Promise.all([
     sb.from('daily_metrics')
       .select('athlete_id, date, hrv_ms, body_battery, sleep_hours, rem_pct, resting_hr, stress_avg')
       .in('athlete_id', athletes.map(a => a.id))
@@ -195,19 +198,24 @@ export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
       .in('athlete_id', athletes.map(a => a.id))
       .gte('started_at', activitySince.toISOString())
       .order('started_at', { ascending: false }),
+    // phone vem direto da tabela athletes
+    sb.from('athletes')
+      .select('id, phone')
+      .in('id', athletes.map(a => a.id)),
   ])
 
   const lastActivityByAthlete = new Map<string, string>()
   for (const act of recentActivities ?? []) {
     if (!lastActivityByAthlete.has(act.athlete_id)) lastActivityByAthlete.set(act.athlete_id, act.started_at)
   }
+  const phoneById = new Map((phones ?? []).map(p => [p.id, p.phone]))
 
   return athletes.map(a => {
     const rows = (metrics ?? []).filter(m => m.athlete_id === a.id).sort((x, y) => y.date.localeCompare(x.date))
     const latest = rows[0] ?? null
     return {
       id: a.id, full_name: a.full_name, primary_sport: a.primary_sport,
-      phone: a.phone ?? null, ctl: a.ctl ?? null, atl: a.atl ?? null, tsb: a.tsb ?? null,
+      phone: phoneById.get(a.id) ?? null, ctl: a.ctl ?? null, atl: a.atl ?? null, tsb: a.tsb ?? null,
       latest_date: latest?.date ?? null,
       hrv_ms: latest?.hrv_ms ?? null, body_battery: latest?.body_battery ?? null,
       sleep_hours: latest?.sleep_hours ?? null, rem_pct: latest?.rem_pct ?? null,
