@@ -93,8 +93,28 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-7">
+        {/* Seletor de papel — sempre visível */}
+        <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-5">
+          <button
+            type="button"
+            onClick={() => { setMode('login'); setError(null); setMessage(null) }}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode !== 'athlete' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}
+          >
+            Sou treinador
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('athlete'); setError(null); setMessage(null) }}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode === 'athlete' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}
+          >
+            Sou atleta
+          </button>
+        </div>
+
         <h2 className="text-lg font-bold text-foreground mb-1">
-          {mode === 'login' ? 'Entrar' : mode === 'athlete' ? 'Sou atleta' : 'Criar conta'}
+          {mode === 'login' ? 'Entrar' : mode === 'athlete' ? 'Criar acesso de atleta' : 'Criar conta'}
         </h2>
         <p className="text-xs text-muted-foreground mb-6">
           {mode === 'login' ? 'Acesse sua plataforma de treinamento'
@@ -172,21 +192,28 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div className="mt-5 space-y-2 text-center">
-          <p className="text-xs text-muted-foreground">
-            {mode === 'login' ? 'É treinador e ainda não tem conta?' : 'Já tem conta?'}{' '}
-            <button
-              onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); setMessage(null) }}
-              className="text-primary hover:underline font-medium"
-            >
-              {mode === 'login' ? 'Criar conta de treinador' : 'Fazer login'}
-            </button>
-          </p>
-          {mode !== 'athlete' && (
+        <div className="mt-5 text-center">
+          {mode === 'login' && (
             <p className="text-xs text-muted-foreground">
-              É atleta?{' '}
-              <button onClick={() => { setMode('athlete'); setError(null); setMessage(null) }} className="text-primary hover:underline font-medium">
-                Criar acesso com código
+              É treinador e ainda não tem conta?{' '}
+              <button onClick={() => { setMode('register'); setError(null); setMessage(null) }} className="text-primary hover:underline font-medium">
+                Criar conta de treinador
+              </button>
+            </p>
+          )}
+          {mode === 'register' && (
+            <p className="text-xs text-muted-foreground">
+              Já tem conta?{' '}
+              <button onClick={() => { setMode('login'); setError(null); setMessage(null) }} className="text-primary hover:underline font-medium">
+                Fazer login
+              </button>
+            </p>
+          )}
+          {mode === 'athlete' && (
+            <p className="text-xs text-muted-foreground">
+              Já criou seu acesso?{' '}
+              <button onClick={() => { setMode('login'); setError(null); setMessage(null) }} className="text-primary hover:underline font-medium">
+                Fazer login
               </button>
             </p>
           )}
