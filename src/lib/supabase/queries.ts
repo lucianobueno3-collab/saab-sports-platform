@@ -758,6 +758,25 @@ export async function setCoachRole(coachId: string, role: 'coach' | 'admin'): Pr
   await sb.from('profiles').update({ role }).eq('id', coachId)
 }
 
+/** Vínculo treinador ⇄ atleta (admin — migração 019). */
+export type AthleteLinkRow = { id: string; full_name: string; coach_id: string; active: boolean }
+
+/** Todos os atletas com seu treinador atual (admin vê todos via RLS da 019). */
+export async function getAthletesForAdmin(): Promise<AthleteLinkRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').select('id, full_name, coach_id, active').order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as AthleteLinkRow[]
+}
+
+/** Reatribui um atleta a outro treinador (admin). */
+export async function updateAthleteCoach(athleteId: string, coachId: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athletes').update({ coach_id: coachId }).eq('id', athleteId)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
 /** Admin edita o nome de um treinador/admin (RLS: admin atualiza qualquer profile). */
 export async function updateCoachName(coachId: string, fullName: string): Promise<boolean> {
   const sb = createClient()
