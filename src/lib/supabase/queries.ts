@@ -165,6 +165,48 @@ export async function deletePlannedWorkout(id: string): Promise<boolean> {
   return true
 }
 
+/** Insere vários treinos programados de uma vez (ao aplicar um plano). */
+export async function bulkCreatePlannedWorkouts(rows: PlannedWorkoutInput[]): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (rows.length === 0) return { ok: true, count: 0 }
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const payload = rows.map(r => ({ ...r, created_by: user?.id ?? null }))
+  const { data, error } = await sb.from('planned_workouts').insert(payload).select('id')
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: data?.length ?? rows.length }
+}
+
+// ─── Biblioteca de treinos do treinador (migração 021) ──────────────────────
+
+export type WorkoutLibraryRow = {
+  id: string; sport: string; title: string; description: string | null
+  duration_min: number | null; tss: number | null
+}
+
+export async function getWorkoutLibrary(): Promise<WorkoutLibraryRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_library')
+    .select('id, sport, title, description, duration_min, tss').order('created_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as WorkoutLibraryRow[]
+}
+
+export async function createLibraryWorkout(w: Omit<WorkoutLibraryRow, 'id'>): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return false
+  const { error } = await sb.from('workout_library').insert({ ...w, coach_id: user.id })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function deleteLibraryWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('workout_library').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
 /** Atividades realizadas num intervalo de datas (para o calendário: planejado x realizado). */
 export async function getActivitiesRange(athleteId: string, fromISO: string, toISO: string): Promise<ActivityRow[]> {
   const sb = createClient()
