@@ -180,16 +180,25 @@ export async function bulkCreatePlannedWorkouts(rows: PlannedWorkoutInput[]): Pr
 
 // ─── Biblioteca de treinos do treinador (migração 021) ──────────────────────
 
+export type LibExercise = { name: string; sets: string; reps: string; load: string }
 export type WorkoutLibraryRow = {
   id: string; sport: string; title: string; description: string | null
   duration_min: number | null; tss: number | null
+  structure?: import('@/lib/workout-structure').WorkoutStructure | null
+  exercises?: LibExercise[] | null
 }
 
 export async function getWorkoutLibrary(): Promise<WorkoutLibraryRow[]> {
   const sb = createClient()
   const { data, error } = await sb.from('workout_library')
-    .select('id, sport, title, description, duration_min, tss').order('created_at', { ascending: false })
-  if (error) { console.error('[queries]', error.message); return [] }
+    .select('id, sport, title, description, duration_min, tss, structure, exercises').order('created_at', { ascending: false })
+  if (error) {
+    // banco sem a migração 023 (structure/exercises): repete sem essas colunas
+    console.error('[queries]', error.message)
+    const retry = await sb.from('workout_library').select('id, sport, title, description, duration_min, tss').order('created_at', { ascending: false })
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []) as WorkoutLibraryRow[]
+  }
   return (data ?? []) as WorkoutLibraryRow[]
 }
 
@@ -198,6 +207,13 @@ export async function createLibraryWorkout(w: Omit<WorkoutLibraryRow, 'id'>): Pr
   const { data: { user } } = await sb.auth.getUser()
   if (!user) return false
   const { error } = await sb.from('workout_library').insert({ ...w, coach_id: user.id })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function updateLibraryWorkout(id: string, patch: Partial<Omit<WorkoutLibraryRow, 'id'>>): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('workout_library').update(patch).eq('id', id)
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }

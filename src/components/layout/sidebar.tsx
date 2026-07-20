@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell
 } from 'lucide-react'
 import { getAthletesForAlerts, getMyRole } from '@/lib/supabase/queries'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
@@ -17,6 +17,7 @@ import { useAutoRefresh } from '@/lib/use-auto-refresh'
 const navItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/athletes', label: 'Alunos', icon: Users },
+  { href: '/treinos', label: 'Treinos', icon: Dumbbell },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },

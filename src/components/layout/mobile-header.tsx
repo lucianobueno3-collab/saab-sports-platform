@@ -3,7 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Menu, Settings, Heart, Shield, LogOut, X } from 'lucide-react'
+import { Menu, Settings, Heart, Shield, LogOut, X, Dumbbell } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
 import { getMyRole } from '@/lib/supabase/queries'
@@ -25,6 +25,7 @@ export function MobileHeader() {
   }
 
   const items = [
+    { href: '/treinos', label: 'Treinos', icon: Dumbbell },
     { href: '/recovery', label: 'Recuperação', icon: Heart },
     { href: '/settings', label: 'Configurações', icon: Settings },
     ...(isAdmin ? [{ href: '/admin', label: 'Administração', icon: Shield }] : []),
