@@ -758,6 +758,46 @@ export async function setCoachRole(coachId: string, role: 'coach' | 'admin'): Pr
   await sb.from('profiles').update({ role }).eq('id', coachId)
 }
 
+/** Admin edita o nome de um treinador/admin (RLS: admin atualiza qualquer profile). */
+export async function updateCoachName(coachId: string, fullName: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('profiles').update({ full_name: fullName }).eq('id', coachId)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Redefine a senha de um usuário (via Netlify Function, service role). */
+export async function adminResetPassword(userId: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ user_id: userId, password }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao redefinir senha' }
+  }
+}
+
+/** Sobe uma foto de perfil para o bucket avatars e devolve a URL pública. */
+export async function uploadAvatar(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${userId}/avatar-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
 export async function getDashboardSummary() {
   const sb = createClient()
   const { data: athletes } = await sb
