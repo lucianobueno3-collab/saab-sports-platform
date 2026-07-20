@@ -7,6 +7,8 @@ import {
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
+import { StructureBar } from '@/components/athlete/structured-builder'
+import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays } from 'lucide-react'
 
@@ -253,7 +255,12 @@ function UpcomingWorkouts({ workouts, onChanged }: { workouts: PlannedWorkoutRow
               <p className="text-[11px] text-muted-foreground mt-1">
                 {info.label}{w.planned_duration_min ? ` · ${w.planned_duration_min}min` : ''}{w.planned_tss ? ` · ${w.planned_tss} TSS` : ''}
               </p>
-              {w.description && <p className="text-[11px] text-muted-foreground/90 mt-1 whitespace-pre-line">{w.description}</p>}
+              {w.structure && w.structure.length > 0 ? (
+                <div className="mt-1.5">
+                  <StructureBar structure={w.structure} height={10} />
+                  <p className="text-[11px] text-muted-foreground/90 mt-1">{structureSummary(w.structure)}</p>
+                </div>
+              ) : w.description && <p className="text-[11px] text-muted-foreground/90 mt-1 whitespace-pre-line">{w.description}</p>}
             </div>
           )
         })}

@@ -126,13 +126,14 @@ export type PlannedWorkoutRow = {
   planned_duration_min: number | null
   planned_tss: number | null
   completed: boolean
+  structure: import('@/lib/workout-structure').WorkoutStructure | null
 }
 
 /** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
 export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
   const sb = createClient()
   const { data, error } = await sb.from('planned_workouts')
-    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed')
+    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
     .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
   if (error) { console.error('[queries]', error.message); return [] }
   return (data ?? []) as PlannedWorkoutRow[]
@@ -141,6 +142,7 @@ export async function getPlannedWorkouts(athleteId: string, from: string, to: st
 export type PlannedWorkoutInput = {
   athlete_id: string; date: string; sport: string; title: string
   description?: string | null; planned_duration_min?: number | null; planned_tss?: number | null
+  structure?: import('@/lib/workout-structure').WorkoutStructure | null
 }
 
 export async function createPlannedWorkout(input: PlannedWorkoutInput): Promise<boolean> {
@@ -787,7 +789,7 @@ export async function getAthleteSelf(athleteId: string) {
     sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
     sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
     sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
-    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
   ])
   return {
     summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
