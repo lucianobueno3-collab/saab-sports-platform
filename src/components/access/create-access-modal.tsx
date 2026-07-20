@@ -14,9 +14,10 @@ function genPassword() {
   return `${cap(pick(a, 4))}${pick(n, 3)}`
 }
 
-export function CreateAccessModal({ variant, canCreateStaff, onClose, onSaved }: {
+export function CreateAccessModal({ variant, canCreateStaff, existingOnly = false, onClose, onSaved }: {
   variant: Variant
   canCreateStaff: boolean          // true só para admin (habilita papel treinador/admin)
+  existingOnly?: boolean           // atleta: só vincular a quem já existe (some a aba "novo")
   onClose: () => void
   onSaved: () => void
 }) {
@@ -41,9 +42,9 @@ export function CreateAccessModal({ variant, canCreateStaff, onClose, onSaved }:
   useEffect(() => {
     if (isAthlete) getAthletesWithoutAccess().then(list => {
       setExisting(list)
-      if (list.length === 0) setAthleteMode('new')
+      if (list.length === 0 && !existingOnly) setAthleteMode('new')
     })
-  }, [isAthlete])
+  }, [isAthlete, existingOnly])
 
   // Prefill do e-mail ao escolher um atleta existente
   const selected = useMemo(() => existing.find(a => a.id === athleteId), [existing, athleteId])
@@ -118,14 +119,16 @@ export function CreateAccessModal({ variant, canCreateStaff, onClose, onSaved }:
             {/* Atleta: novo x existente */}
             {isAthlete && (
               <div>
-                <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-3">
-                  <button type="button" onClick={() => setAthleteMode('existing')} disabled={existing.length === 0}
-                    className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
-                    style={athleteMode === 'existing' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Atleta existente</button>
-                  <button type="button" onClick={() => setAthleteMode('new')}
-                    className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors"
-                    style={athleteMode === 'new' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Atleta novo</button>
-                </div>
+                {!existingOnly && (
+                  <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-3">
+                    <button type="button" onClick={() => setAthleteMode('existing')} disabled={existing.length === 0}
+                      className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors disabled:opacity-40"
+                      style={athleteMode === 'existing' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Atleta existente</button>
+                    <button type="button" onClick={() => setAthleteMode('new')}
+                      className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors"
+                      style={athleteMode === 'new' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Atleta novo</button>
+                  </div>
+                )}
 
                 {athleteMode === 'existing' ? (
                   <div>
