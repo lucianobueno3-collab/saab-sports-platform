@@ -407,7 +407,17 @@ export async function getStrengthPRs(athleteId: string): Promise<StrengthPRRow[]
   return (data ?? []) as StrengthPRRow[]
 }
 
-export type StrengthLogExercise = { name: string; done: boolean; load?: string; reps?: string; notes?: string }
+/** Uma série executada: repetições feitas e carga usada (strings p/ aceitar "45s", "corporal", etc.) */
+export type StrengthSetLog = { reps: string; load: string; done: boolean }
+export type StrengthLogExercise = {
+  name: string
+  muscle?: string
+  done: boolean          // true se ao menos uma série foi concluída (compat. c/ visão do coach)
+  load?: string          // resumo legível das séries válidas, ex.: "12×40 · 10×42" (compat.)
+  reps?: string          // prescrição de reps do programa
+  sets?: StrengthSetLog[] // detalhe série-a-série (executor dinâmico)
+  notes?: string
+}
 export type StrengthLogRow = {
   id: string
   day_label: string | null

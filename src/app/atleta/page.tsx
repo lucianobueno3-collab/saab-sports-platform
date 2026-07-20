@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getMyAthleteId, getAthleteSelf, submitCheckinSelf, logStrengthSelf,
-  type CheckinRow, type StrengthLogRow, type StrengthLogExercise, type PortalStrengthProgram,
+  getMyAthleteId, getAthleteSelf, submitCheckinSelf,
+  type CheckinRow,
 } from '@/lib/supabase/queries'
-import { Activity, Loader2, CheckCircle2, Dumbbell, ClipboardCheck, LogOut } from 'lucide-react'
+import { StrengthPlayer } from '@/components/athlete/strength-player'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -157,7 +158,7 @@ export default function AtletaPage() {
 
       {/* Treino de força */}
       {athleteId && data.program && (
-        <StrengthLogger athleteId={athleteId} program={data.program} logs={data.strengthLogs} onLogged={reload} />
+        <StrengthPlayer athleteId={athleteId} program={data.program} logs={data.strengthLogs} onLogged={reload} />
       )}
 
       {/* Treinos recentes */}
@@ -200,98 +201,6 @@ export default function AtletaPage() {
       )}
 
       <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
-    </div>
-  )
-}
-
-function StrengthLogger({ athleteId, program, logs, onLogged }: {
-  athleteId: string; program: PortalStrengthProgram; logs: StrengthLogRow[]; onLogged: () => void
-}) {
-  const [dayIdx, setDayIdx] = useState(0)
-  const [done, setDone] = useState<Record<string, boolean>>({})
-  const [loads, setLoads] = useState<Record<string, string>>({})
-  const [rpe, setRpe] = useState(7)
-  const [notes, setNotes] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  const day = program.structure[dayIdx]
-  if (!day) return null
-
-  async function save() {
-    setSaving(true)
-    const completed: StrengthLogExercise[] = day.exercises.map(ex => ({ name: ex.name, done: !!done[ex.name], load: loads[ex.name] || undefined }))
-    const ok = await logStrengthSelf(athleteId, { program_id: program.id, day_label: day.label, rpe, completed, notes: notes || null })
-    setSaving(false)
-    if (ok) { setSaved(true); setDone({}); setLoads({}); setNotes(''); onLogged(); setTimeout(() => setSaved(false), 2500) }
-  }
-
-  const doneCount = day.exercises.filter(ex => done[ex.name]).length
-
-  return (
-    <div className="bg-card border border-border rounded-2xl p-5">
-      <div className="flex items-center gap-2 mb-1"><Dumbbell className="w-4 h-4 text-primary" /><h2 className="text-sm font-bold text-foreground">Treino de força</h2></div>
-      <p className="text-[11px] text-muted-foreground mb-3">{program.name}</p>
-
-      {program.structure.length > 1 && (
-        <div className="flex gap-1.5 mb-3 overflow-x-auto pb-1">
-          {program.structure.map((d, i) => (
-            <button key={i} onClick={() => { setDayIdx(i); setDone({}); setLoads({}) }}
-              className="px-3 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap flex-shrink-0"
-              style={i === dayIdx ? { background: '#e8001c', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>{d.label}</button>
-          ))}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        {day.exercises.map((ex, i) => {
-          const isDone = !!done[ex.name]
-          return (
-            <div key={i} className="rounded-xl p-3" style={{ background: 'var(--panel)', border: `1px solid ${isDone ? '#00d08455' : 'var(--panel-border)'}` }}>
-              <div className="flex items-start gap-3">
-                <button onClick={() => setDone(s => ({ ...s, [ex.name]: !s[ex.name] }))}
-                  className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center"
-                  style={{ background: isDone ? '#00d084' : 'transparent', border: `1.5px solid ${isDone ? '#00d084' : 'var(--border)'}` }}>
-                  {isDone && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground">{ex.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{ex.sets} × {ex.reps}{ex.load ? ` · ${ex.load}` : ''}{ex.rest_s ? ` · ${ex.rest_s}s desc.` : ''}</p>
-                </div>
-                <input value={loads[ex.name] ?? ''} onChange={e => setLoads(s => ({ ...s, [ex.name]: e.target.value }))} placeholder="carga"
-                  className="w-16 px-2 py-1 text-xs rounded-lg bg-background border border-border text-foreground text-right outline-none focus:border-primary flex-shrink-0" />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <div className="mt-4"><ScaleInput label="Esforço do treino (RPE)" value={rpe} onChange={setRpe} hint="0 = muito leve · 10 = máximo" invert /></div>
-      <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Observações (opcional)"
-        className="w-full mt-3 px-3 py-2 text-sm rounded-lg bg-background border border-border text-foreground outline-none focus:border-primary resize-none" />
-      <button onClick={save} disabled={saving || doneCount === 0}
-        className="w-full mt-3 py-3 text-sm font-bold rounded-xl bg-primary text-white disabled:opacity-50 flex items-center justify-center gap-2">
-        {saved ? <><CheckCircle2 className="w-4 h-4" /> Treino registrado!</> : saving ? 'Salvando...' : <><ClipboardCheck className="w-4 h-4" /> Registrar treino ({doneCount}/{day.exercises.length})</>}
-      </button>
-
-      {logs.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-border/40">
-          <p className="text-[11px] font-bold text-muted-foreground mb-2">Últimos treinos de força</p>
-          <div className="space-y-1.5">
-            {logs.slice(0, 5).map(l => {
-              const doneN = l.completed.filter(e => e.done).length
-              return (
-                <div key={l.id} className="flex items-center gap-2 text-xs">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" />
-                  <span className="text-muted-foreground w-16 flex-shrink-0">{fmtDate(l.performed_at)}</span>
-                  <span className="text-foreground flex-1 min-w-0 truncate">{l.day_label ?? 'Treino'}</span>
-                  <span className="text-muted-foreground flex-shrink-0">{doneN} ex.{l.rpe != null ? ` · RPE ${l.rpe}` : ''}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
     </div>
   )
 }
