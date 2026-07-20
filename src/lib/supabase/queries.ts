@@ -648,8 +648,12 @@ export async function adminCreateUser(input: AdminCreateUserInput): Promise<{ ok
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify(input),
     })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data.error ?? 'Falha ao criar cadastro' }
+    const text = await res.text()
+    let data: { error?: string; userId?: string; athleteId?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON (ex.: erro 500 do runtime) */ }
+    if (!res.ok) {
+      return { ok: false, error: data.error ?? (text ? `Erro ${res.status}: ${text.slice(0, 140)}` : `Erro ${res.status}`) }
+    }
     return { ok: true, userId: data.userId, athleteId: data.athleteId }
   } catch {
     return { ok: false, error: 'Falha de rede ao criar cadastro' }
