@@ -69,9 +69,10 @@ export default function AthletesPage() {
             <button
               onClick={() => setShowAccess(true)}
               className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary transition-colors"
+              title="Dar acesso a um aluno que já existe (sem login)"
             >
               <KeyRound className="w-4 h-4" />
-              Gerar acesso
+              Acesso p/ aluno existente
             </button>
             <button
               onClick={() => setShowAdd(true)}
@@ -155,7 +156,7 @@ export default function AthletesPage() {
       </div>
 
       {showAdd && <AddAthleteModal onClose={() => setShowAdd(false)} onSaved={load} />}
-      {showAccess && <CreateAccessModal variant="athlete" canCreateStaff={false} onClose={() => setShowAccess(false)} onSaved={load} />}
+      {showAccess && <CreateAccessModal variant="athlete" canCreateStaff={false} existingOnly onClose={() => setShowAccess(false)} onSaved={load} />}
     </div>
   )
 }
