@@ -10,6 +10,8 @@ import {
 import {
   PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, type PlanDef,
 } from '@/lib/training-plans'
+import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
+import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
@@ -141,7 +143,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                         {(p.planned_duration_min || p.planned_tss) && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">{[fmtDur(p.planned_duration_min), p.planned_tss ? `${p.planned_tss} TSS` : null].filter(Boolean).join(' · ')}</p>
                         )}
-                        {p.description && <p className="text-[10px] text-muted-foreground/80 mt-0.5 line-clamp-2">{p.description}</p>}
+                        {p.structure && p.structure.length > 0 && <div className="mt-1"><StructureBar structure={p.structure} height={6} /></div>}
+                        {p.description && !(p.structure && p.structure.length) && <p className="text-[10px] text-muted-foreground/80 mt-0.5 line-clamp-2">{p.description}</p>}
                       </button>
                     )
                   })}
@@ -197,6 +200,10 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
   const [desc, setDesc] = useState(edit?.description ?? '')
   const [saveToLib, setSaveToLib] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [structured, setStructured] = useState<boolean>(!!edit?.structure && edit.structure.length > 0)
+  const [structure, setStructure] = useState<WorkoutStructure>(edit?.structure ?? [])
+
+  const est = structured ? estimateStructure(structure) : null
 
   function applyFromLibrary(id: string) {
     const w = library.find(l => l.id === id); if (!w) return
@@ -206,15 +213,20 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
+    const useStruct = structured && structure.length > 0
+    const finalDur = useStruct ? est!.min : (dur ? parseInt(dur) : null)
+    const finalTss = useStruct ? est!.tss : (tss ? parseInt(tss) : null)
+    const finalDesc = desc.trim() || (useStruct ? structureSummary(structure) : '') || null
     const payload = {
       athlete_id: athleteId, date, sport, title: title.trim(),
-      description: desc.trim() || null,
-      planned_duration_min: dur ? parseInt(dur) : null,
-      planned_tss: tss ? parseInt(tss) : null,
+      description: finalDesc,
+      planned_duration_min: finalDur,
+      planned_tss: finalTss,
+      structure: useStruct ? structure : null,
     }
     const ok = edit ? await updatePlannedWorkout(edit.id, payload) : await createPlannedWorkout(payload)
     if (ok && saveToLib && !edit) {
-      await createLibraryWorkout({ sport, title: title.trim(), description: desc.trim() || null, duration_min: dur ? parseInt(dur) : null, tss: tss ? parseInt(tss) : null })
+      await createLibraryWorkout({ sport, title: title.trim(), description: finalDesc, duration_min: finalDur, tss: finalTss })
     }
     setSaving(false)
     if (ok) onSaved()
@@ -259,19 +271,32 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
             <label className="block text-xs font-medium text-foreground mb-1.5">Título *</label>
             <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="ex: Intervalado 4x1km Z4" className={cls} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label>
-              <input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder="60" className={cls} />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">TSS alvo</label>
-              <input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="70" className={cls} />
-            </div>
+          {/* Toggle: simples x estruturado */}
+          <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+            <label className="text-xs font-semibold text-foreground">Treino estruturado (passo a passo)</label>
+            <button type="button" onClick={() => setStructured(v => !v)} aria-label="Alternar estruturado"
+              className="relative w-10 h-5 rounded-full transition-colors" style={{ background: structured ? '#7c3aed' : 'var(--border)' }}>
+              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: structured ? '22px' : '2px' }} />
+            </button>
           </div>
+
+          {structured ? (
+            <StructuredBuilder value={structure} onChange={setStructure} />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label>
+                <input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder="60" className={cls} />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">TSS alvo</label>
+                <input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="70" className={cls} />
+              </div>
+            </div>
+          )}
           <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">Descrição / estrutura</label>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="ex: 15min aquec Z2 · 4x1km Z4 (rec 2min) · 10min solto Z1" className={cls + ' resize-none'} />
+            <label className="block text-xs font-medium text-foreground mb-1.5">{structured ? 'Observações (opcional)' : 'Descrição / estrutura'}</label>
+            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={structured ? 2 : 3} placeholder={structured ? 'notas adicionais…' : 'ex: 15min aquec Z2 · 4x1km Z4 (rec 2min) · 10min solto Z1'} className={cls + ' resize-none'} />
           </div>
 
           {!edit && (
