@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuth } from '@/context/auth-context'
-import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, type CoachRow } from '@/lib/supabase/queries'
+import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
-import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X } from 'lucide-react'
+import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 
 function planLabel(p: string) {
@@ -233,6 +233,8 @@ export default function AdminPage() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<CoachRow | null>(null)
+  const [links, setLinks] = useState<AthleteLinkRow[]>([])
+  const [reassigning, setReassigning] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -240,7 +242,18 @@ export default function AdminPage() {
     if (role !== 'admin') { setNotAdmin(true); setLoading(false); return }
     setIsAdmin(true)
     setCoaches(coachesList)
+    setLinks(await getAthletesForAdmin())
     setLoading(false)
+  }
+
+  async function handleReassign(athleteId: string, coachId: string) {
+    setReassigning(athleteId)
+    const ok = await updateAthleteCoach(athleteId, coachId)
+    if (ok) {
+      setLinks(prev => prev.map(l => l.id === athleteId ? { ...l, coach_id: coachId } : l))
+      getCoaches().then(setCoaches)   // atualiza contagem de atletas por treinador
+    }
+    setReassigning(null)
   }
 
   useEffect(() => { load() }, [])
@@ -341,6 +354,47 @@ export default function AdminPage() {
               />
             ))}
           </div>
+        </div>
+
+        {/* Vínculo treinador ⇄ atleta */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Link2 className="w-4 h-4 text-primary" />
+            <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider">
+              Vínculo treinador ⇄ atleta ({links.length})
+            </p>
+          </div>
+          {links.length === 0 ? (
+            <p className="text-xs text-muted-foreground rounded-xl p-4" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+              Nenhum atleta cadastrado ainda.
+            </p>
+          ) : (
+            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+              {links.map((l, i) => (
+                <div key={l.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: i === 0 ? 'none' : '1px solid var(--panel-border)' }}>
+                  <Users className="w-3.5 h-3.5 text-[#445566] flex-shrink-0" />
+                  <span className="text-sm font-semibold text-foreground flex-1 min-w-0 truncate">
+                    {l.full_name}{!l.active && <span className="text-[10px] text-muted-foreground ml-2">(inativo)</span>}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground hidden sm:inline">Treinador:</span>
+                  <div className="relative flex items-center">
+                    <select
+                      value={l.coach_id}
+                      disabled={reassigning === l.id}
+                      onChange={e => handleReassign(l.id, e.target.value)}
+                      className="text-xs font-semibold text-foreground bg-background border border-border rounded-lg pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50 appearance-none">
+                      {coaches.map(c => (
+                        <option key={c.id} value={c.id}>{c.full_name ?? c.email}{c.role === 'admin' ? ' (admin)' : ''}</option>
+                      ))}
+                    </select>
+                    {reassigning === l.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground absolute right-2 pointer-events-none" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 pointer-events-none" />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
       </div>
