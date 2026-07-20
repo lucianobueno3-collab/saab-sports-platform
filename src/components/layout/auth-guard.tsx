@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/context/auth-context'
 import { getMyAthleteId } from '@/lib/supabase/queries'
+import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -12,6 +13,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) return
     if (!user) { window.location.href = '/login'; return }
+    if (mustChangePassword(user)) { setCheckingRole(false); return }
     // atleta não acessa o painel do treinador — redireciona para a área dele
     getMyAthleteId().then(athleteId => {
       if (athleteId) window.location.href = '/atleta'
@@ -38,6 +40,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null
+
+  // primeiro acesso: troca de senha obrigatória antes de usar o painel
+  if (mustChangePassword(user)) return <ForcePasswordChange />
 
   return <>{children}</>
 }

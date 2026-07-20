@@ -407,7 +407,17 @@ export async function getStrengthPRs(athleteId: string): Promise<StrengthPRRow[]
   return (data ?? []) as StrengthPRRow[]
 }
 
-export type StrengthLogExercise = { name: string; done: boolean; load?: string; reps?: string; notes?: string }
+/** Uma série executada: repetições feitas e carga usada (strings p/ aceitar "45s", "corporal", etc.) */
+export type StrengthSetLog = { reps: string; load: string; done: boolean }
+export type StrengthLogExercise = {
+  name: string
+  muscle?: string
+  done: boolean          // true se ao menos uma série foi concluída (compat. c/ visão do coach)
+  load?: string          // resumo legível das séries válidas, ex.: "12×40 · 10×42" (compat.)
+  reps?: string          // prescrição de reps do programa
+  sets?: StrengthSetLog[] // detalhe série-a-série (executor dinâmico)
+  notes?: string
+}
 export type StrengthLogRow = {
   id: string
   day_label: string | null
@@ -611,6 +621,49 @@ export async function claimAthleteProfile(token: string): Promise<{ ok: boolean;
   const { data, error } = await sb.rpc('claim_athlete_profile', { p_token: token })
   if (error) { console.error('[queries]', error.message); return { ok: false, error: 'falha' } }
   return data as { ok: boolean; error?: string; full_name?: string }
+}
+
+// ─── Cadastro central de acesso (migração 017 + Netlify Function) ───────────
+
+export type AdminCreateUserInput = {
+  role: 'athlete' | 'coach' | 'admin'
+  email: string
+  password: string
+  full_name: string
+  athlete_id?: string          // vincular a atleta existente
+  athlete?: {                  // criar atleta novo junto com o acesso
+    primary_sport?: string; phone?: string; weight_kg?: number
+    ftp_watts?: number; lthr_bpm?: number; vo2max_ml_kg_min?: number; goal?: string
+  }
+}
+
+/** Cria uma conta (atleta/treinador/admin) com senha temporária via Netlify Function. */
+export async function adminCreateUser(input: AdminCreateUserInput): Promise<{ ok: boolean; error?: string; userId?: string; athleteId?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(input),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? 'Falha ao criar cadastro' }
+    return { ok: true, userId: data.userId, athleteId: data.athleteId }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao criar cadastro' }
+  }
+}
+
+/** Atletas do treinador/admin que ainda não têm acesso ao app (sem user_id). */
+export async function getAthletesWithoutAccess(): Promise<{ id: string; full_name: string; email: string | null }[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('id, full_name, email, user_id, active')
+    .is('user_id', null).eq('active', true).order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []).map(a => ({ id: a.id, full_name: a.full_name, email: a.email }))
 }
 
 /** Dados que o atleta logado vê de si mesmo (via RLS de autoacesso) */

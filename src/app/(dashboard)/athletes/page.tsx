@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { StatusBadge } from '@/components/dashboard/status-badge'
-import { Plus, Filter, Loader2 } from 'lucide-react'
+import { Plus, Filter, Loader2, KeyRound } from 'lucide-react'
 import Link from 'next/link'
 import { getAthletes, type AthleteRow } from '@/lib/supabase/queries'
 import { AddAthleteModal } from '@/components/athletes/add-athlete-modal'
+import { CreateAccessModal } from '@/components/access/create-access-modal'
 
 function initials(name: string) {
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
@@ -35,6 +36,7 @@ export default function AthletesPage() {
   const [athletes, setAthletes] = useState<AthleteRow[]>([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [showAccess, setShowAccess] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -63,13 +65,22 @@ export default function AthletesPage() {
               Filtrar
             </button>
           </div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Novo Aluno
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAccess(true)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary transition-colors"
+            >
+              <KeyRound className="w-4 h-4" />
+              Gerar acesso
+            </button>
+            <button
+              onClick={() => setShowAdd(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Novo Aluno
+            </button>
+          </div>
         </div>
 
         <div className="bg-card border border-border rounded-xl overflow-hidden">
@@ -144,6 +155,7 @@ export default function AthletesPage() {
       </div>
 
       {showAdd && <AddAthleteModal onClose={() => setShowAdd(false)} onSaved={load} />}
+      {showAccess && <CreateAccessModal variant="athlete" canCreateStaff={false} onClose={() => setShowAccess(false)} onSaved={load} />}
     </div>
   )
 }
