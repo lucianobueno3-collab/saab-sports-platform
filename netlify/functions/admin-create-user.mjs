@@ -1,4 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
+import ws from 'ws'
+
+// O @supabase/supabase-js exige WebSocket global (nativo só no Node >= 22).
+// Injeta o `ws` como polyfill para funcionar em qualquer runtime do Netlify.
+if (!globalThis.WebSocket) globalThis.WebSocket = ws
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
