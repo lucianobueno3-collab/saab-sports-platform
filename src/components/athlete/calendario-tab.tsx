@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
-  getActivitiesRange, type PlannedWorkoutRow, type ActivityRow,
+  getActivitiesRange, bulkCreatePlannedWorkouts,
+  getWorkoutLibrary, createLibraryWorkout,
+  type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
 } from '@/lib/supabase/queries'
+import {
+  PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, type PlanDef,
+} from '@/lib/training-plans'
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
+  Sparkles, Library, BookmarkPlus,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -34,8 +40,10 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const [planned, setPlanned] = useState<PlannedWorkoutRow[]>([])
   const [done, setDone] = useState<ActivityRow[]>([])
+  const [library, setLibrary] = useState<WorkoutLibraryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ date: string; edit?: PlannedWorkoutRow } | null>(null)
+  const [showPlan, setShowPlan] = useState(false)
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const todayKey = ymd(new Date())
@@ -45,11 +53,12 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
     const from = ymd(weekStart), to = ymd(addDays(weekStart, 6))
     const fromISO = new Date(weekStart).toISOString()
     const toISO = new Date(addDays(weekStart, 7)).toISOString()
-    const [p, a] = await Promise.all([
+    const [p, a, lib] = await Promise.all([
       getPlannedWorkouts(athleteId, from, to),
       getActivitiesRange(athleteId, fromISO, toISO),
+      getWorkoutLibrary(),
     ])
-    setPlanned(p); setDone(a); setLoading(false)
+    setPlanned(p); setDone(a); setLibrary(lib); setLoading(false)
   }, [athleteId, weekStart])
 
   useEffect(() => { load() }, [load])
@@ -89,6 +98,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
         <div className="flex items-center gap-2 text-[11px]">
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#0088ff18', color: '#0088ff' }}>Planejado {plannedTss} TSS</span>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#00d08418', color: '#00d084' }}>Realizado {doneTss.toFixed(0)} TSS</span>
+          <button onClick={() => setShowPlan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90">
+            <Sparkles className="w-3.5 h-3.5" /> Aplicar plano
+          </button>
         </div>
       </div>
 
@@ -158,18 +170,24 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
 
       {modal && (
         <PlannedModal
-          athleteId={athleteId} date={modal.date} edit={modal.edit} defaultSport={defaultSport}
+          athleteId={athleteId} date={modal.date} edit={modal.edit} defaultSport={defaultSport} library={library}
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load() }}
           onDelete={modal.edit ? () => { remove(modal.edit!.id); setModal(null) } : undefined}
         />
       )}
+
+      {showPlan && (
+        <ApplyPlanModal athleteId={athleteId} defaultSport={defaultSport}
+          onClose={() => setShowPlan(false)}
+          onApplied={() => { setShowPlan(false); load() }} />
+      )}
     </div>
   )
 }
 
-function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, onDelete }: {
-  athleteId: string; date: string; edit?: PlannedWorkoutRow; defaultSport: string
+function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, onSaved, onDelete }: {
+  athleteId: string; date: string; edit?: PlannedWorkoutRow; defaultSport: string; library: WorkoutLibraryRow[]
   onClose: () => void; onSaved: () => void; onDelete?: () => void
 }) {
   const [sport, setSport] = useState(edit?.sport ?? defaultSport)
@@ -177,7 +195,14 @@ function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, o
   const [dur, setDur] = useState(edit?.planned_duration_min?.toString() ?? '')
   const [tss, setTss] = useState(edit?.planned_tss?.toString() ?? '')
   const [desc, setDesc] = useState(edit?.description ?? '')
+  const [saveToLib, setSaveToLib] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  function applyFromLibrary(id: string) {
+    const w = library.find(l => l.id === id); if (!w) return
+    setSport(w.sport); setTitle(w.title); setDesc(w.description ?? '')
+    setDur(w.duration_min?.toString() ?? ''); setTss(w.tss?.toString() ?? '')
+  }
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
@@ -188,6 +213,9 @@ function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, o
       planned_tss: tss ? parseInt(tss) : null,
     }
     const ok = edit ? await updatePlannedWorkout(edit.id, payload) : await createPlannedWorkout(payload)
+    if (ok && saveToLib && !edit) {
+      await createLibraryWorkout({ sport, title: title.trim(), description: desc.trim() || null, duration_min: dur ? parseInt(dur) : null, tss: tss ? parseInt(tss) : null })
+    }
     setSaving(false)
     if (ok) onSaved()
   }
@@ -206,6 +234,15 @@ function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, o
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={save} className="p-6 space-y-4">
+          {!edit && library.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-foreground mb-1.5 flex items-center gap-1"><Library className="w-3.5 h-3.5 text-primary" /> Usar da biblioteca</label>
+              <select defaultValue="" onChange={e => { if (e.target.value) applyFromLibrary(e.target.value) }} className={cls}>
+                <option value="">Preencher a partir de um treino salvo…</option>
+                {library.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Modalidade *</label>
             <div className="grid grid-cols-4 gap-1.5">
@@ -237,6 +274,13 @@ function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, o
             <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={3} placeholder="ex: 15min aquec Z2 · 4x1km Z4 (rec 2min) · 10min solto Z1" className={cls + ' resize-none'} />
           </div>
 
+          {!edit && (
+            <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+              <input type="checkbox" checked={saveToLib} onChange={e => setSaveToLib(e.target.checked)} className="accent-primary w-4 h-4" />
+              <BookmarkPlus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar este treino na biblioteca
+            </label>
+          )}
+
           <div className="flex gap-2 pt-1">
             {onDelete && (
               <button type="button" onClick={onDelete} className="p-2.5 rounded-lg border border-border text-red-400 hover:bg-red-400/10" aria-label="Excluir"><Trash2 className="w-4 h-4" /></button>
@@ -247,6 +291,96 @@ function PlannedModal({ athleteId, date, edit, defaultSport, onClose, onSaved, o
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Aplicar um plano de mercado ao calendário ──────────────────────────────
+function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
+  athleteId: string; defaultSport: string; onClose: () => void; onApplied: () => void
+}) {
+  const [filter, setFilter] = useState<string>(['running', 'cycling', 'triathlon'].includes(defaultSport) ? defaultSport : 'all')
+  const [selected, setSelected] = useState<PlanDef | null>(null)
+  const [start, setStart] = useState(ymd(addDays(startOfWeek(new Date()), 7))) // próxima segunda
+  const [applying, setApplying] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const plans = PLAN_LIBRARY.filter(p => filter === 'all' || p.sport === filter)
+
+  async function apply() {
+    if (!selected) return
+    setApplying(true); setError(null)
+    const startDate = new Date(start + 'T12:00:00')
+    const gen = generatePlan(selected)
+    const rows: PlannedWorkoutInput[] = []
+    for (const wk of gen) for (const s of wk.workouts) {
+      const d = addDays(startDate, (wk.week - 1) * 7 + s.day)
+      rows.push({
+        athlete_id: athleteId, date: ymd(d), sport: s.sport, title: s.title,
+        description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
+      })
+    }
+    const res = await bulkCreatePlannedWorkouts(rows)
+    setApplying(false)
+    if (res.ok) onApplied(); else setError(res.error ?? 'Falha ao aplicar o plano')
+  }
+
+  const totals = selected ? planTotals(selected) : null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
+          <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /><h2 className="text-sm font-bold text-foreground">Aplicar plano de treino</h2></div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {/* Filtro por modalidade */}
+          <div className="flex gap-1 p-1 rounded-xl bg-background border border-border">
+            {[['all', 'Todos'], ['running', 'Corrida'], ['cycling', 'Ciclismo'], ['triathlon', 'Triathlon']].map(([k, label]) => (
+              <button key={k} onClick={() => { setFilter(k); setSelected(null) }}
+                className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors"
+                style={filter === k ? { background: '#7c3aed', color: '#fff' } : { color: 'var(--muted-foreground)' }}>{label}</button>
+            ))}
+          </div>
+
+          {/* Lista de planos */}
+          <div className="space-y-2">
+            {plans.map(p => {
+              const t = planTotals(p)
+              const isSel = selected?.key === p.key
+              return (
+                <button key={p.key} onClick={() => setSelected(p)}
+                  className="w-full text-left rounded-xl p-3 transition-colors"
+                  style={{ background: isSel ? '#7c3aed14' : 'var(--panel)', border: `1.5px solid ${isSel ? '#7c3aed' : 'var(--panel-border)'}` }}>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-foreground flex-1">{p.name}</span>
+                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: 'var(--panel-border)', color: '#8b93a7' }}>{p.level}</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1">{p.focus}</p>
+                  <p className="text-[10px] text-muted-foreground/80 mt-1.5">{PLAN_SPORT_LABEL[p.sport]} · {p.weeks} semanas · {t.perWeek}x/sem · ~{t.hours}h · {t.tss} TSS</p>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Aplicar */}
+          {selected && (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+              <p className="text-xs font-bold text-foreground">Aplicar “{selected.name}” a partir de:</p>
+              <input type="date" value={start} onChange={e => setStart(e.target.value)}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+              <p className="text-[11px] text-muted-foreground">Serão criados <b>{totals?.sessions}</b> treinos ao longo de <b>{selected.weeks} semanas</b> no calendário do atleta. Você pode editar cada um depois.</p>
+              {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
+              <button onClick={apply} disabled={applying}
+                className="w-full py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
+                {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}{applying ? 'Aplicando...' : `Aplicar plano (${totals?.sessions} treinos)`}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
