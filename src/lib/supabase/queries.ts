@@ -114,6 +114,68 @@ export async function getAthletePMC(athleteId: string, days = 90): Promise<PMCRo
   return data ?? []
 }
 
+// ─── Treinos programados / calendário (migração 020) ────────────────────────
+
+export type PlannedWorkoutRow = {
+  id: string
+  athlete_id: string
+  date: string
+  sport: string
+  title: string
+  description: string | null
+  planned_duration_min: number | null
+  planned_tss: number | null
+  completed: boolean
+}
+
+/** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
+export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('planned_workouts')
+    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed')
+    .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as PlannedWorkoutRow[]
+}
+
+export type PlannedWorkoutInput = {
+  athlete_id: string; date: string; sport: string; title: string
+  description?: string | null; planned_duration_min?: number | null; planned_tss?: number | null
+}
+
+export async function createPlannedWorkout(input: PlannedWorkoutInput): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const { error } = await sb.from('planned_workouts').insert({ ...input, created_by: user?.id ?? null })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function updatePlannedWorkout(id: string, patch: Partial<PlannedWorkoutInput> & { completed?: boolean }): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function deletePlannedWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Atividades realizadas num intervalo de datas (para o calendário: planejado x realizado). */
+export async function getActivitiesRange(athleteId: string, fromISO: string, toISO: string): Promise<ActivityRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('activities')
+    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+    .eq('athlete_id', athleteId).gte('started_at', fromISO).lte('started_at', toISO)
+    .order('started_at', { ascending: true })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+}
+
 export async function getAthleteActivities(athleteId: string, limit = 10): Promise<ActivityRow[]> {
   const sb = createClient()
   const { data, error } = await sb
@@ -674,13 +736,16 @@ export async function getAthletesWithoutAccess(): Promise<{ id: string; full_nam
 export async function getAthleteSelf(athleteId: string) {
   const sb = createClient()
   const since = new Date(); since.setDate(since.getDate() - 30)
-  const [summary, metrics, activities, checkins, programs, logs] = await Promise.all([
+  const todayISO = new Date().toLocaleDateString('en-CA')
+  const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+  const [summary, metrics, activities, checkins, programs, logs, plans] = await Promise.all([
     sb.from('v_athlete_summary').select('id, full_name, primary_sport, ctl, atl, tsb').eq('id', athleteId).maybeSingle(),
     sb.from('daily_metrics').select('date, hrv_ms, body_battery, sleep_hours, resting_hr').eq('athlete_id', athleteId).order('date', { ascending: false }).limit(1),
     sb.from('activities').select('name, sport, started_at, duration_seconds, distance_meters, tss').eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(5),
     sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
     sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
     sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
+    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
   ])
   return {
     summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
@@ -689,6 +754,7 @@ export async function getAthleteSelf(athleteId: string) {
     checkins: (checkins.data ?? []) as CheckinRow[],
     program: (programs.data?.[0] ?? null) as PortalStrengthProgram | null,
     strengthLogs: (logs.data ?? []) as StrengthLogRow[],
+    plannedWorkouts: (plans.data ?? []) as PlannedWorkoutRow[],
   }
 }
 

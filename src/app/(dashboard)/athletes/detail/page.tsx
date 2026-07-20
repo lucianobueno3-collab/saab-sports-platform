@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays } from 'lucide-react'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
@@ -23,6 +23,7 @@ import { NutricaoTab } from '@/components/athlete/nutricao-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { ForcaTab } from '@/components/athlete/forca-tab'
+import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { ActivityZones } from '@/components/athlete/activity-zones'
 
 function sportLabel(sport: string) {
@@ -56,7 +57,7 @@ function AthleteDetailContent() {
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
-  const [activeTab, setActiveTab] = useState<'performance' | 'saude' | 'forca' | 'nutricao' | 'provas' | 'evolucao'>('performance')
+  const [activeTab, setActiveTab] = useState<'performance' | 'calendario' | 'saude' | 'forca' | 'nutricao' | 'provas' | 'evolucao'>('performance')
   const [portalCopied, setPortalCopied] = useState(false)
   const [checkins, setCheckins] = useState<CheckinRow[]>([])
 
@@ -333,6 +334,7 @@ function AthleteDetailContent() {
         <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
           {([
             { key: 'performance', label: 'Performance', icon: TrendingUp },
+            { key: 'calendario', label: 'Calendário', icon: CalendarDays },
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
             { key: 'forca', label: 'Força', icon: Dumbbell },
             { key: 'nutricao', label: 'Nutrição', icon: Utensils },
@@ -583,6 +585,7 @@ function AthleteDetailContent() {
           </>
         )}
 
+        {activeTab === 'calendario' && <CalendarioTab athleteId={id} defaultSport={athlete.primary_sport} />}
         {activeTab === 'saude' && <SaudeTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
         {activeTab === 'forca' && <ForcaTab athleteId={id} weightKg={athlete.weight_kg} />}
         {activeTab === 'nutricao' && <NutricaoTab athleteId={id} />}
