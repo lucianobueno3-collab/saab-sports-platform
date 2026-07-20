@@ -7,6 +7,7 @@ import {
   type CheckinRow,
 } from '@/lib/supabase/queries'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
+import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut } from 'lucide-react'
 
 function sportLabel(s: string) {
@@ -47,6 +48,7 @@ export default function AtletaPage() {
   const [athleteId, setAthleteId] = useState<string | null>(null)
   const [data, setData] = useState<SelfData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   // check-in
   const [rpe, setRpe] = useState(5)
@@ -62,6 +64,8 @@ export default function AtletaPage() {
     (async () => {
       const { data: sess } = await sb.auth.getSession()
       if (!sess.session) { window.location.href = '/login'; return }
+      // primeiro acesso: troca de senha obrigatória
+      if (mustChangePassword(sess.session.user)) { setNeedsPassword(true); setLoading(false); return }
       const id = await getMyAthleteId()
       if (!id) { window.location.href = '/dashboard'; return }
       setAthleteId(id)
@@ -88,6 +92,9 @@ export default function AtletaPage() {
     window.location.href = '/login'
   }
 
+  if (needsPassword) {
+    return <ForcePasswordChange onDone={() => window.location.reload()} />
+  }
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center gap-2 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /> <span className="text-sm">Carregando...</span></div>
   }

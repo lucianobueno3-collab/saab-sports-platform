@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuth } from '@/context/auth-context'
 import { getCoaches, getMyRole, setCoachActive, setCoachRole, type CoachRow } from '@/lib/supabase/queries'
-import { createClient } from '@/lib/supabase/client'
+import { CreateAccessModal } from '@/components/access/create-access-modal'
 import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, ChevronDown } from 'lucide-react'
 import Link from 'next/link'
 
@@ -118,11 +118,7 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [notAdmin, setNotAdmin] = useState(false)
 
-  // Invite form
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteName, setInviteName] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -147,33 +143,6 @@ export default function AdminPage() {
     await setCoachRole(id, role)
     setCoaches(prev => prev.map(c => c.id === id ? { ...c, role } : c))
     setActionLoading(null)
-  }
-
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault()
-    if (!inviteEmail) return
-    setInviteLoading(true)
-    setInviteResult(null)
-
-    const sb = createClient()
-    const { data: { session } } = await sb.auth.getSession()
-    const token = session?.access_token ?? ''
-
-    const res = await fetch('/api/invite-coach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email: inviteEmail, full_name: inviteName }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setInviteResult({ ok: true, msg: `Convite enviado para ${inviteEmail}!` })
-      setInviteEmail('')
-      setInviteName('')
-      load()
-    } else {
-      setInviteResult({ ok: false, msg: json.error ?? 'Erro ao enviar convite' })
-    }
-    setInviteLoading(false)
   }
 
   if (loading) return (
@@ -220,44 +189,23 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* Invite form */}
+        {/* Cadastro central de acesso */}
         <div className="rounded-xl p-5" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus className="w-4 h-4 text-primary" />
-            <p className="text-sm font-bold text-foreground">Convidar novo treinador</p>
-          </div>
-          <form onSubmit={handleInvite} className="flex flex-col md:flex-row gap-3">
-            <input
-              value={inviteName}
-              onChange={e => setInviteName(e.target.value)}
-              placeholder="Nome completo"
-              className="flex-1 px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            />
-            <input
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              placeholder="e-mail do treinador"
-              type="email"
-              required
-              className="flex-1 px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            />
-            <button type="submit" disabled={inviteLoading || !inviteEmail}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0">
-              {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Enviar convite
-            </button>
-          </form>
-          {inviteResult && (
-            <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold px-3 py-2 rounded-lg"
-              style={inviteResult.ok
-                ? { background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }
-                : { background: '#e8001c14', border: '1px solid #e8001c33', color: '#e8001c' }}>
-              {inviteResult.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-              {inviteResult.msg}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-sm font-bold text-foreground">Cadastro de acesso</p>
+                <p className="text-[11px] text-muted-foreground">Crie o acesso de treinadores, admins ou atletas com senha temporária.</p>
+              </div>
             </div>
-          )}
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0">
+              <UserPlus className="w-4 h-4" /> Novo cadastro
+            </button>
+          </div>
           <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
-            O treinador receberá um e-mail com link para definir a senha e acessar a plataforma. Após o primeiro login, o perfil ficará visível aqui.
+            Você informa o e-mail e uma senha temporária. A pessoa entra e é obrigada a trocar a senha no primeiro acesso.
           </p>
         </div>
 
@@ -281,6 +229,10 @@ export default function AdminPage() {
         </div>
 
       </div>
+
+      {showCreate && (
+        <CreateAccessModal variant="staff" canCreateStaff onClose={() => setShowCreate(false)} onSaved={load} />
+      )}
     </div>
   )
 }
