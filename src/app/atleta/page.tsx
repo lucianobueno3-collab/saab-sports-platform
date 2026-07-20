@@ -3,12 +3,12 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getMyAthleteId, getAthleteSelf, submitCheckinSelf,
-  type CheckinRow,
+  getMyAthleteId, getAthleteSelf, submitCheckinSelf, updatePlannedWorkout,
+  type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -137,6 +137,11 @@ export default function AtletaPage() {
         <Activity className="w-8 h-8" style={{ color: formColor }} />
       </div>
 
+      {/* Próximos treinos programados */}
+      {athleteId && data.plannedWorkouts && data.plannedWorkouts.length > 0 && (
+        <UpcomingWorkouts workouts={data.plannedWorkouts} onChanged={reload} />
+      )}
+
       {/* Check-in */}
       <div className="bg-card border border-border rounded-2xl p-5">
         <h2 className="text-sm font-bold text-foreground mb-1">Como você está hoje?</h2>
@@ -208,6 +213,51 @@ export default function AtletaPage() {
       )}
 
       <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
+    </div>
+  )
+}
+
+const PLAN_SPORT: Record<string, { label: string; color: string }> = {
+  running: { label: 'Corrida', color: '#ff6b00' }, cycling: { label: 'Ciclismo', color: '#0088ff' },
+  swimming: { label: 'Natação', color: '#00b4d8' }, triathlon: { label: 'Triathlon', color: '#8b5cf6' },
+  duathlon: { label: 'Duathlon', color: '#ffa800' }, strength: { label: 'Força', color: '#e8001c' },
+  other: { label: 'Outro', color: '#64748b' },
+}
+function planDayLabel(d: string) {
+  const today = new Date().toLocaleDateString('en-CA')
+  const tomorrow = new Date(Date.now() + 86400000).toLocaleDateString('en-CA')
+  if (d === today) return 'Hoje'
+  if (d === tomorrow) return 'Amanhã'
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })
+}
+
+function UpcomingWorkouts({ workouts, onChanged }: { workouts: PlannedWorkoutRow[]; onChanged: () => void }) {
+  async function toggle(w: PlannedWorkoutRow) {
+    await updatePlannedWorkout(w.id, { completed: !w.completed }); onChanged()
+  }
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-3"><CalendarDays className="w-4 h-4 text-primary" /><h2 className="text-sm font-bold text-foreground">Próximos treinos</h2></div>
+      <div className="space-y-2">
+        {workouts.map(w => {
+          const info = PLAN_SPORT[w.sport] ?? PLAN_SPORT.other
+          return (
+            <div key={w.id} className="rounded-xl p-3" style={{ background: info.color + '10', borderLeft: `3px solid ${info.color}` }}>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>{planDayLabel(w.date)}</span>
+                <span className="text-sm font-bold text-foreground flex-1 min-w-0 truncate">{w.title}</span>
+                <button onClick={() => toggle(w)} aria-label="Marcar feito">
+                  {w.completed ? <CheckCircle2 className="w-5 h-5 text-[#00d084]" /> : <div className="w-5 h-5 rounded-full border-2 border-border" />}
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {info.label}{w.planned_duration_min ? ` · ${w.planned_duration_min}min` : ''}{w.planned_tss ? ` · ${w.planned_tss} TSS` : ''}
+              </p>
+              {w.description && <p className="text-[11px] text-muted-foreground/90 mt-1 whitespace-pre-line">{w.description}</p>}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
