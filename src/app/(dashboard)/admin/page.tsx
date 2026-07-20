@@ -3,20 +3,27 @@
 import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuth } from '@/context/auth-context'
-import { getCoaches, getMyRole, setCoachActive, setCoachRole, type CoachRow } from '@/lib/supabase/queries'
+import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, type CoachRow } from '@/lib/supabase/queries'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
-import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, ChevronDown } from 'lucide-react'
+import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X } from 'lucide-react'
 import Link from 'next/link'
 
 function planLabel(p: string) {
   return p === 'elite' ? 'Elite' : p === 'pro' ? 'Pro' : 'Starter'
 }
 
-function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading }: {
+function genTempPassword() {
+  const a = 'abcdefghijkmnpqrstuvwxyz', n = '23456789'
+  const pick = (s: string, k: number) => Array.from({ length: k }, () => s[Math.floor(Math.random() * s.length)]).join('')
+  return pick(a, 1).toUpperCase() + pick(a, 3) + pick(n, 3)
+}
+
+function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, onEdit, loading }: {
   coach: CoachRow
   currentUserId: string
   onToggleActive: (id: string, active: boolean) => void
   onToggleRole: (id: string, role: 'coach' | 'admin') => void
+  onEdit: (coach: CoachRow) => void
   loading: string | null
 }) {
   const isSelf = coach.id === currentUserId
@@ -103,8 +110,114 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading
               {isAdmin ? <ShieldOff className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
               {isAdmin ? 'Remover admin' : 'Tornar admin'}
             </button>
+            <button
+              onClick={() => onEdit(coach)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex-1 justify-center"
+              style={{ background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }}>
+              <Pencil className="w-3 h-3" /> Editar
+            </button>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Editar treinador/admin: renomear + redefinir senha temporária
+function EditCoachModal({ coach, onClose, onSaved }: {
+  coach: CoachRow; onClose: () => void; onSaved: () => void
+}) {
+  const [name, setName] = useState(coach.full_name ?? '')
+  const [savingName, setSavingName] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
+
+  const [pwd, setPwd] = useState(genTempPassword())
+  const [resetting, setResetting] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function saveName() {
+    setSavingName(true); setError(null)
+    const ok = await updateCoachName(coach.id, name.trim())
+    setSavingName(false)
+    if (ok) { setNameSaved(true); onSaved(); setTimeout(() => setNameSaved(false), 2000) }
+    else setError('Não foi possível salvar o nome.')
+  }
+
+  async function resetPassword() {
+    setResetting(true); setError(null); setResetDone(false)
+    const res = await adminResetPassword(coach.id, pwd)
+    setResetting(false)
+    if (res.ok) setResetDone(true)
+    else setError(res.error ?? 'Falha ao redefinir senha')
+  }
+
+  function copyCreds() {
+    navigator.clipboard?.writeText(`Acesso ao app SAAB\nE-mail: ${coach.email}\nSenha temporária: ${pwd}\n(troque a senha no primeiro acesso)`)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-sm font-bold text-foreground">Editar acesso</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">E-mail (login)</label>
+            <input value={coach.email} disabled className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-muted-foreground" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Nome completo</label>
+            <div className="flex gap-2">
+              <input value={name} onChange={e => setName(e.target.value)}
+                className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+              <button onClick={saveName} disabled={savingName || !name.trim()}
+                className="px-4 rounded-lg bg-secondary text-foreground text-xs font-bold disabled:opacity-50 flex items-center gap-1.5">
+                {savingName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : nameSaved ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084]" /> : null}
+                {nameSaved ? 'Salvo' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center gap-1.5 mb-2"><KeyRound className="w-3.5 h-3.5 text-primary" /><p className="text-xs font-bold text-foreground">Redefinir senha</p></div>
+            {resetDone ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-[#00d084] text-xs font-bold"><CheckCircle2 className="w-4 h-4" /> Senha redefinida!</div>
+                <div className="rounded-xl bg-background border border-border p-3 text-sm space-y-1">
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">E-mail</span><span className="font-semibold text-foreground break-all">{coach.email}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">Nova senha</span><span className="font-mono font-bold text-foreground">{pwd}</span></div>
+                </div>
+                <button onClick={copyCreds} className="w-full py-2 border border-border text-xs font-semibold text-foreground rounded-lg hover:bg-secondary flex items-center justify-center gap-2">
+                  {copied ? <><CheckCircle2 className="w-4 h-4 text-[#00d084]" /> Copiado!</> : <><Copy className="w-4 h-4" /> Copiar dados de acesso</>}
+                </button>
+                <p className="text-[11px] text-muted-foreground">A pessoa vai trocar esta senha no próximo login.</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-2">
+                  <input value={pwd} onChange={e => setPwd(e.target.value)} minLength={6}
+                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                  <button onClick={() => setPwd(genTempPassword())} title="Gerar nova senha"
+                    className="px-3 rounded-lg border border-border text-muted-foreground hover:bg-secondary"><RefreshCw className="w-4 h-4" /></button>
+                </div>
+                <button onClick={resetPassword} disabled={resetting || pwd.length < 6}
+                  className="w-full mt-2 py-2 bg-primary text-white text-xs font-bold rounded-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                  {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Redefinir senha
+                </button>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
+
+          <button onClick={onClose} className="w-full py-2.5 border border-border text-sm font-semibold text-muted-foreground rounded-lg hover:bg-secondary">Fechar</button>
+        </div>
       </div>
     </div>
   )
@@ -119,6 +232,7 @@ export default function AdminPage() {
   const [notAdmin, setNotAdmin] = useState(false)
 
   const [showCreate, setShowCreate] = useState(false)
+  const [editing, setEditing] = useState<CoachRow | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -222,6 +336,7 @@ export default function AdminPage() {
                 currentUserId={user?.id ?? ''}
                 onToggleActive={handleToggleActive}
                 onToggleRole={handleToggleRole}
+                onEdit={setEditing}
                 loading={actionLoading}
               />
             ))}
@@ -232,6 +347,9 @@ export default function AdminPage() {
 
       {showCreate && (
         <CreateAccessModal variant="staff" canCreateStaff onClose={() => setShowCreate(false)} onSaved={load} />
+      )}
+      {editing && (
+        <EditCoachModal coach={editing} onClose={() => setEditing(null)} onSaved={load} />
       )}
     </div>
   )
