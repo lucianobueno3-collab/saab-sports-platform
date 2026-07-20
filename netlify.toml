@@ -3,8 +3,10 @@
   publish = "out"
   functions = "netlify/functions"
 
+# Node 22: WebSocket nativo exigido pelo @supabase/supabase-js nas Functions
+# (Node 20 quebrava com "detected without native WebSocket support").
 [build.environment]
-  NODE_VERSION = "20"
+  NODE_VERSION = "22"
 
 [[headers]]
   for = "/api/*"
