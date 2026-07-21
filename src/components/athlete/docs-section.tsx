@@ -82,7 +82,7 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
         onExtractText(text, doc.file_name)
       }
     } catch (e) {
-      setError(`Falha ao ler o PDF: ${String(e)}`)
+      setError(`Falha ao ler o PDF: ${e instanceof Error ? e.message : String(e)}`)
     }
     setExtracting(null)
   }

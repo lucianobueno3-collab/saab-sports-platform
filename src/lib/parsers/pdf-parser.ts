@@ -2,7 +2,22 @@
 // e composição corporal em laudos brasileiros. O resultado sempre passa por revisão
 // do usuário antes de salvar — a extração é sugestão, não verdade.
 
+// Polyfills para navegadores/Safari mais antigos (o pdfjs-dist v6 usa APIs novas).
+// Sem isso, iOS < 17.4 quebra com "undefined is not a function".
+function installPolyfills() {
+  const P = Promise as unknown as { withResolvers?: () => unknown }
+  if (typeof P.withResolvers !== 'function') {
+    P.withResolvers = function <T>() {
+      let resolve!: (v: T | PromiseLike<T>) => void
+      let reject!: (r?: unknown) => void
+      const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej })
+      return { promise, resolve, reject }
+    }
+  }
+}
+
 async function loadPdfjs() {
+  installPolyfills()
   const pdfjs = await import('pdfjs-dist')
   pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     'pdfjs-dist/build/pdf.worker.min.mjs',
