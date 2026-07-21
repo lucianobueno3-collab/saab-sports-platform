@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ElementType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   getMyAthleteId, getMyRole, getAthleteSelf, submitCheckinSelf, updatePlannedWorkout,
@@ -9,9 +9,13 @@ import {
 import { setViewMode } from '@/lib/view-mode'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
+import { SaudeTab } from '@/components/athlete/saude-tab'
+import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { ProvasTab } from '@/components/athlete/provas-tab'
+import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -45,14 +49,23 @@ function ScaleInput({ label, value, onChange, hint, invert }: {
 }
 
 type SelfData = Awaited<ReturnType<typeof getAthleteSelf>>
+type AthleteProfile = {
+  weight_kg: number | null; height_cm: number | null; gender: 'M' | 'F' | 'other' | null
+  ftp_watts: number | null; ftp_run_watts: number | null
+  lthr_bpm: number | null; lthr_bike_bpm: number | null; lthr_run_bpm: number | null; lthr_swim_bpm: number | null
+  vo2max_ml_kg_min: number | null
+}
+type AtletaTab = 'inicio' | 'saude' | 'nutricao' | 'provas' | 'evolucao' | 'dados'
 
 export default function AtletaPage() {
   const sb = createClient()
   const [athleteId, setAthleteId] = useState<string | null>(null)
   const [data, setData] = useState<SelfData | null>(null)
+  const [profile, setProfile] = useState<AthleteProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
   const [canCoach, setCanCoach] = useState(false)
+  const [tab, setTab] = useState<AtletaTab>('inicio')
 
   // check-in
   const [rpe, setRpe] = useState(5)
@@ -75,6 +88,10 @@ export default function AtletaPage() {
       setAthleteId(id)
       // conta dupla (treinador que também é atleta): habilita voltar ao painel
       getMyRole().then(r => setCanCoach(r === 'coach' || r === 'admin')).catch(() => {})
+      const { data: prof } = await sb.from('athletes')
+        .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min')
+        .eq('id', id).single()
+      if (prof) setProfile(prof as AthleteProfile)
       setData(await getAthleteSelf(id))
       setLoading(false)
     })()
@@ -123,8 +140,17 @@ export default function AtletaPage() {
   const formColor = tsb == null ? '#888' : tsb >= 5 ? '#4ade80' : tsb >= -10 ? '#fbbf24' : '#ef4444'
   const formLabel = tsb == null ? '—' : tsb >= 5 ? 'Descansado' : tsb >= -10 ? 'Equilibrado' : 'Fadigado'
 
+  const tabs: { key: AtletaTab; label: string; icon: ElementType }[] = [
+    { key: 'inicio', label: 'Início', icon: Activity },
+    { key: 'saude', label: 'Saúde', icon: Heart },
+    { key: 'nutricao', label: 'Nutrição', icon: Utensils },
+    { key: 'provas', label: 'Provas', icon: Trophy },
+    { key: 'evolucao', label: 'Evolução', icon: Target },
+    { key: 'dados', label: 'Meus dados', icon: UserRound },
+  ]
+
   return (
-    <div className="max-w-lg mx-auto px-4 py-6 space-y-5 safe-top safe-bottom">
+    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5 safe-top safe-bottom">
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -149,6 +175,20 @@ export default function AtletaPage() {
         </div>
       </div>
 
+      {/* Navegação por abas — a ficha completa do atleta */}
+      <div className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+        {tabs.map(({ key, label, icon: Icon }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className="flex items-center gap-1.5 flex-1 justify-center py-2 px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"
+            style={tab === key ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            <Icon className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{label}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === 'inicio' && (
+      <div className="space-y-5 max-w-2xl mx-auto">
       {/* Forma atual */}
       <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
         <div>
@@ -232,8 +272,93 @@ export default function AtletaPage() {
           </div>
         </div>
       )}
+      </div>
+      )}
+
+      {tab === 'saude' && athleteId && <SaudeTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
+      {tab === 'nutricao' && athleteId && <NutricaoTab athleteId={athleteId} />}
+      {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
+      {tab === 'evolucao' && athleteId && <EvolucaoTab athleteId={athleteId} />}
+      {tab === 'dados' && athleteId && (
+        <MyDataForm athleteId={athleteId} profile={profile} onSaved={p => setProfile(p)} />
+      )}
 
       <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
+    </div>
+  )
+}
+
+// Meus dados — o atleta edita os próprios números físicos
+function MyDataForm({ athleteId, profile, onSaved }: {
+  athleteId: string; profile: AthleteProfile | null; onSaved: (p: AthleteProfile) => void
+}) {
+  const sb = createClient()
+  const [v, setV] = useState({
+    weight_kg: profile?.weight_kg?.toString() ?? '',
+    height_cm: profile?.height_cm?.toString() ?? '',
+    ftp_watts: profile?.ftp_watts?.toString() ?? '',
+    ftp_run_watts: profile?.ftp_run_watts?.toString() ?? '',
+    lthr_bpm: profile?.lthr_bpm?.toString() ?? '',
+    lthr_bike_bpm: profile?.lthr_bike_bpm?.toString() ?? '',
+    lthr_run_bpm: profile?.lthr_run_bpm?.toString() ?? '',
+    lthr_swim_bpm: profile?.lthr_swim_bpm?.toString() ?? '',
+    vo2max_ml_kg_min: profile?.vo2max_ml_kg_min?.toString() ?? '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const num = (s: string) => (s.trim() === '' ? null : Number(s))
+  const fields: { key: keyof typeof v; label: string; hint?: string; step?: string }[] = [
+    { key: 'weight_kg', label: 'Peso (kg)', step: '0.1' },
+    { key: 'height_cm', label: 'Altura (cm)', step: '0.1' },
+    { key: 'ftp_watts', label: 'FTP Bike (W)' },
+    { key: 'ftp_run_watts', label: 'FTP Corrida (W)', hint: 'Stryd' },
+    { key: 'vo2max_ml_kg_min', label: 'VO2max', step: '0.1' },
+    { key: 'lthr_bpm', label: 'LTHR geral (bpm)' },
+    { key: 'lthr_bike_bpm', label: 'LTHR bike (bpm)' },
+    { key: 'lthr_run_bpm', label: 'LTHR corrida (bpm)' },
+    { key: 'lthr_swim_bpm', label: 'LTHR natação (bpm)' },
+  ]
+
+  async function save() {
+    setSaving(true); setError(null); setSaved(false)
+    const payload = {
+      weight_kg: num(v.weight_kg), height_cm: num(v.height_cm),
+      ftp_watts: num(v.ftp_watts), ftp_run_watts: num(v.ftp_run_watts),
+      lthr_bpm: num(v.lthr_bpm), lthr_bike_bpm: num(v.lthr_bike_bpm),
+      lthr_run_bpm: num(v.lthr_run_bpm), lthr_swim_bpm: num(v.lthr_swim_bpm),
+      vo2max_ml_kg_min: num(v.vo2max_ml_kg_min),
+    }
+    const { error } = await sb.from('athletes').update(payload).eq('id', athleteId)
+    setSaving(false)
+    if (error) { setError(error.message); return }
+    setSaved(true); setTimeout(() => setSaved(false), 2500)
+    onSaved({ ...(profile ?? { gender: null }), ...payload } as AthleteProfile)
+  }
+
+  const inputCls = 'w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary'
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-5 max-w-2xl">
+      <h2 className="text-sm font-bold text-foreground mb-1">Meus dados físicos</h2>
+      <p className="text-xs text-muted-foreground mb-4">Mantenha seus números atualizados — eles deixam os cálculos de treino mais precisos para você e seu treinador.</p>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {fields.map(f => (
+          <div key={f.key}>
+            <label className="block text-xs font-medium text-muted-foreground mb-1.5">{f.label}{f.hint && <span className="text-muted-foreground/50"> · {f.hint}</span>}</label>
+            <input type="number" step={f.step ?? '1'} value={v[f.key]}
+              onChange={e => setV(prev => ({ ...prev, [f.key]: e.target.value }))}
+              className={inputCls} />
+          </div>
+        ))}
+      </div>
+      {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2 mt-3">{error}</p>}
+      <button onClick={save} disabled={saving}
+        className="mt-4 flex items-center justify-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg transition-colors">
+        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+        {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar meus dados'}
+      </button>
     </div>
   )
 }
