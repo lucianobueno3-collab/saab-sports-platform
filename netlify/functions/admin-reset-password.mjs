@@ -52,7 +52,9 @@ export default async (req) => {
     if (getErr || !target?.user) return json({ error: 'Usuário não encontrado' }, 404)
     const meta = { ...(target.user.user_metadata ?? {}), must_change_password: true }
 
-    const { error } = await admin.auth.admin.updateUserById(userId, { password, user_metadata: meta })
+    // email_confirm: true também confirma contas antigas que ficaram com
+    // "Email not confirmed" (fluxo de cadastro anterior).
+    const { error } = await admin.auth.admin.updateUserById(userId, { password, email_confirm: true, user_metadata: meta })
     if (error) return json({ error: error.message }, 400)
 
     return json({ ok: true })
