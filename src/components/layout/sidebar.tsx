@@ -29,7 +29,9 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const [criticalCount, setCriticalCount] = useState(0)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
+  const isAdmin = role === 'admin'
+  const roleLabel = role === 'admin' ? 'Admin' : 'Treinador'
 
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
@@ -57,7 +59,7 @@ export function Sidebar() {
 
   useEffect(() => {
     refreshCriticalCount()
-    getMyRole().then(role => setIsAdmin(role === 'admin')).catch(() => {})
+    getMyRole().then(setRole).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
@@ -126,7 +128,11 @@ export function Sidebar() {
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded flex-shrink-0"
+                style={isAdmin ? { background: '#e8001c22', color: '#e8001c' } : { background: 'var(--panel-border)', color: '#6677aa' }}>{roleLabel}</span>
+            </div>
             <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
           </div>
           <LogOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />

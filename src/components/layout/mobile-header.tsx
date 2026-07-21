@@ -7,16 +7,21 @@ import { Menu, Settings, Heart, Shield, LogOut, X, Dumbbell } from 'lucide-react
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
 import { getMyRole } from '@/lib/supabase/queries'
+import { useAuth } from '@/context/auth-context'
 
 // Barra de marca fixa no topo, só no celular (a sidebar cobre o desktop).
 // O menu dá acesso às páginas que não estão na barra inferior
 // (Recuperação, Configurações, Administração) + Sair.
 export function MobileHeader() {
+  const { user } = useAuth()
   const [open, setOpen] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [role, setRole] = useState<string | null>(null)
+  const isAdmin = role === 'admin'
+  const roleLabel = role === 'admin' ? 'Admin' : 'Treinador'
+  const displayName = (user?.user_metadata?.full_name as string) ?? user?.email?.split('@')[0] ?? ''
 
   useEffect(() => {
-    getMyRole().then(r => setIsAdmin(r === 'admin')).catch(() => {})
+    getMyRole().then(setRole).catch(() => {})
   }, [])
 
   async function logout() {
@@ -50,6 +55,15 @@ export function MobileHeader() {
             <div className="flex items-center justify-between px-4 h-12 border-b border-border">
               <Image src="/logo-saab.png" alt="SAAB Sports" width={92} height={24} className="h-auto w-[92px] invert dark:invert-0" />
               <button onClick={() => setOpen(false)} aria-label="Fechar" className="p-2 rounded-lg hover:bg-secondary"><X className="w-4 h-4 text-muted-foreground" /></button>
+            </div>
+            {/* Identidade + papel */}
+            <div className="px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-foreground truncate">{displayName || 'Minha conta'}</p>
+                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded flex-shrink-0"
+                  style={isAdmin ? { background: '#e8001c22', color: '#e8001c' } : { background: 'var(--panel-border)', color: '#6677aa' }}>{roleLabel}</span>
+              </div>
+              {user?.email && <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>}
             </div>
             <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
               {items.map(({ href, label, icon: Icon }) => (
