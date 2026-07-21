@@ -3,14 +3,15 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getMyAthleteId, getAthleteSelf, submitCheckinSelf, updatePlannedWorkout,
+  getMyAthleteId, getMyRole, getAthleteSelf, submitCheckinSelf, updatePlannedWorkout,
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
+import { setViewMode } from '@/lib/view-mode'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -51,6 +52,7 @@ export default function AtletaPage() {
   const [data, setData] = useState<SelfData | null>(null)
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
+  const [canCoach, setCanCoach] = useState(false)
 
   // check-in
   const [rpe, setRpe] = useState(5)
@@ -71,6 +73,8 @@ export default function AtletaPage() {
       const id = await getMyAthleteId()
       if (!id) { window.location.href = '/dashboard'; return }
       setAthleteId(id)
+      // conta dupla (treinador que também é atleta): habilita voltar ao painel
+      getMyRole().then(r => setCanCoach(r === 'coach' || r === 'admin')).catch(() => {})
       setData(await getAthleteSelf(id))
       setLoading(false)
     })()
@@ -92,6 +96,11 @@ export default function AtletaPage() {
   async function logout() {
     await sb.auth.signOut()
     window.location.href = '/login'
+  }
+
+  function switchToCoach() {
+    setViewMode('coach')
+    window.location.href = '/dashboard'
   }
 
   if (needsPassword) {
@@ -130,7 +139,14 @@ export default function AtletaPage() {
             <p className="text-xs text-muted-foreground">{sportLabel(a.primary_sport)} · Meu treino</p>
           </div>
         </div>
-        <button onClick={logout} className="p-2 rounded-lg hover:bg-secondary transition-colors" title="Sair"><LogOut className="w-4 h-4 text-muted-foreground" /></button>
+        <div className="flex items-center gap-1">
+          {canCoach && (
+            <button onClick={switchToCoach} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Ir para o painel do treinador">
+              <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Treinador</span>
+            </button>
+          )}
+          <button onClick={logout} className="p-2 rounded-lg hover:bg-secondary transition-colors" title="Sair"><LogOut className="w-4 h-4 text-muted-foreground" /></button>
+        </div>
       </div>
 
       {/* Forma atual */}

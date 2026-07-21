@@ -3,10 +3,11 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { Menu, Settings, Heart, Shield, LogOut, X, Dumbbell } from 'lucide-react'
+import { Menu, Settings, Heart, Shield, LogOut, X, Dumbbell, UserRound } from 'lucide-react'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
-import { getMyRole } from '@/lib/supabase/queries'
+import { getMyAccess } from '@/lib/supabase/queries'
+import { setViewMode } from '@/lib/view-mode'
 import { useAuth } from '@/context/auth-context'
 
 // Barra de marca fixa no topo, só no celular (a sidebar cobre o desktop).
@@ -16,17 +17,23 @@ export function MobileHeader() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
   const [role, setRole] = useState<string | null>(null)
+  const [dual, setDual] = useState(false)
   const isAdmin = role === 'admin'
   const roleLabel = role === 'admin' ? 'Admin' : 'Treinador'
   const displayName = (user?.user_metadata?.full_name as string) ?? user?.email?.split('@')[0] ?? ''
 
   useEffect(() => {
-    getMyRole().then(setRole).catch(() => {})
+    getMyAccess().then(({ role, dual }) => { setRole(role); setDual(dual) }).catch(() => {})
   }, [])
 
   async function logout() {
     await createClient().auth.signOut()
     window.location.href = '/login'
+  }
+
+  function switchToAthlete() {
+    setViewMode('athlete')
+    window.location.href = '/atleta'
   }
 
   const items = [
@@ -73,6 +80,14 @@ export function MobileHeader() {
                 </Link>
               ))}
             </nav>
+            {dual && (
+              <div className="p-2 border-t border-border">
+                <button onClick={switchToAthlete}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-foreground hover:bg-secondary transition-colors">
+                  <UserRound className="w-4 h-4 text-muted-foreground" /> Ver como atleta
+                </button>
+              </div>
+            )}
             <div className="p-2 border-t border-border safe-bottom">
               <button onClick={logout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary hover:bg-secondary transition-colors">

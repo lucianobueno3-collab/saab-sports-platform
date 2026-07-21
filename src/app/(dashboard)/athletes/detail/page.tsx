@@ -8,14 +8,14 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2 } from 'lucide-react'
 import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV, getAthleteCheckins,
+  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV, getAthleteCheckins, deleteAthlete,
   type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow, type CheckinRow,
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
@@ -54,6 +54,9 @@ function AthleteDetailContent() {
   const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
@@ -161,6 +164,19 @@ function AthleteDetailContent() {
     setAthlete({ ...athlete, ...updates } as AthleteRow)
     setSaving(false)
     setEditOpen(false)
+  }
+
+  async function handleDelete() {
+    if (!athlete) return
+    setDeleting(true)
+    setDeleteError(null)
+    const res = await deleteAthlete(athlete.id)
+    if (!res.ok) {
+      setDeleting(false)
+      setDeleteError(res.error ?? 'Falha ao excluir o aluno')
+      return
+    }
+    window.location.href = '/athletes'
   }
 
   function handleWhatsApp() {
@@ -698,6 +714,35 @@ function AthleteDetailContent() {
                 className="px-4 py-2.5 border border-border text-sm font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
                 Cancelar
               </button>
+            </div>
+
+            {/* Zona de perigo: excluir aluno */}
+            <div className="mt-5 pt-4 border-t border-border">
+              {!confirmDelete ? (
+                <button onClick={() => { setConfirmDelete(true); setDeleteError(null) }}
+                  className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir aluno
+                </button>
+              ) : (
+                <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-3">
+                  <p className="text-xs font-bold text-red-300 mb-1">Excluir {athlete.full_name}?</p>
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                    Esta ação é permanente e apaga todos os dados do aluno (treinos, métricas, check-ins, exames e o login dele). Não pode ser desfeita.
+                  </p>
+                  {deleteError && <p className="text-[11px] text-red-400 mb-2">{deleteError}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors">
+                      {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                      className="px-3 py-2 border border-border text-xs font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

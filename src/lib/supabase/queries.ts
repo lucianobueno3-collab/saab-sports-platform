@@ -747,6 +747,38 @@ export async function getMyAthleteId(): Promise<string | null> {
   return (data as string | null) ?? null
 }
 
+/**
+ * Acesso da conta logada. `isCoach` = tem painel de treinador/admin;
+ * `athleteId` = vínculo de atleta (null se não for atleta). `dual` = ambos
+ * (treinador que também é atleta → o seletor do login decide a área).
+ */
+export async function getMyAccess(): Promise<{ isCoach: boolean; athleteId: string | null; role: string | null; dual: boolean }> {
+  const [role, athleteId] = await Promise.all([getMyRole(), getMyAthleteId()])
+  const isCoach = role === 'coach' || role === 'admin'
+  return { isCoach, athleteId, role, dual: isCoach && !!athleteId }
+}
+
+/** Exclui um aluno e (se aplicável) o login dele, via Netlify Function (service role). */
+export async function deleteAthlete(athleteId: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-delete-athlete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ athlete_id: athleteId }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao excluir o aluno' }
+  }
+}
+
 /** Vincula a conta logada a um atleta pelo código de acesso (portal_token) */
 export async function claimAthleteProfile(token: string): Promise<{ ok: boolean; error?: string; full_name?: string }> {
   const sb = createClient()

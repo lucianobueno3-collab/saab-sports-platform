@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/context/auth-context'
-import { getMyAthleteId } from '@/lib/supabase/queries'
+import { getMyAccess } from '@/lib/supabase/queries'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -14,9 +14,10 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (loading) return
     if (!user) { window.location.href = '/login'; return }
     if (mustChangePassword(user)) { setCheckingRole(false); return }
-    // atleta não acessa o painel do treinador — redireciona para a área dele
-    getMyAthleteId().then(athleteId => {
-      if (athleteId) window.location.href = '/atleta'
+    // atleta puro não acessa o painel do treinador — redireciona para a área dele.
+    // Conta dupla (treinador que também é atleta) permanece no painel.
+    getMyAccess().then(({ isCoach, athleteId }) => {
+      if (athleteId && !isCoach) window.location.href = '/atleta'
       else setCheckingRole(false)
     }).catch(() => setCheckingRole(false))
   }, [user, loading])
