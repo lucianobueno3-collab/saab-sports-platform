@@ -2,8 +2,12 @@
 // e composição corporal em laudos brasileiros. O resultado sempre passa por revisão
 // do usuário antes de salvar — a extração é sugestão, não verdade.
 
-// Polyfills para navegadores/Safari mais antigos (o pdfjs-dist v6 usa APIs novas).
-// Sem isso, iOS < 17.4 quebra com "undefined is not a function".
+// O pdfjs-dist v6 usa Promise.withResolvers() — ausente em iOS/Safari < 17.4 —
+// tanto no thread principal quanto DENTRO do worker. Sem isso: "undefined is
+// not a function". Instalamos o polyfill nos dois lugares.
+const WITH_RESOLVERS_POLYFILL =
+  "if(typeof Promise.withResolvers!=='function'){Promise.withResolvers=function(){var a,b;var p=new Promise(function(x,y){a=x;b=y});return{promise:p,resolve:a,reject:b}}}"
+
 function installPolyfills() {
   const P = Promise as unknown as { withResolvers?: () => unknown }
   if (typeof P.withResolvers !== 'function') {
@@ -17,12 +21,17 @@ function installPolyfills() {
 }
 
 async function loadPdfjs() {
-  installPolyfills()
+  installPolyfills() // thread principal (e caso o pdfjs use fake worker no main)
   const pdfjs = await import('pdfjs-dist')
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url,
-  ).toString()
+  const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString()
+  try {
+    // Worker "shim": instala o polyfill e então importa o worker real do pdfjs.
+    // Se o navegador bloquear o worker-blob, o pdfjs cai no fake worker (main).
+    const shim = `${WITH_RESOLVERS_POLYFILL};import(${JSON.stringify(workerUrl)});`
+    pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([shim], { type: 'text/javascript' }))
+  } catch {
+    pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+  }
   return pdfjs
 }
 
