@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
@@ -16,7 +16,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, Library, BookmarkPlus,
+  Sparkles, Library, BookmarkPlus, GripVertical,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -42,7 +42,7 @@ function startOfMonth(d: Date) { const x = new Date(d.getFullYear(), d.getMonth(
 function addMonths(d: Date, n: number) { return startOfMonth(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 
 export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = false }: { athleteId: string; defaultSport?: string; readOnly?: boolean }) {
-  const [view, setView] = useState<'week' | 'month'>('week')
+  const [view, setView] = useState<'week' | 'month'>('month')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
   const [planned, setPlanned] = useState<PlannedWorkoutRow[]>([])
@@ -52,6 +52,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [modal, setModal] = useState<{ date: string; edit?: PlannedWorkoutRow } | null>(null)
   const [detail, setDetail] = useState<PlannedWorkoutRow | null>(null)
   const [showPlan, setShowPlan] = useState(false)
+  const [showLib, setShowLib] = useState(false)
+  const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
+  const [dragOverDay, setDragOverDay] = useState<string | null>(null)
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const monthGridStart = useMemo(() => startOfWeek(monthAnchor), [monthAnchor])
@@ -103,6 +106,24 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   function openWorkout(date: string, p: PlannedWorkoutRow) {
     if (readOnly) setDetail(p); else setModal({ date, edit: p })
   }
+  // Arrastar um treino da biblioteca para um dia programa o treino nesse dia.
+  async function dropOnDay(date: string) {
+    const w = dragLib
+    setDragLib(null); setDragOverDay(null)
+    if (!w) return
+    await createPlannedWorkout({
+      athlete_id: athleteId, date, sport: w.sport, title: w.title,
+      description: w.description ?? null, planned_duration_min: w.duration_min ?? null,
+      planned_tss: w.tss ?? null, structure: w.structure ?? null,
+    })
+    load()
+  }
+  // Props de "solte aqui" aplicadas às células de dia (só no modo treinador).
+  const dropProps = (key: string) => (readOnly ? {} : {
+    onDragOver: (e: DragEvent) => { if (dragLib) { e.preventDefault(); setDragOverDay(key) } },
+    onDragLeave: () => setDragOverDay(o => (o === key ? null : o)),
+    onDrop: () => dropOnDay(key),
+  })
 
   const weekLabel = `${weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`
   const monthLabel = monthAnchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
@@ -128,6 +149,12 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           </div>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#0088ff18', color: '#0088ff' }}>Planejado {plannedTss} TSS</span>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#00d08418', color: '#00d084' }}>Realizado {doneTss.toFixed(0)} TSS</span>
+          {!readOnly && library.length > 0 && (
+            <button onClick={() => setShowLib(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+              style={showLib ? { background: '#7c3aed', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--foreground)' }}>
+              <GripVertical className="w-3.5 h-3.5" /> Arrastar treino
+            </button>
+          )}
           {!readOnly && (
             <button onClick={() => setShowPlan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90">
               <Sparkles className="w-3.5 h-3.5" /> Aplicar plano
@@ -135,6 +162,32 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           )}
         </div>
       </div>
+
+      {/* Rail de treinos para arrastar até um dia (modelo TrainingPeaks/Garmin) */}
+      {!readOnly && showLib && library.length > 0 && (
+        <div className="rounded-xl p-3" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+          <p className="text-[11px] text-muted-foreground mb-2">Arraste um treino para um dia do calendário para programá-lo.</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {library.map(w => {
+              const info = sportInfo(w.sport)
+              return (
+                <div key={w.id} draggable
+                  onDragStart={() => setDragLib(w)}
+                  onDragEnd={() => { setDragLib(null); setDragOverDay(null) }}
+                  className="flex-shrink-0 cursor-grab active:cursor-grabbing rounded-lg px-3 py-2 select-none"
+                  style={{ background: info.color + '14', borderLeft: `3px solid ${info.color}`, minWidth: 160 }}>
+                  <div className="flex items-center gap-1.5">
+                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <info.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: info.color }} />
+                    <span className="text-xs font-bold text-foreground truncate">{w.title}</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 pl-5">{info.label}{w.duration_min ? ` · ${fmtDur(w.duration_min)}` : ''}{w.tss ? ` · ${w.tss} TSS` : ''}</p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
@@ -146,8 +199,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
             const dayPlanned = plannedByDay[key] ?? []
             const dayDone = doneByDay[key] ?? []
             return (
-              <div key={key} className="rounded-xl p-2 min-h-[120px] flex flex-col"
-                style={{ background: 'var(--card)', border: `1px solid ${isToday ? '#7c3aed' : 'var(--border)'}` }}>
+              <div key={key} {...dropProps(key)} className="rounded-xl p-2 min-h-[120px] flex flex-col transition-shadow"
+                style={{ background: 'var(--card)', border: `1px solid ${dragOverDay === key ? '#7c3aed' : isToday ? '#7c3aed' : 'var(--border)'}`, boxShadow: dragOverDay === key ? '0 0 0 2px #7c3aed55' : undefined }}>
                 <div className="flex items-center justify-between mb-1.5 px-1">
                   <span className={`text-[11px] font-bold ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>
                     {WEEKDAYS[(d.getDay() + 6) % 7]} {d.getDate()}
@@ -219,9 +272,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                 ...dayDone.map(a => ({ kind: 'd' as const, a })),
               ]
               return (
-                <div key={key} onClick={() => { if (!readOnly) setModal({ date: key }) }}
+                <div key={key} {...dropProps(key)} onClick={() => { if (!readOnly) setModal({ date: key }) }}
                   className={`rounded-lg p-1.5 min-h-[84px] flex flex-col transition-colors hover:border-primary/40 ${readOnly ? '' : 'cursor-pointer'}`}
-                  style={{ background: 'var(--card)', border: `1px solid ${isToday ? '#7c3aed' : 'var(--border)'}`, opacity: inMonth ? 1 : 0.45 }}>
+                  style={{ background: 'var(--card)', border: `1px solid ${dragOverDay === key ? '#7c3aed' : isToday ? '#7c3aed' : 'var(--border)'}`, boxShadow: dragOverDay === key ? '0 0 0 2px #7c3aed55' : undefined, opacity: inMonth ? 1 : 0.45 }}>
                   <span className={`text-[11px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
                   <div className="space-y-1 mt-1 flex-1 overflow-hidden">
                     {items.slice(0, 6).map((it) => {
