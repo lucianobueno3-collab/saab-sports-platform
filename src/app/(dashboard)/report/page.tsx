@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Printer, MessageCircle, ArrowLeft, ImageDown, Loader2 } from 'lucide-react'
+import { Printer, ArrowLeft, ImageDown, Loader2 } from 'lucide-react'
+import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import Link from 'next/link'
 import {
   getAthlete, getAthletePMC, getAthleteHRV,
@@ -636,7 +637,7 @@ function ReportContent() {
                 <button onClick={handleWhatsApp} disabled={exporting}
                   className="flex items-center gap-2 px-5 py-2 text-[12px] font-bold rounded-lg disabled:opacity-40 transition-colors"
                   style={{ background: '#071a0e', border: '1px solid #1a4a25', color: '#25d366' }}>
-                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <WhatsappIcon className="w-3.5 h-3.5" />}
                   {exporting ? 'Gerando PDF...' : 'Enviar no WhatsApp'}
                 </button>
               </div>

@@ -8,7 +8,8 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays } from 'lucide-react'
+import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
@@ -307,7 +308,7 @@ function AthleteDetailContent() {
               onClick={handleWhatsApp}
               className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
             >
-              <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
+              <WhatsappIcon className="w-3.5 h-3.5" /> Enviar Relatório
             </button>
           </div>
         </div>
