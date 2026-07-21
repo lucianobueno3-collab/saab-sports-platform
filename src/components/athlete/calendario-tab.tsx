@@ -41,7 +41,7 @@ function fmtDur(min?: number | null) { if (!min) return null; const h = Math.flo
 function startOfMonth(d: Date) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0, 0, 0, 0); return x }
 function addMonths(d: Date, n: number) { return startOfMonth(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 
-export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athleteId: string; defaultSport?: string }) {
+export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = false }: { athleteId: string; defaultSport?: string; readOnly?: boolean }) {
   const [view, setView] = useState<'week' | 'month'>('week')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
   const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
@@ -50,6 +50,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
   const [library, setLibrary] = useState<WorkoutLibraryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ date: string; edit?: PlannedWorkoutRow } | null>(null)
+  const [detail, setDetail] = useState<PlannedWorkoutRow | null>(null)
   const [showPlan, setShowPlan] = useState(false)
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
@@ -69,10 +70,10 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
     const [p, a, lib] = await Promise.all([
       getPlannedWorkouts(athleteId, from, to),
       getActivitiesRange(athleteId, fromISO, toISO),
-      getWorkoutLibrary(),
+      readOnly ? Promise.resolve([]) : getWorkoutLibrary(),
     ])
     setPlanned(p); setDone(a); setLibrary(lib); setLoading(false)
-  }, [athleteId, rangeStart, rangeDays])
+  }, [athleteId, rangeStart, rangeDays, readOnly])
 
   useEffect(() => { load() }, [load])
 
@@ -92,9 +93,16 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
   const doneTss = done.reduce((s, a) => s + (a.tss ?? 0), 0)
 
   async function toggleDone(p: PlannedWorkoutRow) {
-    await updatePlannedWorkout(p.id, { completed: !p.completed }); load()
+    await updatePlannedWorkout(p.id, { completed: !p.completed })
+    setDetail(d => (d && d.id === p.id ? { ...d, completed: !p.completed } : d))
+    load()
   }
   async function remove(id: string) { await deletePlannedWorkout(id); load() }
+  // No modo atleta (readOnly) o clique abre os detalhes do treino; no modo
+  // treinador abre o editor.
+  function openWorkout(date: string, p: PlannedWorkoutRow) {
+    if (readOnly) setDetail(p); else setModal({ date, edit: p })
+  }
 
   const weekLabel = `${weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`
   const monthLabel = monthAnchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
@@ -120,9 +128,11 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
           </div>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#0088ff18', color: '#0088ff' }}>Planejado {plannedTss} TSS</span>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#00d08418', color: '#00d084' }}>Realizado {doneTss.toFixed(0)} TSS</span>
-          <button onClick={() => setShowPlan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90">
-            <Sparkles className="w-3.5 h-3.5" /> Aplicar plano
-          </button>
+          {!readOnly && (
+            <button onClick={() => setShowPlan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90">
+              <Sparkles className="w-3.5 h-3.5" /> Aplicar plano
+            </button>
+          )}
         </div>
       </div>
 
@@ -142,7 +152,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                   <span className={`text-[11px] font-bold ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>
                     {WEEKDAYS[(d.getDay() + 6) % 7]} {d.getDate()}
                   </span>
-                  <button onClick={() => setModal({ date: key })} className="p-1 rounded-md hover:bg-secondary text-muted-foreground" aria-label="Adicionar treino"><Plus className="w-3.5 h-3.5" /></button>
+                  {!readOnly && <button onClick={() => setModal({ date: key })} className="p-1 rounded-md hover:bg-secondary text-muted-foreground" aria-label="Adicionar treino"><Plus className="w-3.5 h-3.5" /></button>}
                 </div>
 
                 <div className="space-y-1.5 flex-1">
@@ -150,7 +160,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                   {dayPlanned.map(p => {
                     const info = sportInfo(p.sport)
                     return (
-                      <button key={p.id} onClick={() => setModal({ date: key, edit: p })}
+                      <button key={p.id} onClick={() => openWorkout(key, p)}
                         className="w-full text-left rounded-lg p-1.5 group"
                         style={{ background: info.color + '14', borderLeft: `3px solid ${info.color}` }}>
                         <div className="flex items-center gap-1">
@@ -181,7 +191,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                     )
                   })}
 
-                  {dayPlanned.length === 0 && dayDone.length === 0 && (
+                  {dayPlanned.length === 0 && dayDone.length === 0 && !readOnly && (
                     <button onClick={() => setModal({ date: key })} className="w-full py-3 text-[10px] text-muted-foreground/50 hover:text-muted-foreground rounded-lg border border-dashed border-border">+ treino</button>
                   )}
                 </div>
@@ -209,8 +219,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                 ...dayDone.map(a => ({ kind: 'd' as const, a })),
               ]
               return (
-                <div key={key} onClick={() => setModal({ date: key })}
-                  className="rounded-lg p-1.5 min-h-[84px] flex flex-col cursor-pointer transition-colors hover:border-primary/40"
+                <div key={key} onClick={() => { if (!readOnly) setModal({ date: key }) }}
+                  className={`rounded-lg p-1.5 min-h-[84px] flex flex-col transition-colors hover:border-primary/40 ${readOnly ? '' : 'cursor-pointer'}`}
                   style={{ background: 'var(--card)', border: `1px solid ${isToday ? '#7c3aed' : 'var(--border)'}`, opacity: inMonth ? 1 : 0.45 }}>
                   <span className={`text-[11px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
                   <div className="space-y-1 mt-1 flex-1 overflow-hidden">
@@ -218,7 +228,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
                       if (it.kind === 'p') {
                         const info = sportInfo(it.p.sport)
                         return (
-                          <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); setModal({ date: key, edit: it.p }) }}
+                          <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); openWorkout(key, it.p) }}
                             className="w-full text-left rounded-md px-1.5 py-1 truncate text-[11px] font-semibold flex items-center gap-1"
                             style={{ background: info.color + '22', color: info.color }}>
                             <info.icon className="w-3 h-3 flex-shrink-0" />
@@ -245,7 +255,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
         </div>
       )}
 
-      {modal && (
+      {modal && !readOnly && (
         <PlannedModal
           athleteId={athleteId} date={modal.date} edit={modal.edit} defaultSport={defaultSport} library={library}
           onClose={() => setModal(null)}
@@ -254,12 +264,70 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
         />
       )}
 
+      {detail && (
+        <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)} onToggleDone={() => toggleDone(detail)} />
+      )}
+
       {showPlan && (
         <ApplyPlanModal athleteId={athleteId} defaultSport={defaultSport}
           onClose={() => setShowPlan(false)}
           onApplied={() => { setShowPlan(false); load() }} />
       )}
     </div>
+  )
+}
+
+// Detalhe do treino (visão do atleta, somente leitura + marcar feito)
+function WorkoutDetailModal({ workout, onClose, onToggleDone }: {
+  workout: PlannedWorkoutRow; onClose: () => void; onToggleDone: () => void
+}) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const info = sportInfo(workout.sport)
+  const dateLabel = new Date(workout.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-border" style={{ borderTop: `3px solid ${info.color}` }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>{info.label}</span>
+              <h2 className="text-lg font-black text-foreground mt-2 leading-tight">{workout.title}</h2>
+              <p className="text-xs text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
+            </div>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="w-5 h-5" /></button>
+          </div>
+          <div className="flex gap-2 mt-3">
+            {workout.planned_duration_min ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>{fmtDur(workout.planned_duration_min)}</span> : null}
+            {workout.planned_tss ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: '#0088ff18', color: '#0088ff' }}>{workout.planned_tss} TSS</span> : null}
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          {workout.structure && workout.structure.length > 0 && (
+            <div>
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Estrutura</p>
+              <StructureBar structure={workout.structure} height={14} />
+              <p className="text-xs text-muted-foreground mt-2">{structureSummary(workout.structure)}</p>
+            </div>
+          )}
+          {workout.description && (
+            <div>
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-1">Instruções</p>
+              <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{workout.description}</p>
+            </div>
+          )}
+          <button onClick={onToggleDone}
+            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
+            style={workout.completed
+              ? { background: 'var(--panel)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }
+              : { background: '#00d084', color: '#fff' }}>
+            {workout.completed ? <><Circle className="w-4 h-4" /> Marcar como não feito</> : <><CheckCircle2 className="w-4 h-4" /> Marcar como feito</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 

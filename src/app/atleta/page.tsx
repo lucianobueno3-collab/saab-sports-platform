@@ -13,6 +13,7 @@ import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
+import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save } from 'lucide-react'
@@ -55,7 +56,7 @@ type AthleteProfile = {
   lthr_bpm: number | null; lthr_bike_bpm: number | null; lthr_run_bpm: number | null; lthr_swim_bpm: number | null
   vo2max_ml_kg_min: number | null
 }
-type AtletaTab = 'inicio' | 'saude' | 'nutricao' | 'provas' | 'evolucao' | 'dados'
+type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'provas' | 'evolucao' | 'dados'
 
 export default function AtletaPage() {
   const sb = createClient()
@@ -65,7 +66,7 @@ export default function AtletaPage() {
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
   const [canCoach, setCanCoach] = useState(false)
-  const [tab, setTab] = useState<AtletaTab>('inicio')
+  const [tab, setTab] = useState<AtletaTab>('calendario')
 
   // check-in
   const [rpe, setRpe] = useState(5)
@@ -141,7 +142,8 @@ export default function AtletaPage() {
   const formLabel = tsb == null ? '—' : tsb >= 5 ? 'Descansado' : tsb >= -10 ? 'Equilibrado' : 'Fadigado'
 
   const tabs: { key: AtletaTab; label: string; icon: ElementType }[] = [
-    { key: 'inicio', label: 'Início', icon: Activity },
+    { key: 'calendario', label: 'Calendário', icon: CalendarDays },
+    { key: 'inicio', label: 'Hoje', icon: Activity },
     { key: 'saude', label: 'Saúde', icon: Heart },
     { key: 'nutricao', label: 'Nutrição', icon: Utensils },
     { key: 'provas', label: 'Provas', icon: Trophy },
@@ -187,6 +189,10 @@ export default function AtletaPage() {
         ))}
       </div>
 
+      {tab === 'calendario' && athleteId && (
+        <CalendarioTab athleteId={athleteId} defaultSport={a.primary_sport} readOnly />
+      )}
+
       {tab === 'inicio' && (
       <div className="space-y-5 max-w-2xl mx-auto">
       {/* Forma atual */}
@@ -197,11 +203,6 @@ export default function AtletaPage() {
         </div>
         <Activity className="w-8 h-8" style={{ color: formColor }} />
       </div>
-
-      {/* Próximos treinos programados */}
-      {athleteId && data.plannedWorkouts && data.plannedWorkouts.length > 0 && (
-        <UpcomingWorkouts workouts={data.plannedWorkouts} onChanged={reload} />
-      )}
 
       {/* Check-in */}
       <div className="bg-card border border-border rounded-2xl p-5">
