@@ -1034,6 +1034,27 @@ export async function adminResetPassword(userId: string, password: string): Prom
   }
 }
 
+/** Exclui um treinador/admin e o login dele, via Netlify Function (service role). */
+export async function deleteStaff(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-delete-staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ user_id: userId }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao excluir o treinador' }
+  }
+}
+
 /** Sobe uma foto de perfil para o bucket avatars e devolve a URL pública. */
 export async function uploadAvatar(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
   const sb = createClient()

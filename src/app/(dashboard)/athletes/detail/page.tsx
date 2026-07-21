@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { Topbar } from '@/components/layout/topbar'
 import { KpiCard } from '@/components/dashboard/kpi-card'
@@ -597,9 +598,9 @@ function AthleteDetailContent() {
       </div>
 
       {/* Edit modal */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      {editOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-sm font-bold text-foreground">Editar Perfil do Atleta</h3>
               <button onClick={() => setEditOpen(false)} className="p-1 hover:bg-secondary rounded transition-colors">
@@ -745,7 +746,8 @@ function AthleteDetailContent() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <div className="p-6 pt-0">

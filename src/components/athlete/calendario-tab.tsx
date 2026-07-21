@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts,
@@ -269,8 +270,12 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
   const [saving, setSaving] = useState(false)
   const [structured, setStructured] = useState<boolean>(!!edit?.structure && edit.structure.length > 0)
   const [structure, setStructure] = useState<WorkoutStructure>(edit?.structure ?? [])
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   const est = structured ? estimateStructure(structure) : null
+  // treinos da biblioteca da modalidade selecionada (para escolher depois da modalidade)
+  const libForSport = library.filter(l => l.sport === sport)
 
   function applyFromLibrary(id: string) {
     const w = library.find(l => l.id === id); if (!w) return
@@ -302,8 +307,9 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
   const cls = 'w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary'
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card">
           <div>
@@ -313,15 +319,7 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={save} className="p-6 space-y-4">
-          {!edit && library.length > 0 && (
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5 flex items-center gap-1"><Library className="w-3.5 h-3.5 text-primary" /> Usar da biblioteca</label>
-              <select defaultValue="" onChange={e => { if (e.target.value) applyFromLibrary(e.target.value) }} className={cls}>
-                <option value="">Preencher a partir de um treino salvo…</option>
-                {library.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
-              </select>
-            </div>
-          )}
+          {/* 1º) Modalidade — filtra os treinos da biblioteca abaixo */}
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Modalidade *</label>
             <div className="grid grid-cols-4 gap-1.5">
@@ -334,6 +332,20 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
               ))}
             </div>
           </div>
+          {/* 2º) Treinos disponíveis para a modalidade escolhida */}
+          {!edit && (
+            libForSport.length > 0 ? (
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5 flex items-center gap-1"><Library className="w-3.5 h-3.5 text-primary" /> Treinos disponíveis ({SPORTS.find(s => s.key === sport)?.label ?? sport})</label>
+                <select key={sport} defaultValue="" onChange={e => { if (e.target.value) applyFromLibrary(e.target.value) }} className={cls}>
+                  <option value="">Escolher um treino salvo…</option>
+                  {libForSport.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+                </select>
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground px-1">Nenhum treino salvo nesta modalidade — preencha manualmente abaixo.</p>
+            )
+          )}
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Título *</label>
             <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="ex: Intervalado 4x1km Z4" className={cls} />
@@ -384,7 +396,8 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -397,6 +410,8 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
   const [start, setStart] = useState(ymd(addDays(startOfWeek(new Date()), 7))) // próxima segunda
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
 
   const plans = PLAN_LIBRARY.filter(p => filter === 'all' || p.sport === filter)
 
@@ -420,8 +435,9 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
 
   const totals = selected ? planTotals(selected) : null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
           <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /><h2 className="text-sm font-bold text-foreground">Aplicar plano de treino</h2></div>
@@ -474,6 +490,7 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
