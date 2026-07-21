@@ -195,7 +195,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
           <div className="grid grid-cols-7 gap-1 mb-1">
             {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold text-muted-foreground py-1">{w}</div>)}
           </div>
-          <div className="grid grid-cols-7 gap-1">
+          {/* auto-rows-fr + altura por viewport: as semanas dividem a altura da
+              tela e a grade cresce quando você maximiza a janela */}
+          <div className="grid grid-cols-7 auto-rows-fr gap-1 min-h-[calc(100dvh-22rem)]">
             {monthDays.map(d => {
               const key = ymd(d)
               const isToday = key === todayKey
@@ -208,29 +210,33 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
               ]
               return (
                 <div key={key} onClick={() => setModal({ date: key })}
-                  className="rounded-lg p-1 min-h-[84px] flex flex-col cursor-pointer transition-colors hover:border-primary/40"
+                  className="rounded-lg p-1.5 min-h-[84px] flex flex-col cursor-pointer transition-colors hover:border-primary/40"
                   style={{ background: 'var(--card)', border: `1px solid ${isToday ? '#7c3aed' : 'var(--border)'}`, opacity: inMonth ? 1 : 0.45 }}>
-                  <span className={`text-[10px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
-                  <div className="space-y-0.5 mt-0.5 flex-1 overflow-hidden">
-                    {items.slice(0, 3).map((it, i) => {
+                  <span className={`text-[11px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
+                  <div className="space-y-1 mt-1 flex-1 overflow-hidden">
+                    {items.slice(0, 6).map((it) => {
                       if (it.kind === 'p') {
                         const info = sportInfo(it.p.sport)
                         return (
                           <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); setModal({ date: key, edit: it.p }) }}
-                            className="w-full text-left rounded px-1 py-0.5 truncate text-[9px] font-semibold flex items-center gap-1"
+                            className="w-full text-left rounded-md px-1.5 py-1 truncate text-[11px] font-semibold flex items-center gap-1"
                             style={{ background: info.color + '22', color: info.color }}>
-                            {it.p.completed && <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0" />}
-                            <span className="truncate">{it.p.title}</span>
+                            <info.icon className="w-3 h-3 flex-shrink-0" />
+                            {it.p.completed && <CheckCircle2 className="w-3 h-3 flex-shrink-0" />}
+                            <span className="truncate flex-1">{it.p.title}</span>
+                            {(it.p.planned_tss || it.p.planned_duration_min) && (
+                              <span className="text-[10px] font-bold opacity-80 flex-shrink-0">{it.p.planned_tss ? `${it.p.planned_tss}` : fmtDur(it.p.planned_duration_min)}</span>
+                            )}
                           </button>
                         )
                       }
                       return (
-                        <div key={'d' + it.a.id} className="w-full rounded px-1 py-0.5 truncate text-[9px] flex items-center gap-1" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>
-                          <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0 text-[#00d084]" /><span className="truncate">{it.a.name ?? sportInfo(it.a.sport).label}</span>
+                        <div key={'d' + it.a.id} className="w-full rounded-md px-1.5 py-1 truncate text-[11px] flex items-center gap-1" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>
+                          <CheckCircle2 className="w-3 h-3 flex-shrink-0 text-[#00d084]" /><span className="truncate">{it.a.name ?? sportInfo(it.a.sport).label}</span>
                         </div>
                       )
                     })}
-                    {items.length > 3 && <span className="text-[9px] text-muted-foreground/70 px-1">+{items.length - 3}</span>}
+                    {items.length > 6 && <span className="text-[10px] text-muted-foreground/70 px-1">+{items.length - 6}</span>}
                   </div>
                 </div>
               )
