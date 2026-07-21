@@ -269,7 +269,11 @@ function AthleteDetailContent() {
 
   return (
     <div>
-      <Topbar title={athlete.full_name} subtitle={`${sportLabel(athlete.primary_sport)}`} />
+      {/* No celular a barra da marca (topo) já serve de cabeçalho e o nome
+          aparece no corpo — evita duplicar o nome. No desktop mantém a Topbar. */}
+      <div className="hidden md:block">
+        <Topbar title={athlete.full_name} subtitle={`${sportLabel(athlete.primary_sport)}`} />
+      </div>
 
       <div className="p-4 md:p-6 space-y-5">
         <Link href="/athletes" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
