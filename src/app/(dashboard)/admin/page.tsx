@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuth } from '@/context/auth-context'
-import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, getStaffAthleteMap, createStaffAthleteProfile, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
+import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, getStaffAthleteMap, createStaffAthleteProfile, deleteStaff, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
-import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown, Dumbbell } from 'lucide-react'
+import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown, Dumbbell, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 function planLabel(p: string) {
@@ -167,8 +168,8 @@ function MakeAthleteModal({ coach, onClose, onSaved }: {
     else setError(res.error ?? 'Falha ao criar o perfil de atleta.')
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-sm font-bold text-foreground">Tornar também atleta</h2>
@@ -198,14 +199,16 @@ function MakeAthleteModal({ coach, onClose, onSaved }: {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
-// Editar treinador/admin: renomear + redefinir senha temporária
-function EditCoachModal({ coach, onClose, onSaved }: {
-  coach: CoachRow; onClose: () => void; onSaved: () => void
+// Editar treinador/admin: renomear + redefinir senha temporária + excluir
+function EditCoachModal({ coach, currentUserId, onClose, onSaved, onDeleted }: {
+  coach: CoachRow; currentUserId: string; onClose: () => void; onSaved: () => void; onDeleted: () => void
 }) {
+  const isSelf = coach.id === currentUserId
   const [name, setName] = useState(coach.full_name ?? '')
   const [savingName, setSavingName] = useState(false)
   const [nameSaved, setNameSaved] = useState(false)
@@ -215,6 +218,17 @@ function EditCoachModal({ coach, onClose, onSaved }: {
   const [resetDone, setResetDone] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true); setError(null)
+    const res = await deleteStaff(coach.id)
+    setDeleting(false)
+    if (res.ok) onDeleted()
+    else setError(res.error ?? 'Falha ao excluir o treinador')
+  }
 
   async function saveName() {
     setSavingName(true); setError(null)
@@ -237,10 +251,10 @@ function EditCoachModal({ coach, onClose, onSaved }: {
     setCopied(true); setTimeout(() => setCopied(false), 2000)
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card">
           <h2 className="text-sm font-bold text-foreground">Editar acesso</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
@@ -296,9 +310,40 @@ function EditCoachModal({ coach, onClose, onSaved }: {
           {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
 
           <button onClick={onClose} className="w-full py-2.5 border border-border text-sm font-semibold text-muted-foreground rounded-lg hover:bg-secondary">Fechar</button>
+
+          {/* Zona de perigo: excluir treinador */}
+          {!isSelf && (
+            <div className="pt-4 border-t border-border">
+              {!confirmDelete ? (
+                <button onClick={() => { setConfirmDelete(true); setError(null) }}
+                  className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir treinador
+                </button>
+              ) : (
+                <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-3">
+                  <p className="text-xs font-bold text-red-300 mb-1">Excluir {coach.full_name ?? coach.email}?</p>
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                    Remove o login e o acesso desta pessoa. Se ela tiver atletas, reatribua-os a outro treinador antes. Não pode ser desfeito.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors">
+                      {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                      className="px-3 py-2 border border-border text-xs font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -488,7 +533,8 @@ export default function AdminPage() {
         <CreateAccessModal variant="staff" canCreateStaff onClose={() => setShowCreate(false)} onSaved={load} />
       )}
       {editing && (
-        <EditCoachModal coach={editing} onClose={() => setEditing(null)} onSaved={load} />
+        <EditCoachModal coach={editing} currentUserId={user?.id ?? ''} onClose={() => setEditing(null)} onSaved={load}
+          onDeleted={() => { setEditing(null); load() }} />
       )}
       {makingAthlete && (
         <MakeAthleteModal coach={makingAthlete} onClose={() => setMakingAthlete(null)}
