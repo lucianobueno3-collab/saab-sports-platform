@@ -68,6 +68,15 @@ describe('extractBodyCompFromText', () => {
     expect(comp.weight_kg).toBeNull()
     expect(comp.body_fat_pct).toBeNull()
   })
+
+  it('extrai laudo InBody (peso, %gordura calculado, massa muscular)', () => {
+    // trecho real de um laudo InBody120 (sem rótulos junto dos números)
+    const text = '[InBody120] 65,7 ( ) 45,1~55,2 (kg) 17,8 ( ) 12,1~14,8 (kg) 6,73 ( ) 4,18~5,10 (kg) 19,1 ( ) 9,6~19,3 (kg) 109,4 ( ) 68,2~92,3 (kg) 51,8 34,7~42,4 kg 90,3 61,4~75,0 kcal Ver.LookinBody120'
+    const comp = extractBodyCompFromText(text)
+    expect(comp.weight_kg).toBe(109.4)
+    expect(comp.muscle_mass_kg).toBe(51.8)
+    expect(comp.body_fat_pct).toBe(17.5)
+  })
 })
 
 describe('extractDateFromText', () => {

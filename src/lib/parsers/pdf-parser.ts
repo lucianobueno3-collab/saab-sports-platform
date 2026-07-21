@@ -182,14 +182,19 @@ export function extractExamsFromText(text: string): ExtractedExam[] {
   return results
 }
 
-/** Primeira data dd/mm/aaaa encontrada no texto (data do laudo) */
+/** Data mais recente (dd/mm/aaaa ou dd.mm.aaaa) encontrada no texto do laudo. */
 export function extractDateFromText(text: string): string | null {
-  const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(text)
-  if (!m) return null
-  const [, d, mo, y] = m
-  const day = parseInt(d), month = parseInt(mo)
-  if (day < 1 || day > 31 || month < 1 || month > 12) return null
-  return `${y}-${mo}-${d}`
+  const re = /(\d{2})[./](\d{2})[./](\d{4})/g
+  let best: string | null = null
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const [, d, mo, y] = m
+    const day = parseInt(d), month = parseInt(mo)
+    if (day < 1 || day > 31 || month < 1 || month > 12) continue
+    const iso = `${y}-${mo}-${d}`
+    if (!best || iso > best) best = iso   // mantém a data mais recente
+  }
+  return best
 }
 
 // ─── Composição corporal ─────────────────────────────────────────────────────
@@ -202,7 +207,38 @@ export interface ExtractedBodyComp {
   visceral_fat: number | null
 }
 
+/**
+ * Laudos InBody (InBody120/270/570/770 · LookinBody) não trazem os rótulos
+ * junto dos números no texto — usam o layout gráfico. Extraímos pela sequência
+ * fixa da "Composição Corporal": Água, Proteína, Minerais, Massa de Gordura, Peso.
+ */
+function extractInBody(text: string): ExtractedBodyComp | null {
+  if (!/inbody|lookinbody/i.test(text)) return null
+
+  // 5 valores no formato "X ( ) low~high (kg)" na ordem padrão do InBody
+  const compRe = /([\d.,]+)\s*\(\s*\)\s*[\d.,]+\s*~\s*[\d.,]+\s*\(kg\)/gi
+  const vals: number[] = []
+  let m: RegExpExecArray | null
+  while ((m = compRe.exec(text)) !== null) { const v = parseBrNumber(m[1]); if (!isNaN(v)) vals.push(v) }
+  if (vals.length < 5) return null
+
+  const fatMass = vals[3]
+  const weight = vals[4]
+  const bodyFat = weight > 0 && !isNaN(fatMass) ? Math.round((fatMass / weight) * 1000) / 10 : null
+
+  // Massa Muscular Esquelética: 1º "X low~high kg" (sem "( )"), faixa plausível
+  let smm: number | null = null
+  const smmRe = /([\d.,]+)\s+[\d.,]+\s*~\s*[\d.,]+\s*kg/gi
+  let ms: RegExpExecArray | null
+  while ((ms = smmRe.exec(text)) !== null) { const v = parseBrNumber(ms[1]); if (v >= 20 && v <= 90) { smm = v; break } }
+
+  return { weight_kg: weight, body_fat_pct: bodyFat, muscle_mass_kg: smm, bone_mass_kg: null, visceral_fat: null }
+}
+
 export function extractBodyCompFromText(text: string): ExtractedBodyComp {
+  const inbody = extractInBody(text)
+  if (inbody && inbody.weight_kg != null) return inbody
+
   const find = (patterns: RegExp[]): number | null => {
     for (const p of patterns) {
       const m = p.exec(text)
