@@ -964,6 +964,47 @@ export async function updateAthleteCoach(athleteId: string, coachId: string): Pr
   return true
 }
 
+/**
+ * Mapa user_id → athlete_id dos logins que já têm perfil de atleta.
+ * Usado no admin para saber quais treinadores também treinam (conta dupla).
+ */
+export async function getStaffAthleteMap(): Promise<Record<string, string>> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').select('id, user_id').not('user_id', 'is', null)
+  if (error) { console.error('[queries]', error.message); return {} }
+  const map: Record<string, string> = {}
+  for (const r of (data ?? []) as { id: string; user_id: string | null }[]) {
+    if (r.user_id) map[r.user_id] = r.id
+  }
+  return map
+}
+
+/**
+ * Cria um perfil de atleta para um treinador/admin existente (conta dupla:
+ * o mesmo login passa a treinar também). Usa a RLS "athletes: admin all",
+ * então só um admin consegue inserir. Por padrão o treinador é o próprio
+ * responsável (pode ser reatribuído depois no vínculo treinador ⇄ atleta).
+ */
+export async function createStaffAthleteProfile(
+  coach: { id: string; full_name: string | null; email: string },
+  primarySport: string,
+): Promise<{ ok: boolean; error?: string; athleteId?: string }> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').insert({
+    coach_id: coach.id,
+    user_id: coach.id,
+    full_name: coach.full_name?.trim() || coach.email,
+    email: coach.email,
+    primary_sport: primarySport,
+  }).select('id').single()
+  if (error) {
+    console.error('[queries]', error.message)
+    const dup = /duplicate|uq_athlete_email/i.test(error.message)
+    return { ok: false, error: dup ? 'Este treinador já tem perfil de atleta.' : error.message }
+  }
+  return { ok: true, athleteId: data.id }
+}
+
 /** Admin edita o nome de um treinador/admin (RLS: admin atualiza qualquer profile). */
 export async function updateCoachName(coachId: string, fullName: string): Promise<boolean> {
   const sb = createClient()
