@@ -284,49 +284,53 @@ function AthleteDetailContent() {
     <div>
       <Topbar title={athlete.full_name} subtitle={`${sportLabel(athlete.primary_sport)}`} />
 
-      <div className="p-6 space-y-5">
-        <div className="flex items-center gap-4">
-          <Link href="/athletes" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Voltar
-          </Link>
-          <div className="flex items-center gap-3 ml-2 flex-1">
-            <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary">
+      <div className="p-4 md:p-6 space-y-5">
+        <Link href="/athletes" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Voltar
+        </Link>
+
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          {/* Identidade */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-base font-bold text-primary flex-shrink-0">
               {initials}
             </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-foreground">{athlete.full_name}</h2>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-foreground leading-tight">{athlete.full_name}</h2>
                 <StatusBadge status={status} />
               </div>
-              <p className="text-xs text-muted-foreground">{athlete.email ?? sportLabel(athlete.primary_sport)}</p>
+              <p className="text-xs text-muted-foreground truncate">{athlete.email ?? sportLabel(athlete.primary_sport)}</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/report?id=${id}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
-              >
-                <FileText className="w-3.5 h-3.5" /> Ver Relatório
-              </Link>
-              <button
-                onClick={handleWhatsApp}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
-              >
-                <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
-              </button>
-              <button
-                onClick={handleSharePortal}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#a78bfa] border border-[#a78bfa]/30 bg-[#a78bfa]/10 rounded-lg hover:bg-[#a78bfa]/20 transition-colors"
-              >
-                <Share2 className="w-3.5 h-3.5" /> {portalCopied ? 'Link copiado!' : 'Portal do Aluno'}
-              </button>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Editar Perfil
-              </button>
-            </div>
+          </div>
+
+          {/* Ações: grid 2x2 no celular, linha no desktop */}
+          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:flex-shrink-0">
+            <Link
+              href={`/report?id=${id}`}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" /> Ver Relatório
+            </Link>
+            <button
+              onClick={handleWhatsApp}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
+            >
+              <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
+            </button>
+            <button
+              onClick={handleSharePortal}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#a78bfa] border border-[#a78bfa]/30 bg-[#a78bfa]/10 rounded-lg hover:bg-[#a78bfa]/20 transition-colors"
+            >
+              <Share2 className="w-3.5 h-3.5" /> {portalCopied ? 'Copiado!' : 'Portal do Aluno'}
+            </button>
+            <button
+              onClick={() => setEditOpen(true)}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" /> Editar Perfil
+            </button>
           </div>
         </div>
 
