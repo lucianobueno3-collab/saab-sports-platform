@@ -13,6 +13,7 @@ async function routeAfterLogin() {
 }
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<'coach' | 'athlete'>('coach')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -54,8 +55,26 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-7">
+        {/* Seletor de perfil (visual) — o login é o mesmo; o app leva você à sua área */}
+        <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-5">
+          <button type="button" onClick={() => setMode('coach')}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode === 'coach' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            Sou treinador
+          </button>
+          <button type="button" onClick={() => setMode('athlete')}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode === 'athlete' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            Sou atleta
+          </button>
+        </div>
+
         <h2 className="text-lg font-bold text-foreground mb-1">Entrar</h2>
-        <p className="text-xs text-muted-foreground mb-6">Acesse com o e-mail e a senha que você recebeu.</p>
+        <p className="text-xs text-muted-foreground mb-6">
+          {mode === 'athlete'
+            ? 'Acesse com o e-mail e a senha que seu treinador te enviou.'
+            : 'Acesse com o e-mail e a senha da sua conta.'}
+        </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -96,7 +115,9 @@ export default function LoginPage() {
         </form>
 
         <p className="text-[11px] text-muted-foreground mt-5 text-center">
-          Não tem acesso? Peça ao seu treinador ou administrador para criar o seu.
+          {mode === 'athlete'
+            ? 'Não tem acesso? Peça ao seu treinador para criar o seu.'
+            : 'Não tem acesso? Peça ao administrador para criar o seu.'}
         </p>
       </div>
     </div>

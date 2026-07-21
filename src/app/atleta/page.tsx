@@ -123,7 +123,10 @@ export default function AtletaPage() {
             {a.full_name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
           </div>
           <div>
-            <p className="text-base font-black text-foreground leading-tight">{a.full_name}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-base font-black text-foreground leading-tight">{a.full_name}</p>
+              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: '#e8001c22', color: '#e8001c' }}>Atleta</span>
+            </div>
             <p className="text-xs text-muted-foreground">{sportLabel(a.primary_sport)} · Meu treino</p>
           </div>
         </div>
