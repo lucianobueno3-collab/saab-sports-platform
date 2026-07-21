@@ -792,6 +792,25 @@ export async function adminCreateUser(input: AdminCreateUserInput): Promise<{ ok
   }
 }
 
+/** Extrai o texto de um PDF do storage no servidor (Node) — robusto em qualquer navegador. */
+export async function extractPdfViaServer(storagePath: string): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'sem sessão' }
+  try {
+    const res = await fetch('/api/extract-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ storage_path: storagePath }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `erro ${res.status}` }
+    return { ok: true, text: data.text ?? '' }
+  } catch {
+    return { ok: false, error: 'rede' }
+  }
+}
+
 /** Atletas do treinador/admin que ainda não têm acesso ao app (sem user_id). */
 export async function getAthletesWithoutAccess(): Promise<{ id: string; full_name: string; email: string | null }[]> {
   const sb = createClient()

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getAthleteDocuments, type AthleteDocumentRow } from '@/lib/supabase/queries'
+import { getAthleteDocuments, extractPdfViaServer, type AthleteDocumentRow } from '@/lib/supabase/queries'
 import { extractPdfText, ocrPdf, hasExtractableText } from '@/lib/parsers/pdf-parser'
 import { FileText, Upload, Download, X, Loader2, Sparkles, ScanText } from 'lucide-react'
 
@@ -70,17 +70,23 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
     setError(null)
     setExtracting(doc.id)
     try {
+      // 1) Servidor (Node) — robusto em qualquer navegador.
+      const srv = await extractPdfViaServer(doc.storage_path)
+      if (srv.ok) {
+        if (srv.text && hasExtractableText(srv.text)) { onExtractText(srv.text, doc.file_name) }
+        else { setOcrDoc(doc) } // PDF sem camada de texto (digitalizado) → OCR
+        setExtracting(null)
+        return
+      }
+
+      // 2) Fallback: leitura no navegador (pdfjs) caso o servidor falhe.
       const sb = createClient()
       const { data, error: dlErr } = await sb.storage.from('athlete-docs').download(doc.storage_path)
       if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
       const file = new File([data], doc.file_name, { type: 'application/pdf' })
       const text = await extractPdfText(file)
-      if (!hasExtractableText(text)) {
-        // PDF sem camada de texto (digitalizado) → oferece OCR
-        setOcrDoc(doc)
-      } else {
-        onExtractText(text, doc.file_name)
-      }
+      if (!hasExtractableText(text)) setOcrDoc(doc)
+      else onExtractText(text, doc.file_name)
     } catch (e) {
       setError(`Falha ao ler o PDF: ${e instanceof Error ? e.message : String(e)}`)
     }
