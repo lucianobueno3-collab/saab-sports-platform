@@ -8,9 +8,10 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound
 } from 'lucide-react'
-import { getAthletesForAlerts, getMyRole } from '@/lib/supabase/queries'
+import { getAthletesForAlerts, getMyAccess } from '@/lib/supabase/queries'
+import { setViewMode } from '@/lib/view-mode'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
 import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
@@ -30,8 +31,14 @@ export function Sidebar() {
   const { user, signOut } = useAuth()
   const [criticalCount, setCriticalCount] = useState(0)
   const [role, setRole] = useState<string | null>(null)
+  const [dual, setDual] = useState(false)
   const isAdmin = role === 'admin'
   const roleLabel = role === 'admin' ? 'Admin' : 'Treinador'
+
+  function switchToAthlete() {
+    setViewMode('athlete')
+    window.location.href = '/atleta'
+  }
 
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
@@ -59,7 +66,7 @@ export function Sidebar() {
 
   useEffect(() => {
     refreshCriticalCount()
-    getMyRole().then(setRole).catch(() => {})
+    getMyAccess().then(({ role, dual }) => { setRole(role); setDual(dual) }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
@@ -120,6 +127,17 @@ export function Sidebar() {
           </>
         )}
       </nav>
+
+      {/* Conta dupla: alternar para a visão de atleta */}
+      {dual && (
+        <div className="px-3 pt-3">
+          <button onClick={switchToAthlete}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors border border-border">
+            <UserRound className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1 text-left">Ver como atleta</span>
+          </button>
+        </div>
+      )}
 
       {/* User */}
       <div className="px-3 py-4 border-t border-border">

@@ -2,14 +2,23 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getMyAthleteId } from '@/lib/supabase/queries'
+import { getMyAccess } from '@/lib/supabase/queries'
+import { setViewMode, type ViewMode } from '@/lib/view-mode'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import Image from 'next/image'
 
-// destino pós-login conforme o papel (atleta → área do atleta)
-async function routeAfterLogin() {
-  const athleteId = await getMyAthleteId()
-  window.location.href = athleteId ? '/atleta' : '/dashboard'
+// Destino pós-login conforme o papel. Contas normais vão direto para a sua
+// área. Contas duplas (treinador que também é atleta) seguem a escolha do
+// seletor "Sou treinador / Sou atleta".
+async function routeAfterLogin(mode: ViewMode) {
+  const { isCoach, athleteId, dual } = await getMyAccess()
+  if (dual) {
+    setViewMode(mode)
+    window.location.href = mode === 'athlete' ? '/atleta' : '/dashboard'
+    return
+  }
+  if (athleteId) { setViewMode('athlete'); window.location.href = '/atleta' }
+  else { setViewMode('coach'); window.location.href = isCoach ? '/dashboard' : '/atleta' }
 }
 
 export default function LoginPage() {
@@ -39,11 +48,11 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    await routeAfterLogin()
+    await routeAfterLogin(mode)
   }
 
   if (needsPassword) {
-    return <ForcePasswordChange onDone={routeAfterLogin} />
+    return <ForcePasswordChange onDone={() => routeAfterLogin(mode)} />
   }
 
   return (
@@ -55,7 +64,7 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-7">
-        {/* Seletor de perfil (visual) — o login é o mesmo; o app leva você à sua área */}
+        {/* Seletor de perfil — o login é o mesmo; para quem é treinador E atleta, decide qual área abrir */}
         <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-5">
           <button type="button" onClick={() => setMode('coach')}
             className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
