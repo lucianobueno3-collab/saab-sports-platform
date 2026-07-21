@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react
 import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
-  getActivitiesRange, bulkCreatePlannedWorkouts,
+  getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin,
   getWorkoutLibrary, createLibraryWorkout,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
 } from '@/lib/supabase/queries'
@@ -98,6 +98,13 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   async function toggleDone(p: PlannedWorkoutRow) {
     await updatePlannedWorkout(p.id, { completed: !p.completed })
     setDetail(d => (d && d.id === p.id ? { ...d, completed: !p.completed } : d))
+    load()
+  }
+  // Concluir treino (atleta): marca feito + registra dificuldade e relato
+  async function completeWorkout(p: PlannedWorkoutRow, rpe: number, notes: string) {
+    await updatePlannedWorkout(p.id, { completed: true })
+    await submitWorkoutCheckin(athleteId, { rpe, notes: notes.trim() || null })
+    setDetail(d => (d && d.id === p.id ? { ...d, completed: true } : d))
     load()
   }
   async function remove(id: string) { await deletePlannedWorkout(id); load() }
@@ -220,8 +227,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                           <info.icon className="w-3 h-3 flex-shrink-0" style={{ color: info.color }} />
                           <span className="text-[11px] font-bold text-foreground truncate flex-1">{p.title}</span>
                           {p.completed
-                            ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" onClick={e => { e.stopPropagation(); toggleDone(p) }} />
-                            : <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" onClick={e => { e.stopPropagation(); toggleDone(p) }} />}
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" onClick={e => { e.stopPropagation(); if (readOnly) setDetail(p); else toggleDone(p) }} />
+                            : <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" onClick={e => { e.stopPropagation(); if (readOnly) setDetail(p); else toggleDone(p) }} />}
                         </div>
                         {(p.planned_duration_min || p.planned_tss) && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">{[fmtDur(p.planned_duration_min), p.planned_tss ? `${p.planned_tss} TSS` : null].filter(Boolean).join(' · ')}</p>
@@ -318,7 +325,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       )}
 
       {detail && (
-        <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)} onToggleDone={() => toggleDone(detail)} />
+        <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)}
+          onComplete={(rpe, notes) => completeWorkout(detail, rpe, notes)}
+          onReopen={() => toggleDone(detail)} />
       )}
 
       {showPlan && (
@@ -330,12 +339,23 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   )
 }
 
-// Detalhe do treino (visão do atleta, somente leitura + marcar feito)
-function WorkoutDetailModal({ workout, onClose, onToggleDone }: {
-  workout: PlannedWorkoutRow; onClose: () => void; onToggleDone: () => void
+// Detalhe do treino (visão do atleta): leitura + concluir com check-in simples
+function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
+  workout: PlannedWorkoutRow; onClose: () => void
+  onComplete: (rpe: number, notes: string) => Promise<void>; onReopen: () => void
 }) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
+  const [rpe, setRpe] = useState(6)
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  async function finish() {
+    setSaving(true)
+    await onComplete(rpe, notes)
+    setSaving(false)
+    onClose()
+  }
+  const rpeColor = rpe <= 3 ? '#4ade80' : rpe <= 6 ? '#fbbf24' : rpe <= 8 ? '#ff8c00' : '#ef4444'
   const info = sportInfo(workout.sport)
   const dateLabel = new Date(workout.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
   if (!mounted) return null
@@ -370,13 +390,38 @@ function WorkoutDetailModal({ workout, onClose, onToggleDone }: {
               <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{workout.description}</p>
             </div>
           )}
-          <button onClick={onToggleDone}
-            className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors"
-            style={workout.completed
-              ? { background: 'var(--panel)', color: 'var(--muted-foreground)', border: '1px solid var(--border)' }
-              : { background: '#00d084', color: '#fff' }}>
-            {workout.completed ? <><Circle className="w-4 h-4" /> Marcar como não feito</> : <><CheckCircle2 className="w-4 h-4" /> Marcar como feito</>}
-          </button>
+          {workout.completed ? (
+            <div className="rounded-xl p-4 space-y-3" style={{ background: '#00d0840d', border: '1px solid #00d08433' }}>
+              <p className="text-sm font-bold text-[#00d084] flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Treino concluído</p>
+              <button onClick={() => { onReopen(); onClose() }}
+                className="text-xs text-muted-foreground hover:text-foreground underline">Marcar como não feito</button>
+            </div>
+          ) : (
+            <div className="rounded-xl p-4 space-y-4" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+              <p className="text-sm font-bold text-foreground">Concluir treino</p>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-medium text-foreground">Dificuldade do treino</label>
+                  <span className="text-lg font-black tabular-nums" style={{ color: rpeColor }}>{rpe}</span>
+                </div>
+                <input type="range" min={0} max={10} value={rpe} onChange={e => setRpe(parseInt(e.target.value))}
+                  className="w-full" style={{ accentColor: rpeColor }} />
+                <p className="text-[11px] text-muted-foreground mt-0.5">0 = muito leve · 10 = máximo</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-foreground mb-1.5">Como foi? Dores / feedback (opcional)</label>
+                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
+                  placeholder="ex: senti o treino bom, leve incômodo no joelho direito no fim..."
+                  className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground outline-none focus:border-primary resize-none" />
+              </div>
+              <button onClick={finish} disabled={saving}
+                className="w-full py-3 rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60"
+                style={{ background: '#00d084', color: '#fff' }}>
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {saving ? 'Salvando...' : 'Concluir treino'}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>,
