@@ -8,6 +8,12 @@
 [build.environment]
   NODE_VERSION = "22"
 
+# pdfjs-dist precisa ficar como node_module externo (não empacotado pelo esbuild)
+# para o worker interno (carregado por caminho relativo) resolver na Function.
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pdfjs-dist"]
+
 [[headers]]
   for = "/api/*"
   [headers.values]
