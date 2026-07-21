@@ -3,14 +3,23 @@
 import { useEffect, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import { useAuth } from '@/context/auth-context'
-import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
+import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, getStaffAthleteMap, createStaffAthleteProfile, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
-import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown } from 'lucide-react'
+import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown, Dumbbell } from 'lucide-react'
 import Link from 'next/link'
 
 function planLabel(p: string) {
   return p === 'elite' ? 'Elite' : p === 'pro' ? 'Pro' : 'Starter'
 }
+
+const SPORTS: { value: string; label: string }[] = [
+  { value: 'running', label: 'Corrida' },
+  { value: 'cycling', label: 'Ciclismo' },
+  { value: 'triathlon', label: 'Triathlon' },
+  { value: 'swimming', label: 'Natação' },
+  { value: 'duathlon', label: 'Duathlon' },
+  { value: 'other', label: 'Outro' },
+]
 
 function genTempPassword() {
   const a = 'abcdefghijkmnpqrstuvwxyz', n = '23456789'
@@ -18,12 +27,14 @@ function genTempPassword() {
   return pick(a, 1).toUpperCase() + pick(a, 3) + pick(n, 3)
 }
 
-function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, onEdit, loading }: {
+function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, onEdit, onMakeAthlete, athleteId, loading }: {
   coach: CoachRow
   currentUserId: string
   onToggleActive: (id: string, active: boolean) => void
   onToggleRole: (id: string, role: 'coach' | 'admin') => void
   onEdit: (coach: CoachRow) => void
+  onMakeAthlete: (coach: CoachRow) => void
+  athleteId: string | null
   loading: string | null
 }) {
   const isSelf = coach.id === currentUserId
@@ -118,6 +129,74 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, onEdit,
             </button>
           </div>
         )}
+
+        {/* Também é atleta (conta dupla) */}
+        <div className={`flex items-center gap-2 mt-2 pt-2 ${isSelf ? '' : 'border-t border-border'}`}>
+          {athleteId ? (
+            <Link href={`/athletes/detail?id=${athleteId}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg flex-1 justify-center transition-colors"
+              style={{ background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }}>
+              <Dumbbell className="w-3 h-3" /> Também é atleta — ver perfil
+            </Link>
+          ) : (
+            <button onClick={() => onMakeAthlete(coach)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg flex-1 justify-center transition-colors"
+              style={{ background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }}>
+              <Dumbbell className="w-3 h-3" /> Tornar também atleta
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Cria o perfil de atleta de um treinador/admin (conta dupla).
+function MakeAthleteModal({ coach, onClose, onSaved }: {
+  coach: CoachRow; onClose: () => void; onSaved: () => void
+}) {
+  const [sport, setSport] = useState('running')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function confirm() {
+    setSaving(true); setError(null)
+    const res = await createStaffAthleteProfile(coach, sport)
+    setSaving(false)
+    if (res.ok) onSaved()
+    else setError(res.error ?? 'Falha ao criar o perfil de atleta.')
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-sm font-bold text-foreground">Tornar também atleta</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">{coach.full_name ?? coach.email}</span> passa a ter também um perfil de atleta, usando o mesmo login. No login, o seletor <span className="font-semibold">Sou treinador / Sou atleta</span> decide qual área abrir.
+          </p>
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Modalidade principal</label>
+            <select value={sport} onChange={e => setSport(e.target.value)}
+              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary appearance-none">
+              {SPORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={confirm} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg transition-colors">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Dumbbell className="w-4 h-4" />} Criar perfil de atleta
+            </button>
+            <button onClick={onClose} disabled={saving}
+              className="px-4 py-2.5 border border-border text-sm font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -233,6 +312,8 @@ export default function AdminPage() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [editing, setEditing] = useState<CoachRow | null>(null)
+  const [makingAthlete, setMakingAthlete] = useState<CoachRow | null>(null)
+  const [staffAthlete, setStaffAthlete] = useState<Record<string, string>>({})
   const [links, setLinks] = useState<AthleteLinkRow[]>([])
   const [reassigning, setReassigning] = useState<string | null>(null)
 
@@ -242,7 +323,9 @@ export default function AdminPage() {
     if (role !== 'admin') { setNotAdmin(true); setLoading(false); return }
     setIsAdmin(true)
     setCoaches(coachesList)
-    setLinks(await getAthletesForAdmin())
+    const [linkRows, staffMap] = await Promise.all([getAthletesForAdmin(), getStaffAthleteMap()])
+    setLinks(linkRows)
+    setStaffAthlete(staffMap)
     setLoading(false)
   }
 
@@ -350,6 +433,8 @@ export default function AdminPage() {
                 onToggleActive={handleToggleActive}
                 onToggleRole={handleToggleRole}
                 onEdit={setEditing}
+                onMakeAthlete={setMakingAthlete}
+                athleteId={staffAthlete[coach.id] ?? null}
                 loading={actionLoading}
               />
             ))}
@@ -404,6 +489,10 @@ export default function AdminPage() {
       )}
       {editing && (
         <EditCoachModal coach={editing} onClose={() => setEditing(null)} onSaved={load} />
+      )}
+      {makingAthlete && (
+        <MakeAthleteModal coach={makingAthlete} onClose={() => setMakingAthlete(null)}
+          onSaved={() => { setMakingAthlete(null); load() }} />
       )}
     </div>
   )
