@@ -58,7 +58,6 @@ function AthleteDetailContent() {
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
   const [activeTab, setActiveTab] = useState<'performance' | 'calendario' | 'saude' | 'forca' | 'nutricao' | 'provas' | 'evolucao'>('performance')
-  const [portalCopied, setPortalCopied] = useState(false)
   const [checkins, setCheckins] = useState<CheckinRow[]>([])
 
   useEffect(() => {
@@ -161,19 +160,6 @@ function AthleteDetailContent() {
     setAthlete({ ...athlete, ...updates } as AthleteRow)
     setSaving(false)
     setEditOpen(false)
-  }
-
-  function handleSharePortal() {
-    if (!athlete?.portal_token) { window.alert('Token do portal não encontrado. Rode a migration 012.'); return }
-    // barra final antes do ?token — o site usa export estático com trailingSlash,
-    // e sem a barra o Netlify redireciona /portal → /portal/ e derruba o token
-    const url = `${window.location.origin}/portal/?token=${athlete.portal_token}`
-    // instruções para o atleta: link direto (sem senha) OU login no app com o código
-    const msg = `Olá! Seu acesso ao SAAB Sports:\n\n📲 Acesso rápido (sem senha):\n${url}\n\n🔐 Ou crie seu login no app (${window.location.origin}) escolhendo "Sou atleta" e usando o código de acesso:\n${athlete.portal_token}`
-    navigator.clipboard.writeText(msg).then(() => {
-      setPortalCopied(true)
-      setTimeout(() => setPortalCopied(false), 2500)
-    }).catch(() => window.prompt('Copie e envie ao atleta:', msg))
   }
 
   function handleWhatsApp() {
@@ -298,14 +284,18 @@ function AthleteDetailContent() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-lg font-bold text-foreground leading-tight">{athlete.full_name}</h2>
+                <button onClick={() => setEditOpen(true)} title="Editar perfil"
+                  className="group flex items-center gap-1.5 text-lg font-bold text-foreground leading-tight hover:text-primary transition-colors">
+                  {athlete.full_name}
+                  <Pencil className="w-3.5 h-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
+                </button>
                 <StatusBadge status={status} />
               </div>
               <p className="text-xs text-muted-foreground truncate">{athlete.email ?? sportLabel(athlete.primary_sport)}</p>
             </div>
           </div>
 
-          {/* Ações: grid 2x2 no celular, linha no desktop */}
+          {/* Ações */}
           <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:flex-shrink-0">
             <Link
               href={`/report?id=${id}`}
@@ -318,18 +308,6 @@ function AthleteDetailContent() {
               className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
             >
               <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
-            </button>
-            <button
-              onClick={handleSharePortal}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#a78bfa] border border-[#a78bfa]/30 bg-[#a78bfa]/10 rounded-lg hover:bg-[#a78bfa]/20 transition-colors"
-            >
-              <Share2 className="w-3.5 h-3.5" /> {portalCopied ? 'Copiado!' : 'Portal do Aluno'}
-            </button>
-            <button
-              onClick={() => setEditOpen(true)}
-              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
-            >
-              <Pencil className="w-3.5 h-3.5" /> Editar Perfil
             </button>
           </div>
         </div>
