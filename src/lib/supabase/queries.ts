@@ -891,6 +891,14 @@ export async function submitCheckinSelf(athleteId: string, c: {
   return true
 }
 
+/** Check-in simples ao concluir um treino: dificuldade (rpe) + relato livre. */
+export async function submitWorkoutCheckin(athleteId: string, c: { rpe: number | null; notes: string | null }): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athlete_checkins').insert({ athlete_id: athleteId, rpe: c.rpe, notes: c.notes, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
 /** Registro de treino de força do atleta logado */
 export async function logStrengthSelf(athleteId: string, log: {
   program_id: string | null; day_label: string | null; rpe: number | null

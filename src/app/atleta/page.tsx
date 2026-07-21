@@ -3,7 +3,7 @@
 import { useEffect, useState, type ElementType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getMyAthleteId, getMyRole, getAthleteSelf, submitCheckinSelf, updatePlannedWorkout,
+  getMyAthleteId, getMyRole, getAthleteSelf, updatePlannedWorkout,
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
@@ -30,24 +30,6 @@ function fmtDuration(s: number) {
   return h > 0 ? `${h}h${m.toString().padStart(2, '0')}` : `${m}min`
 }
 
-function ScaleInput({ label, value, onChange, hint, invert }: {
-  label: string; value: number; onChange: (v: number) => void; hint?: string; invert?: boolean
-}) {
-  const good = invert ? value <= 3 : value >= 7
-  const bad = invert ? value >= 7 : value <= 3
-  const color = good ? '#4ade80' : bad ? '#ef4444' : '#fbbf24'
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <label className="text-sm font-medium text-foreground">{label}</label>
-        <span className="text-lg font-black tabular-nums" style={{ color }}>{value}</span>
-      </div>
-      <input type="range" min={0} max={10} value={value} onChange={e => onChange(parseInt(e.target.value))}
-        className="w-full" style={{ accentColor: color }} />
-      {hint && <p className="text-[11px] text-muted-foreground mt-0.5">{hint}</p>}
-    </div>
-  )
-}
 
 type SelfData = Awaited<ReturnType<typeof getAthleteSelf>>
 type AthleteProfile = {
@@ -67,16 +49,6 @@ export default function AtletaPage() {
   const [needsPassword, setNeedsPassword] = useState(false)
   const [canCoach, setCanCoach] = useState(false)
   const [tab, setTab] = useState<AtletaTab>('calendario')
-
-  // check-in
-  const [rpe, setRpe] = useState(5)
-  const [soreness, setSoreness] = useState(3)
-  const [sleepQ, setSleepQ] = useState(7)
-  const [mood, setMood] = useState(7)
-  const [painLoc, setPainLoc] = useState('')
-  const [notes, setNotes] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -101,14 +73,6 @@ export default function AtletaPage() {
 
   async function reload() {
     if (athleteId) setData(await getAthleteSelf(athleteId))
-  }
-
-  async function submitCheckin() {
-    if (!athleteId) return
-    setSubmitting(true)
-    const ok = await submitCheckinSelf(athleteId, { rpe, soreness, sleep_quality: sleepQ, mood, pain_location: painLoc || null, notes: notes || null })
-    setSubmitting(false)
-    if (ok) { setSubmitted(true); setPainLoc(''); setNotes(''); reload(); setTimeout(() => setSubmitted(false), 2500) }
   }
 
   async function logout() {
@@ -204,31 +168,8 @@ export default function AtletaPage() {
         <Activity className="w-8 h-8" style={{ color: formColor }} />
       </div>
 
-      {/* Check-in */}
-      <div className="bg-card border border-border rounded-2xl p-5">
-        <h2 className="text-sm font-bold text-foreground mb-1">Como você está hoje?</h2>
-        <p className="text-xs text-muted-foreground mb-4">Seu check-in ajuda o treinador a ajustar seus treinos.</p>
-        <div className="space-y-4">
-          <ScaleInput label="Esforço do último treino (RPE)" value={rpe} onChange={setRpe} hint="0 = muito leve · 10 = máximo" invert />
-          <ScaleInput label="Dor muscular" value={soreness} onChange={setSoreness} hint="0 = nenhuma · 10 = muito dolorido" invert />
-          <ScaleInput label="Qualidade do sono" value={sleepQ} onChange={setSleepQ} hint="0 = péssimo · 10 = excelente" />
-          <ScaleInput label="Humor / energia" value={mood} onChange={setMood} hint="0 = exausto · 10 = ótimo" />
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Local de dor (opcional)</label>
-            <input value={painLoc} onChange={e => setPainLoc(e.target.value)} placeholder="ex: joelho direito, lombar"
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground outline-none focus:border-primary" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-foreground mb-1.5">Observações (opcional)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Como se sentiu, algo diferente..."
-              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground outline-none focus:border-primary resize-none" />
-          </div>
-          <button onClick={submitCheckin} disabled={submitting}
-            className="w-full py-3 bg-primary text-white text-sm font-bold rounded-xl disabled:opacity-60 flex items-center justify-center gap-2">
-            {submitted ? <><CheckCircle2 className="w-4 h-4" /> Check-in enviado!</> : submitting ? 'Enviando...' : 'Enviar check-in de hoje'}
-          </button>
-        </div>
-      </div>
+      {/* O check-in agora é feito ao concluir cada treino no Calendário
+          (dificuldade + relato), então não fica mais aqui. */}
 
       {/* Treino de força */}
       {athleteId && data.program && (
