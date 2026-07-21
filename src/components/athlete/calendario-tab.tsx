@@ -37,9 +37,13 @@ function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDat
 function ymd(d: Date) { return d.toLocaleDateString('en-CA') } // YYYY-MM-DD local
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 function fmtDur(min?: number | null) { if (!min) return null; const h = Math.floor(min / 60), m = min % 60; return h > 0 ? `${h}h${m ? m + '' : ''}` : `${m}min` }
+function startOfMonth(d: Date) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0, 0, 0, 0); return x }
+function addMonths(d: Date, n: number) { return startOfMonth(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 
 export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athleteId: string; defaultSport?: string }) {
+  const [view, setView] = useState<'week' | 'month'>('week')
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()))
+  const [monthAnchor, setMonthAnchor] = useState(() => startOfMonth(new Date()))
   const [planned, setPlanned] = useState<PlannedWorkoutRow[]>([])
   const [done, setDone] = useState<ActivityRow[]>([])
   const [library, setLibrary] = useState<WorkoutLibraryRow[]>([])
@@ -48,20 +52,26 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
   const [showPlan, setShowPlan] = useState(false)
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
+  const monthGridStart = useMemo(() => startOfWeek(monthAnchor), [monthAnchor])
+  const monthDays = useMemo(() => Array.from({ length: 42 }, (_, i) => addDays(monthGridStart, i)), [monthGridStart])
   const todayKey = ymd(new Date())
+
+  // Intervalo carregado conforme a visão (semana ou mês)
+  const rangeStart = view === 'week' ? weekStart : monthGridStart
+  const rangeDays = view === 'week' ? 7 : 42
 
   const load = useCallback(async () => {
     setLoading(true)
-    const from = ymd(weekStart), to = ymd(addDays(weekStart, 6))
-    const fromISO = new Date(weekStart).toISOString()
-    const toISO = new Date(addDays(weekStart, 7)).toISOString()
+    const from = ymd(rangeStart), to = ymd(addDays(rangeStart, rangeDays - 1))
+    const fromISO = new Date(rangeStart).toISOString()
+    const toISO = new Date(addDays(rangeStart, rangeDays)).toISOString()
     const [p, a, lib] = await Promise.all([
       getPlannedWorkouts(athleteId, from, to),
       getActivitiesRange(athleteId, fromISO, toISO),
       getWorkoutLibrary(),
     ])
     setPlanned(p); setDone(a); setLibrary(lib); setLoading(false)
-  }, [athleteId, weekStart])
+  }, [athleteId, rangeStart, rangeDays])
 
   useEffect(() => { load() }, [load])
 
@@ -86,18 +96,27 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
   async function remove(id: string) { await deletePlannedWorkout(id); load() }
 
   const weekLabel = `${weekStart.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} – ${addDays(weekStart, 6).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}`
+  const monthLabel = monthAnchor.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  const goPrev = () => view === 'week' ? setWeekStart(w => addDays(w, -7)) : setMonthAnchor(m => addMonths(m, -1))
+  const goNext = () => view === 'week' ? setWeekStart(w => addDays(w, 7)) : setMonthAnchor(m => addMonths(m, 1))
+  const goToday = () => { setWeekStart(startOfWeek(new Date())); setMonthAnchor(startOfMonth(new Date())) }
 
   return (
     <div className="space-y-4">
       {/* Barra de navegação + resumo */}
       <div className="flex flex-wrap items-center gap-3 justify-between">
         <div className="flex items-center gap-2">
-          <button onClick={() => setWeekStart(w => addDays(w, -7))} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronLeft className="w-4 h-4" /></button>
-          <button onClick={() => setWeekStart(startOfWeek(new Date()))} className="px-3 py-2 rounded-lg bg-secondary text-xs font-bold text-foreground">Hoje</button>
-          <button onClick={() => setWeekStart(w => addDays(w, 7))} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronRight className="w-4 h-4" /></button>
-          <div className="flex items-center gap-1.5 ml-1 text-sm font-bold text-foreground"><CalendarDays className="w-4 h-4 text-primary" />{weekLabel}</div>
+          <button onClick={goPrev} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronLeft className="w-4 h-4" /></button>
+          <button onClick={goToday} className="px-3 py-2 rounded-lg bg-secondary text-xs font-bold text-foreground">Hoje</button>
+          <button onClick={goNext} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronRight className="w-4 h-4" /></button>
+          <div className="flex items-center gap-1.5 ml-1 text-sm font-bold text-foreground capitalize"><CalendarDays className="w-4 h-4 text-primary" />{view === 'week' ? weekLabel : monthLabel}</div>
         </div>
-        <div className="flex items-center gap-2 text-[11px]">
+        <div className="flex items-center gap-2 text-[11px] flex-wrap">
+          {/* Seletor Semana/Mês */}
+          <div className="flex gap-0.5 p-0.5 rounded-lg bg-background border border-border">
+            <button onClick={() => setView('week')} className="px-2.5 py-1 rounded-md font-bold transition-colors" style={view === 'week' ? { background: '#7c3aed', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Semana</button>
+            <button onClick={() => setView('month')} className="px-2.5 py-1 rounded-md font-bold transition-colors" style={view === 'month' ? { background: '#7c3aed', color: '#fff' } : { color: 'var(--muted-foreground)' }}>Mês</button>
+          </div>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#0088ff18', color: '#0088ff' }}>Planejado {plannedTss} TSS</span>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#00d08418', color: '#00d084' }}>Realizado {doneTss.toFixed(0)} TSS</span>
           <button onClick={() => setShowPlan(true)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary/90">
@@ -108,7 +127,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
-      ) : (
+      ) : view === 'week' ? (
         <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
           {days.map(d => {
             const key = ymd(d)
@@ -168,6 +187,54 @@ export function CalendarioTab({ athleteId, defaultSport = 'running' }: { athlete
               </div>
             )
           })}
+        </div>
+      ) : (
+        /* ─── Visão de MÊS ─── */
+        <div>
+          <div className="grid grid-cols-7 gap-1 mb-1">
+            {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold text-muted-foreground py-1">{w}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-1">
+            {monthDays.map(d => {
+              const key = ymd(d)
+              const isToday = key === todayKey
+              const inMonth = d.getMonth() === monthAnchor.getMonth()
+              const dayPlanned = plannedByDay[key] ?? []
+              const dayDone = doneByDay[key] ?? []
+              const items = [
+                ...dayPlanned.map(p => ({ kind: 'p' as const, p })),
+                ...dayDone.map(a => ({ kind: 'd' as const, a })),
+              ]
+              return (
+                <div key={key} onClick={() => setModal({ date: key })}
+                  className="rounded-lg p-1 min-h-[84px] flex flex-col cursor-pointer transition-colors hover:border-primary/40"
+                  style={{ background: 'var(--card)', border: `1px solid ${isToday ? '#7c3aed' : 'var(--border)'}`, opacity: inMonth ? 1 : 0.45 }}>
+                  <span className={`text-[10px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
+                  <div className="space-y-0.5 mt-0.5 flex-1 overflow-hidden">
+                    {items.slice(0, 3).map((it, i) => {
+                      if (it.kind === 'p') {
+                        const info = sportInfo(it.p.sport)
+                        return (
+                          <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); setModal({ date: key, edit: it.p }) }}
+                            className="w-full text-left rounded px-1 py-0.5 truncate text-[9px] font-semibold flex items-center gap-1"
+                            style={{ background: info.color + '22', color: info.color }}>
+                            {it.p.completed && <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0" />}
+                            <span className="truncate">{it.p.title}</span>
+                          </button>
+                        )
+                      }
+                      return (
+                        <div key={'d' + it.a.id} className="w-full rounded px-1 py-0.5 truncate text-[9px] flex items-center gap-1" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>
+                          <CheckCircle2 className="w-2.5 h-2.5 flex-shrink-0 text-[#00d084]" /><span className="truncate">{it.a.name ?? sportInfo(it.a.sport).label}</span>
+                        </div>
+                      )
+                    })}
+                    {items.length > 3 && <span className="text-[9px] text-muted-foreground/70 px-1">+{items.length - 3}</span>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 
