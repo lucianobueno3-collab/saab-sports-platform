@@ -211,6 +211,16 @@ export async function createLibraryWorkout(w: Omit<WorkoutLibraryRow, 'id'>): Pr
   return true
 }
 
+export async function bulkCreateLibraryWorkouts(rows: Omit<WorkoutLibraryRow, 'id'>[]): Promise<number> {
+  if (rows.length === 0) return 0
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return 0
+  const { data, error } = await sb.from('workout_library').insert(rows.map(r => ({ ...r, coach_id: user.id }))).select('id')
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return data?.length ?? rows.length
+}
+
 export async function updateLibraryWorkout(id: string, patch: Partial<Omit<WorkoutLibraryRow, 'id'>>): Promise<boolean> {
   const sb = createClient()
   const { error } = await sb.from('workout_library').update(patch).eq('id', id)
