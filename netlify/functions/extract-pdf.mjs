@@ -30,13 +30,22 @@ export default async (req) => {
     const caller = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${token}` } } })
     const { data: { user } } = await caller.auth.getUser()
     if (!user) return json({ error: 'Sessão inválida' }, 401)
-    const { data: prof } = await caller.from('profiles').select('role').eq('id', user.id).single()
-    if (!prof || (prof.role !== 'admin' && prof.role !== 'coach')) return json({ error: 'Sem permissão' }, 403)
 
     let body
     try { body = await req.json() } catch { return json({ error: 'Requisição inválida' }, 400) }
     const storagePath = String(body.storage_path ?? '')
     if (!storagePath) return json({ error: 'storage_path obrigatório' }, 400)
+
+    // Treinador/admin leem qualquer documento; o atleta lê os próprios
+    // (arquivos na pasta {athlete_id}/...). Assim a leitura no servidor —
+    // robusta em qualquer navegador — vale também para o atleta.
+    const { data: prof } = await caller.from('profiles').select('role').eq('id', user.id).single()
+    let allowed = !!prof && (prof.role === 'admin' || prof.role === 'coach')
+    if (!allowed) {
+      const { data: myAthleteId } = await caller.rpc('my_athlete_id')
+      if (myAthleteId && storagePath.split('/')[0] === myAthleteId) allowed = true
+    }
+    if (!allowed) return json({ error: 'Sem permissão' }, 403)
 
     const admin = createClient(URL_, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } })
     const { data: file, error: dlErr } = await admin.storage.from('athlete-docs').download(storagePath)
