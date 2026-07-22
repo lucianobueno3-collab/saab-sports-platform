@@ -79,6 +79,14 @@ export type ActivityRow = {
   athlete_comments?: string | null
   planned_duration_seconds?: number | null
   planned_distance_meters?: number | null
+  laps?: ActivityLap[] | null
+}
+
+export type ActivityLap = {
+  i: number; duration_s: number; distance_m: number | null
+  avg_hr: number | null; max_hr: number | null
+  avg_power: number | null; max_power?: number | null
+  avg_speed_mps: number | null; avg_cadence: number | null
 }
 
 export type DailyMetricRow = {
@@ -274,7 +282,7 @@ export async function deleteLibraryWorkout(id: string): Promise<boolean> {
   return true
 }
 
-const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters'
+const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters, laps'
 
 /** Atividades realizadas num intervalo de datas (para o calendário: planejado x realizado). */
 export async function getActivitiesRange(athleteId: string, fromISO: string, toISO: string): Promise<ActivityRow[]> {

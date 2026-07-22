@@ -362,7 +362,8 @@ export default function ImportPage() {
               intensity_factor: act.intensity_factor ?? null, tss: act.tss ?? null, tss_method: act.tss_method,
               zone_data: act.zone_data, avg_hr_bpm: act.avg_hr ?? null, max_hr_bpm: act.max_hr ?? null,
               avg_cadence_rpm: act.avg_cadence ?? null, elevation_gain_m: act.elevation_gain_m ?? null,
-              calories: act.calories ?? null, source: 'fit', external_id: uf.name, ftp_used: athlete.ftp_watts ?? null,
+              calories: act.calories ?? null, laps: act.laps ?? null,
+              source: 'fit', external_id: uf.name, ftp_used: athlete.ftp_watts ?? null,
             },
           })
         } catch (err) { totalFailed++; details.push(`✗ ${uf.name} — ${String(err)}`) }
@@ -408,36 +409,45 @@ export default function ImportPage() {
     // duplos no mesmo dia (mesma fonte) continuam sendo importados.
     const dayKey = (iso: string) => iso.slice(0, 10)
     const durTol = (d: number) => Math.max(300, d * 0.05) // 5 min ou 5%
-    type Sig = { day: string; sport: string; dur: number; source: string }
+    type Sig = { day: string; sport: string; dur: number; source: string; id?: string; hasLaps?: boolean }
     const seen: Sig[] = []
     if (candidates.length > 0) {
       const times = candidates.map(c => new Date(c.date).getTime()).filter(t => !isNaN(t))
       const minISO = new Date(Math.min(...times) - 86400000).toISOString()
       const maxISO = new Date(Math.max(...times) + 2 * 86400000).toISOString()
       const { data: existing } = await sb.from('activities')
-        .select('started_at, duration_seconds, sport, source')
+        .select('id, started_at, duration_seconds, sport, source, laps')
         .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO)
       for (const e of existing ?? []) {
-        seen.push({ day: dayKey(e.started_at as string), sport: sportToDb((e.sport as string) ?? ''), dur: (e.duration_seconds as number) ?? 0, source: (e.source as string) ?? '' })
+        seen.push({ id: e.id as string, day: dayKey(e.started_at as string), sport: sportToDb((e.sport as string) ?? ''), dur: (e.duration_seconds as number) ?? 0, source: (e.source as string) ?? '', hasLaps: Array.isArray((e as { laps?: unknown[] }).laps) })
       }
     }
-    const crossDup = (c: Candidate) => {
+    const crossMatch = (c: Candidate): Sig | undefined => {
       const day = dayKey(c.date)
-      return seen.some(s => s.source !== c.source && s.day === day && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
+      return seen.find(s => s.source !== c.source && s.day === day && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
     }
 
     // ── Inserção com dedup ────────────────────────────────────────────────
-    let dedupSkipped = 0
+    let dedupSkipped = 0, enriched = 0
     for (const c of candidates) {
-      if (crossDup(c)) { totalSkipped++; dedupSkipped++; continue }
-      let { error } = await sb.from('activities').insert(c.payload)
+      const match = crossMatch(c)
+      if (match) {
+        // FIT cobre um treino já existente (CSV): não duplica, mas aproveita os laps
+        const laps = (c.payload as { laps?: unknown[] }).laps
+        if (c.source === 'fit' && Array.isArray(laps) && laps.length && match.id && !match.hasLaps) {
+          const { error } = await sb.from('activities').update({ laps }).eq('id', match.id)
+          if (!error) { match.hasLaps = true; enriched++ }
+        }
+        totalSkipped++; dedupSkipped++; continue
+      }
+      let { data: ins, error } = await sb.from('activities').insert(c.payload).select('id').single()
       if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? '') || error.message?.includes('zone_data'))) {
-        // banco sem a migração 011/025: tenta a versão reduzida
-        if (c.base) { ({ error } = await sb.from('activities').insert(c.base)) }
+        // banco sem migração 011/025/028: tenta a versão reduzida
+        if (c.base) { ({ data: ins, error } = await sb.from('activities').insert(c.base).select('id').single()) }
         else {
-          const { zone_data: _omit, ...withoutZones } = c.payload
-          void _omit
-          ;({ error } = await sb.from('activities').insert(withoutZones))
+          const { zone_data: _z, laps: _l, ...withoutExtra } = c.payload
+          void _z; void _l
+          ;({ data: ins, error } = await sb.from('activities').insert(withoutExtra).select('id').single())
         }
       }
       if (error) {
@@ -446,10 +456,11 @@ export default function ImportPage() {
         else { totalFailed++; details.push(`✗ ${c.label} — ${error.message} (${error.code ?? ''})`) }
       } else {
         totalImported++
-        seen.push({ day: dayKey(c.date), sport: c.sport, dur: c.duration, source: c.source })
+        seen.push({ id: ins?.id as string | undefined, day: dayKey(c.date), sport: c.sport, dur: c.duration, source: c.source, hasLaps: Array.isArray((c.payload as { laps?: unknown[] }).laps) })
       }
     }
-    if (dedupSkipped > 0) details.push(`⏭ ${dedupSkipped} treino(s) já cobertos por outra fonte (mesmo dia/duração) — não duplicados`)
+    if (dedupSkipped > 0) details.push(`⏭ ${dedupSkipped} treino(s) já cobertos por outra fonte — não duplicados`)
+    if (enriched > 0) details.push(`✓ laps (tiro a tiro) adicionados a ${enriched} treino(s)`)
 
     if (totalImported > 0) {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })

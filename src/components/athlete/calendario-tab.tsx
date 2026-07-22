@@ -39,6 +39,7 @@ function ymd(d: Date) { return d.toLocaleDateString('en-CA') } // YYYY-MM-DD loc
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 function fmtDur(min?: number | null) { if (!min) return null; const h = Math.floor(min / 60), m = min % 60; return h > 0 ? `${h}h${m ? m + '' : ''}` : `${m}min` }
 function fmtPace(secPerKm: number) { const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60); return `${m}:${String(s).padStart(2, '0')}/km` }
+function fmtClock(s: number) { const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = Math.round(s % 60); return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}` : `${m}:${String(ss).padStart(2, '0')}` }
 const ZONE_COLORS = ['#3b82f6', '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d']
 function startOfMonth(d: Date) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0, 0, 0, 0); return x }
 function addMonths(d: Date, n: number) { return startOfMonth(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
@@ -570,6 +571,33 @@ function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; 
           </div>
           {hrZones && <ZoneBar label="Tempo por zona de FC" minutes={hrZones} />}
           {pwrZones && <ZoneBar label="Tempo por zona de potência" minutes={pwrZones} />}
+
+          {a.laps && a.laps.length > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Tiros / voltas ({a.laps.length})</p>
+              <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--panel-border)' }}>
+                <div className="grid text-[10px] font-bold text-muted-foreground uppercase" style={{ background: 'var(--panel)', gridTemplateColumns: '2rem 1fr 1fr 1fr 1fr' }}>
+                  <div className="px-2 py-1">#</div><div className="px-2 py-1">Tempo</div><div className="px-2 py-1">Dist.</div><div className="px-2 py-1">Ritmo/Pot.</div><div className="px-2 py-1">FC</div>
+                </div>
+                <div className="max-h-56 overflow-y-auto">
+                  {a.laps.map(l => {
+                    const pace = l.avg_speed_mps ? 1000 / l.avg_speed_mps : null
+                    const ritmo = (a.sport === 'cycling' && l.avg_power) ? `${l.avg_power} W` : pace ? fmtPace(pace) : (l.avg_power ? `${l.avg_power} W` : '—')
+                    const dist = l.distance_m != null ? (l.distance_m >= 1000 ? `${(l.distance_m / 1000).toFixed(2)} km` : `${l.distance_m} m`) : '—'
+                    return (
+                      <div key={l.i} className="grid text-[11px] border-t border-border/50" style={{ gridTemplateColumns: '2rem 1fr 1fr 1fr 1fr' }}>
+                        <div className="px-2 py-1 font-bold text-foreground">{l.i}</div>
+                        <div className="px-2 py-1 text-foreground">{fmtClock(l.duration_s)}</div>
+                        <div className="px-2 py-1 text-muted-foreground">{dist}</div>
+                        <div className="px-2 py-1 text-muted-foreground">{ritmo}</div>
+                        <div className="px-2 py-1 text-muted-foreground">{l.avg_hr ? `${l.avg_hr} bpm` : '—'}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
           {a.feeling && <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Sensação:</span> {a.feeling}</p>}
           {a.athlete_comments && <p className="text-xs text-muted-foreground whitespace-pre-line"><span className="font-semibold text-foreground">Atleta:</span> {a.athlete_comments}</p>}
         </div>
