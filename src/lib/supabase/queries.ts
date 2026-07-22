@@ -274,18 +274,28 @@ export async function deleteLibraryWorkout(id: string): Promise<boolean> {
   return true
 }
 
+const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters'
+
 /** Atividades realizadas num intervalo de datas (para o calendário: planejado x realizado). */
 export async function getActivitiesRange(athleteId: string, fromISO: string, toISO: string): Promise<ActivityRow[]> {
   const sb = createClient()
   const { data, error } = await sb.from('activities')
-    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+    .select(ACTIVITY_FULL_COLS)
     .eq('athlete_id', athleteId).gte('started_at', fromISO).lte('started_at', toISO)
     .order('started_at', { ascending: true })
-  if (error) { console.error('[queries]', error.message); return [] }
-  return (data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+  if (error) {
+    // banco sem as migrações 011/025: repete com o conjunto mínimo
+    console.error('[queries]', error.message)
+    const retry = await sb.from('activities')
+      .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+      .eq('athlete_id', athleteId).gte('started_at', fromISO).lte('started_at', toISO)
+      .order('started_at', { ascending: true })
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+  }
+  return (data ?? []) as unknown as ActivityRow[]
 }
 
-const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters'
 
 export async function getAthleteActivities(athleteId: string, limit = 10): Promise<ActivityRow[]> {
   const sb = createClient()
