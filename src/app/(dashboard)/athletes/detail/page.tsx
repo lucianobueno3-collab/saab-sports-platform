@@ -42,6 +42,31 @@ function formatDuration(seconds: number) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`
 }
 
+const ZONE_COLORS = ['#3b82f6', '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d']
+
+// Distribuição de minutos por zona (FC ou potência) importada do TP
+function ZoneMinutesBar({ label, minutes }: { label: string; minutes: number[] }) {
+  const total = minutes.reduce((s, v) => s + v, 0)
+  if (total <= 0) return null
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+      <div className="flex h-3.5 rounded overflow-hidden">
+        {minutes.map((m, i) => m > 0
+          ? <div key={i} title={`Z${i + 1}: ${m} min`} style={{ width: `${(m / total) * 100}%`, background: ZONE_COLORS[i] }} />
+          : null)}
+      </div>
+      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
+        {minutes.map((m, i) => m > 0
+          ? <span key={i} className="text-[9px] text-muted-foreground flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: ZONE_COLORS[i] }} />Z{i + 1} {m}min
+            </span>
+          : null)}
+      </div>
+    </div>
+  )
+}
+
 function AthleteDetailContent() {
   const params = useSearchParams()
   const id = params.get('id')
@@ -496,21 +521,43 @@ function AthleteDetailContent() {
 
                       {isExpanded && (
                         <div className="px-5 pb-4 pt-0 ml-8 space-y-3" style={{ background: 'var(--background)' }}>
-                          <div className="grid grid-cols-2 gap-2 pt-3">
-                            {[
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-3">
+                            {([
                               { label: 'Duração', value: formatDuration(act.duration_seconds) },
-                              { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : '—' },
-                              { label: `TSS${act.tss_method === 'hr' ? ' (via FC)' : act.tss_method === 'power' ? ' (via potência)' : ''}`, value: act.tss?.toFixed(0) ?? '—', highlight: true },
-                              { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : '—' },
-                              { label: 'NP', value: act.normalized_power ? `${act.normalized_power}W` : '—' },
-                              { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? '—' },
-                            ].map(({ label, value, highlight }) => (
+                              { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : null },
+                              { label: `TSS${act.tss_method === 'hr' ? ' (via FC)' : act.tss_method === 'power' ? ' (via potência)' : ''}`, value: act.tss?.toFixed(0) ?? null, highlight: true },
+                              { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? null },
+                              { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : null },
+                              { label: 'FC Máx', value: act.max_hr_bpm ? `${act.max_hr_bpm} bpm` : null },
+                              { label: 'Pot. Média', value: act.avg_power_watts ? `${act.avg_power_watts} W` : null },
+                              { label: 'Pot. Máx', value: act.max_power_watts ? `${act.max_power_watts} W` : null },
+                              { label: 'NP', value: act.normalized_power ? `${act.normalized_power} W` : null },
+                              { label: 'Cadência', value: act.avg_cadence_rpm ? `${act.avg_cadence_rpm}${act.max_cadence_rpm ? ` / ${act.max_cadence_rpm}` : ''} rpm` : null },
+                              { label: 'Velocidade', value: act.velocity_avg_mps ? `${(act.velocity_avg_mps * 3.6).toFixed(1)} km/h` : null },
+                              { label: 'Torque', value: act.avg_torque_nm ? `${act.avg_torque_nm} Nm` : null },
+                              { label: 'Energia', value: act.energy_kj ? `${act.energy_kj} kJ` : null },
+                              { label: 'RPE', value: act.rpe != null ? `${act.rpe}` : null },
+                              { label: 'Sensação', value: act.feeling ?? null },
+                            ].filter(t => t.value != null) as { label: string; value: string; highlight?: boolean }[]).map(({ label, value, highlight }) => (
                               <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
                                 <p className={`text-sm font-bold mt-0.5 ${highlight ? 'text-[#ffa800]' : 'text-foreground'}`}>{value}</p>
                               </div>
                             ))}
                           </div>
+                          {act.hr_zone_minutes && act.hr_zone_minutes.some(m => m > 0) && (
+                            <ZoneMinutesBar label="Tempo por zona de FC" minutes={act.hr_zone_minutes} />
+                          )}
+                          {act.pwr_zone_minutes && act.pwr_zone_minutes.some(m => m > 0) && (
+                            <ZoneMinutesBar label="Tempo por zona de potência" minutes={act.pwr_zone_minutes} />
+                          )}
+                          {(act.workout_description || act.coach_comments || act.athlete_comments) && (
+                            <div className="space-y-1.5">
+                              {act.workout_description && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Treino:</span> {act.workout_description}</p>}
+                              {act.coach_comments && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Coach:</span> {act.coach_comments}</p>}
+                              {act.athlete_comments && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Atleta:</span> {act.athlete_comments}</p>}
+                            </div>
+                          )}
                           {act.zone_data && act.zone_data.seconds?.length > 0 && (
                             <ActivityZones
                               zoneData={act.zone_data}
