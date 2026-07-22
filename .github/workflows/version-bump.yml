@@ -1,9 +1,12 @@
 name: Auto version bump
 
-# A cada merge na main, sobe a versão em package.json automaticamente.
-# Nível: patch por padrão; use "#minor" ou "#major" na mensagem do merge
-# para subir minor/major. O carimbo de data/hora do deploy já é gerado no
-# build (next.config.ts), então aqui só cuidamos do número da versão.
+# A cada merge na main, sobe a versao em package.json automaticamente.
+# Nivel: patch por padrao. Para minor/major, inclua o marcador entre
+# colchetes no TITULO do PR (vira o assunto do commit de squash):
+#   [bump-minor]  ou  [bump-major]
+# So o assunto (primeira linha) e inspecionado, para o texto do corpo do PR
+# nunca disparar um bump por engano. O carimbo de data/hora do deploy ja e
+# gerado no build (next.config.ts); aqui so cuidamos do numero da versao.
 
 on:
   push:
@@ -32,14 +35,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Definir nível do bump
+      - name: Definir nivel do bump
         id: level
         env:
           MSG: ${{ github.event.head_commit.message }}
         run: |
-          if echo "$MSG" | grep -qiE '#major'; then
+          # Só o assunto (primeira linha) conta — evita falso-positivo do corpo.
+          SUBJECT=$(printf '%s\n' "$MSG" | head -n1)
+          if printf '%s' "$SUBJECT" | grep -qiF '[bump-major]'; then
             echo "level=major" >> "$GITHUB_OUTPUT"
-          elif echo "$MSG" | grep -qiE '#minor'; then
+          elif printf '%s' "$SUBJECT" | grep -qiF '[bump-minor]'; then
             echo "level=minor" >> "$GITHUB_OUTPUT"
           else
             echo "level=patch" >> "$GITHUB_OUTPUT"
