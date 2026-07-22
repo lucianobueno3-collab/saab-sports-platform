@@ -8,6 +8,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { createClient } from '@/lib/supabase/client'
 import { getMyAccess } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
+import { VersionTag } from '@/components/ui/version-tag'
 import { useAuth } from '@/context/auth-context'
 
 // Barra de marca fixa no topo, só no celular (a sidebar cobre o desktop).
@@ -93,6 +94,7 @@ export function MobileHeader() {
                 className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-primary hover:bg-secondary transition-colors">
                 <LogOut className="w-4 h-4" /> Sair da conta
               </button>
+              <VersionTag className="text-[10px] text-muted-foreground/50 mt-2 px-3" />
             </div>
           </div>
         </>

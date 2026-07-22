@@ -16,6 +16,7 @@ import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
+import { VersionTag } from '@/components/ui/version-tag'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save } from 'lucide-react'
 
 function sportLabel(s: string) {
@@ -225,7 +226,10 @@ export default function AtletaPage() {
         <MyDataForm athleteId={athleteId} profile={profile} onSaved={p => setProfile(p)} />
       )}
 
-      <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
+      <div className="text-center pt-2 space-y-0.5">
+        <p className="text-[10px] text-muted-foreground/60">Saab Sports Performance Platform</p>
+        <VersionTag className="text-[10px] text-muted-foreground/50" />
+      </div>
     </div>
   )
 }

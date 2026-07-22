@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { getMyAccess } from '@/lib/supabase/queries'
 import { setViewMode, type ViewMode } from '@/lib/view-mode'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
+import { VersionTag } from '@/components/ui/version-tag'
 import Image from 'next/image'
 
 // Destino pós-login conforme o papel. Contas normais vão direto para a sua
@@ -129,6 +130,8 @@ export default function LoginPage() {
             : 'Não tem acesso? Peça ao administrador para criar o seu.'}
         </p>
       </div>
+
+      <VersionTag className="text-[10px] text-muted-foreground/50 text-center mt-4" />
     </div>
   )
 }
