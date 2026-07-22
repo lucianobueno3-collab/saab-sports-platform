@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type DragEvent } from 'react
 import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
-  getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin,
+  getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
   getWorkoutLibrary, createLibraryWorkout,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
 } from '@/lib/supabase/queries'
@@ -71,6 +71,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     const from = ymd(rangeStart), to = ymd(addDays(rangeStart, rangeDays - 1))
     const fromISO = new Date(rangeStart).toISOString()
     const toISO = new Date(addDays(rangeStart, rangeDays)).toISOString()
+    // cruza planejado x realizado antes de carregar (idempotente)
+    await matchPlannedActivities(athleteId, from, to).catch(() => {})
     const [p, a, lib] = await Promise.all([
       getPlannedWorkouts(athleteId, from, to),
       getActivitiesRange(athleteId, fromISO, toISO),
@@ -86,11 +88,16 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     for (const p of planned) (m[p.date] ??= []).push(p)
     return m
   }, [planned])
+  // atividades já vinculadas a um treino planejado (mostradas junto do planejado)
+  const linkedActivityIds = useMemo(() => new Set(planned.map(p => p.activity_id).filter(Boolean) as string[]), [planned])
+  const activityById = useMemo(() => new Map(done.map(a => [a.id, a] as const)), [done])
+  const realizedOf = (p: PlannedWorkoutRow) => (p.activity_id ? activityById.get(p.activity_id) : undefined)
+  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.tss != null ? `${a.tss.toFixed(0)} TSS` : null].filter(Boolean).join(' · ')
   const doneByDay = useMemo(() => {
     const m: Record<string, ActivityRow[]> = {}
-    for (const a of done) { const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
+    for (const a of done) { if (linkedActivityIds.has(a.id)) continue; const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
     return m
-  }, [done])
+  }, [done, linkedActivityIds])
 
   // Resumo da semana
   const plannedTss = planned.reduce((s, p) => s + (p.planned_tss ?? 0), 0)
@@ -231,8 +238,11 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                         : <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>Ver</span>}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
+                      <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
                     </p>
+                    {realizedOf(p) && (
+                      <p className="text-[11px] mt-0.5 font-semibold" style={{ color: '#00d084' }}>Realizado: {realizedLine(realizedOf(p)!)}</p>
+                    )}
                     {p.structure && p.structure.length > 0 && (
                       <div className="mt-2"><StructureBar structure={p.structure} height={12} /></div>
                     )}
@@ -356,6 +366,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                         </div>
                         {(p.planned_duration_min || p.planned_tss) && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">{[fmtDur(p.planned_duration_min), p.planned_tss ? `${p.planned_tss} TSS` : null].filter(Boolean).join(' · ')}</p>
+                        )}
+                        {realizedOf(p) && (
+                          <p className="text-[10px] mt-0.5 font-semibold flex items-center gap-1" style={{ color: '#00d084' }}><CheckCircle2 className="w-2.5 h-2.5" /> {realizedLine(realizedOf(p)!)}</p>
                         )}
                         {p.structure && p.structure.length > 0 && <div className="mt-1"><StructureBar structure={p.structure} height={6} /></div>}
                         {p.description && !(p.structure && p.structure.length) && <p className="text-[10px] text-muted-foreground/80 mt-0.5 line-clamp-2">{p.description}</p>}

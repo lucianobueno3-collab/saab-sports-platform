@@ -148,16 +148,34 @@ export type PlannedWorkoutRow = {
   planned_tss: number | null
   completed: boolean
   structure: import('@/lib/workout-structure').WorkoutStructure | null
+  activity_id?: string | null
 }
 
 /** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
 export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
   const sb = createClient()
+  const cols = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, activity_id'
   const { data, error } = await sb.from('planned_workouts')
-    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+    .select(cols)
     .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
-  if (error) { console.error('[queries]', error.message); return [] }
+  if (error) {
+    // banco sem a migração 027 (activity_id): repete sem a coluna
+    console.error('[queries]', error.message)
+    const retry = await sb.from('planned_workouts')
+      .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+      .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []) as PlannedWorkoutRow[]
+  }
   return (data ?? []) as PlannedWorkoutRow[]
+}
+
+/** Cruza treinos planejados com as atividades importadas (mesmo dia + modalidade). */
+export async function matchPlannedActivities(athleteId: string, from: string, to: string): Promise<number> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('match_planned_activities', { p_athlete: athleteId, p_from: from, p_to: to })
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return (data as number) ?? 0
 }
 
 export type PlannedWorkoutInput = {
