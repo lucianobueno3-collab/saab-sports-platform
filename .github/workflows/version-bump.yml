@@ -1,0 +1,54 @@
+name: Auto version bump
+
+# A cada merge na main, sobe a versão em package.json automaticamente.
+# Nível: patch por padrão; use "#minor" ou "#major" na mensagem do merge
+# para subir minor/major. O carimbo de data/hora do deploy já é gerado no
+# build (next.config.ts), então aqui só cuidamos do número da versão.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    # Evita laço infinito: não roda no próprio commit de release.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configurar git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Definir nível do bump
+        id: level
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          if echo "$MSG" | grep -qiE '#major'; then
+            echo "level=major" >> "$GITHUB_OUTPUT"
+          elif echo "$MSG" | grep -qiE '#minor'; then
+            echo "level=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "level=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Subir versão e commitar
+        run: |
+          npm version "${{ steps.level.outputs.level }}" --no-git-tag-version
+          VER=$(node -p "require('./package.json').version")
+          git add package.json package-lock.json
+          git commit -m "chore(release): v$VER"
+          git push origin main
