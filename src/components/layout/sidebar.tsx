@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { getAthletesForAlerts, getMyAccess } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
+import { VersionTag } from '@/components/ui/version-tag'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
 import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
@@ -155,6 +156,7 @@ export function Sidebar() {
           </div>
           <LogOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         </button>
+        <VersionTag className="text-[10px] text-muted-foreground/50 mt-2 px-1" />
       </div>
     </aside>
   )
