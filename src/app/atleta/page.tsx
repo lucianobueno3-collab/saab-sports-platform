@@ -3,7 +3,7 @@
 import { useEffect, useState, type ElementType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getMyAthleteId, getMyRole, getAthleteSelf, updatePlannedWorkout,
+  getMyAthleteId, getMyRole, getAthleteSelf, updatePlannedWorkout, uploadAvatar,
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
@@ -17,7 +17,7 @@ import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -38,6 +38,7 @@ type AthleteProfile = {
   ftp_watts: number | null; ftp_run_watts: number | null
   lthr_bpm: number | null; lthr_bike_bpm: number | null; lthr_run_bpm: number | null; lthr_swim_bpm: number | null
   vo2max_ml_kg_min: number | null
+  avatar_url: string | null; full_name: string | null
 }
 type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'provas' | 'evolucao' | 'dados'
 
@@ -64,7 +65,7 @@ export default function AtletaPage() {
       // conta dupla (treinador que também é atleta): habilita voltar ao painel
       getMyRole().then(r => setCanCoach(r === 'coach' || r === 'admin')).catch(() => {})
       const { data: prof } = await sb.from('athletes')
-        .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min')
+        .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min, avatar_url, full_name')
         .eq('id', id).single()
       if (prof) setProfile(prof as AthleteProfile)
       setData(await getAthleteSelf(id))
@@ -128,12 +129,14 @@ export default function AtletaPage() {
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-black" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }}>
-            {a.full_name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
-          </div>
+          <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Editar meus dados">
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt={a.full_name} className="w-full h-full object-cover" />
+              : (profile?.full_name ?? a.full_name).split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+          </button>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-base font-black text-foreground leading-tight">{a.full_name}</p>
+              <p className="text-base font-black text-foreground leading-tight">{profile?.full_name ?? a.full_name}</p>
               <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: '#e8001c22', color: '#e8001c' }}>Atleta</span>
             </div>
             <p className="text-xs text-muted-foreground">{sportLabel(a.primary_sport)} · Meu treino</p>
@@ -292,6 +295,34 @@ function MyDataForm({ athleteId, profile, onSaved }: {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Foto + nome
+  const [name, setName] = useState(profile?.full_name ?? '')
+  const [avatar, setAvatar] = useState(profile?.avatar_url ?? null)
+  const [uploading, setUploading] = useState(false)
+  const [savingName, setSavingName] = useState(false)
+
+  async function changePhoto(file: File) {
+    setUploading(true); setError(null)
+    const { data: { user } } = await sb.auth.getUser()
+    if (!user) { setUploading(false); setError('Sessão expirada.'); return }
+    const up = await uploadAvatar(user.id, file)
+    if (!up.ok || !up.url) { setUploading(false); setError(up.error ?? 'Falha ao enviar a foto.'); return }
+    const { error } = await sb.from('athletes').update({ avatar_url: up.url }).eq('id', athleteId)
+    setUploading(false)
+    if (error) { setError(error.message); return }
+    setAvatar(up.url)
+    onSaved({ ...(profile ?? {}), avatar_url: up.url } as AthleteProfile)
+  }
+
+  async function saveName() {
+    if (!name.trim()) return
+    setSavingName(true); setError(null)
+    const { error } = await sb.from('athletes').update({ full_name: name.trim() }).eq('id', athleteId)
+    setSavingName(false)
+    if (error) { setError(error.message); return }
+    onSaved({ ...(profile ?? {}), full_name: name.trim() } as AthleteProfile)
+  }
+
   const num = (s: string) => (s.trim() === '' ? null : Number(s))
   const fields: { key: keyof typeof v; label: string; hint?: string; step?: string }[] = [
     { key: 'weight_kg', label: 'Peso (kg)', step: '0.1' },
@@ -324,7 +355,37 @@ function MyDataForm({ athleteId, profile, onSaved }: {
   const inputCls = 'w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary'
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-5 max-w-2xl">
+    <div className="space-y-5 max-w-2xl">
+    {/* Foto + nome */}
+    <div className="bg-card border border-border rounded-2xl p-5">
+      <h2 className="text-sm font-bold text-foreground mb-4">Foto e nome</h2>
+      <div className="flex items-center gap-4">
+        <label className="relative w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-lg font-black cursor-pointer flex-shrink-0"
+          style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Trocar foto">
+          {avatar
+            ? <img src={avatar} alt="" className="w-full h-full object-cover" />
+            : (name || '?').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+          <span className="absolute inset-x-0 bottom-0 h-6 flex items-center justify-center" style={{ background: '#00000066' }}>
+            {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Camera className="w-3.5 h-3.5 text-white" />}
+          </span>
+          <input type="file" accept="image/*" className="hidden" disabled={uploading}
+            onChange={e => { const f = e.target.files?.[0]; if (f) changePhoto(f) }} />
+        </label>
+        <div className="flex-1 min-w-0">
+          <label className="block text-xs font-medium text-muted-foreground mb-1.5">Nome</label>
+          <div className="flex gap-2">
+            <input value={name} onChange={e => setName(e.target.value)} className={inputCls} />
+            <button onClick={saveName} disabled={savingName || !name.trim()}
+              className="px-4 rounded-lg bg-secondary text-foreground text-xs font-bold disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0">
+              {savingName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />} Salvar
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground mt-1.5">Toque na foto para trocar (JPG/PNG).</p>
+        </div>
+      </div>
+    </div>
+
+    <div className="bg-card border border-border rounded-2xl p-5">
       <h2 className="text-sm font-bold text-foreground mb-1">Meus dados físicos</h2>
       <p className="text-xs text-muted-foreground mb-4">Mantenha seus números atualizados — eles deixam os cálculos de treino mais precisos para você e seu treinador.</p>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -343,6 +404,7 @@ function MyDataForm({ athleteId, profile, onSaved }: {
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <CheckCircle2 className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         {saved ? 'Salvo!' : saving ? 'Salvando...' : 'Salvar meus dados'}
       </button>
+    </div>
     </div>
   )
 }
