@@ -17,7 +17,7 @@ import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -50,6 +50,7 @@ export default function AtletaPage() {
   const [needsPassword, setNeedsPassword] = useState(false)
   const [canCoach, setCanCoach] = useState(false)
   const [tab, setTab] = useState<AtletaTab>('calendario')
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     (async () => {
@@ -106,18 +107,24 @@ export default function AtletaPage() {
   const formColor = tsb == null ? '#888' : tsb >= 5 ? '#4ade80' : tsb >= -10 ? '#fbbf24' : '#ef4444'
   const formLabel = tsb == null ? '—' : tsb >= 5 ? 'Descansado' : tsb >= -10 ? 'Equilibrado' : 'Fadigado'
 
-  const tabs: { key: AtletaTab; label: string; icon: ElementType }[] = [
+  // Menu inferior (estilo TrainingPeaks): 4 principais + "Mais"
+  type TabDef = { key: AtletaTab; label: string; icon: ElementType }
+  const primaryTabs: TabDef[] = [
     { key: 'calendario', label: 'Calendário', icon: CalendarDays },
     { key: 'inicio', label: 'Hoje', icon: Activity },
     { key: 'saude', label: 'Saúde', icon: Heart },
+    { key: 'evolucao', label: 'Evolução', icon: Target },
+  ]
+  const moreTabs: TabDef[] = [
     { key: 'nutricao', label: 'Nutrição', icon: Utensils },
     { key: 'provas', label: 'Provas', icon: Trophy },
-    { key: 'evolucao', label: 'Evolução', icon: Target },
     { key: 'dados', label: 'Meus dados', icon: UserRound },
   ]
+  const moreActive = moreTabs.some(t => t.key === tab)
+  function go(k: AtletaTab) { setTab(k); setMoreOpen(false) }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-5 safe-top safe-bottom">
+    <div className="max-w-5xl mx-auto px-4 py-6 pb-28 space-y-5 safe-top">
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -140,18 +147,6 @@ export default function AtletaPage() {
           )}
           <button onClick={logout} className="p-2 rounded-lg hover:bg-secondary transition-colors" title="Sair"><LogOut className="w-4 h-4 text-muted-foreground" /></button>
         </div>
-      </div>
-
-      {/* Navegação por abas — a ficha completa do atleta */}
-      <div className="flex gap-1 p-1 rounded-xl overflow-x-auto" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
-        {tabs.map(({ key, label, icon: Icon }) => (
-          <button key={key} onClick={() => setTab(key)}
-            className="flex items-center gap-1.5 flex-1 justify-center py-2 px-3 rounded-lg text-xs font-semibold transition-all whitespace-nowrap"
-            style={tab === key ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
-            <Icon className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{label}</span>
-          </button>
-        ))}
       </div>
 
       {tab === 'calendario' && athleteId && (
@@ -230,6 +225,49 @@ export default function AtletaPage() {
         <p className="text-[10px] text-muted-foreground/60">Saab Sports Performance Platform</p>
         <VersionTag className="text-[10px] text-muted-foreground/50" />
       </div>
+
+      {/* Folha "Mais" (abas secundárias) */}
+      {moreOpen && (
+        <>
+          <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setMoreOpen(false)} />
+          <div className="fixed left-0 right-0 bottom-0 z-[61] bg-card border-t border-border rounded-t-2xl p-3 safe-bottom">
+            <div className="flex items-center justify-between px-2 pb-2">
+              <p className="text-sm font-bold text-foreground">Mais</p>
+              <button onClick={() => setMoreOpen(false)} className="p-1.5 rounded-lg hover:bg-secondary"><X className="w-4 h-4 text-muted-foreground" /></button>
+            </div>
+            {moreTabs.map(({ key, label, icon: Icon }) => (
+              <button key={key} onClick={() => go(key)}
+                className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium text-foreground hover:bg-secondary transition-colors"
+                style={tab === key ? { background: 'var(--secondary)' } : undefined}>
+                <Icon className="w-4 h-4 text-muted-foreground" /> {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Menu inferior fixo (estilo TrainingPeaks) */}
+      <nav className="fixed left-0 right-0 bottom-0 z-40 bg-card/95 backdrop-blur border-t border-border safe-bottom">
+        <div className="max-w-5xl mx-auto flex items-stretch">
+          {primaryTabs.map(({ key, label, icon: Icon }) => {
+            const active = tab === key
+            return (
+              <button key={key} onClick={() => go(key)}
+                className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors"
+                style={{ color: active ? '#e8001c' : 'var(--muted-foreground)' }}>
+                <Icon className="w-5 h-5" />
+                <span className="text-[10px] font-semibold">{label}</span>
+              </button>
+            )
+          })}
+          <button onClick={() => setMoreOpen(true)}
+            className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors"
+            style={{ color: moreActive ? '#e8001c' : 'var(--muted-foreground)' }}>
+            <MoreHorizontal className="w-5 h-5" />
+            <span className="text-[10px] font-semibold">Mais</span>
+          </button>
+        </div>
+      </nav>
     </div>
   )
 }
