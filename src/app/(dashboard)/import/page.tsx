@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { parseFitFile } from '@/lib/parsers/fit-parser'
 import { parseTPCSV } from '@/lib/parsers/csv-parser'
+import { matchPlannedActivities } from '@/lib/supabase/queries'
 import JSZip from 'jszip'
 
 type FileStatus = 'idle' | 'parsing' | 'success' | 'error'
@@ -454,6 +455,14 @@ export default function ImportPage() {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })
       if (rpcErr) details.push(`⚠ PMC: ${rpcErr.message}`)
       else details.push(`✓ PMC recalculado`)
+      // cruza os treinos importados com o que estava planejado no calendário
+      try {
+        const days = candidates.map(c => c.date.slice(0, 10)).sort()
+        if (days.length) {
+          const matched = await matchPlannedActivities(selectedAthlete, days[0], days[days.length - 1])
+          if (matched > 0) details.push(`✓ ${matched} treino(s) cruzado(s) com o planejado`)
+        }
+      } catch { /* não crítico */ }
     }
 
     try {
