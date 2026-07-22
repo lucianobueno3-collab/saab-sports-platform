@@ -51,6 +51,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ date: string; edit?: PlannedWorkoutRow } | null>(null)
   const [detail, setDetail] = useState<PlannedWorkoutRow | null>(null)
+  const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
   const [showLib, setShowLib] = useState(false)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
@@ -137,6 +138,129 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const goPrev = () => view === 'week' ? setWeekStart(w => addDays(w, -7)) : setMonthAnchor(m => addMonths(m, -1))
   const goNext = () => view === 'week' ? setWeekStart(w => addDays(w, 7)) : setMonthAnchor(m => addMonths(m, 1))
   const goToday = () => { setWeekStart(startOfWeek(new Date())); setMonthAnchor(startOfMonth(new Date())) }
+
+  // ── Visão do ATLETA: calendário com bolinhas + detalhe do dia (estilo TP) ──
+  if (readOnly) {
+    const goMonth = (delta: number) => {
+      const next = addMonths(monthAnchor, delta)
+      setMonthAnchor(next)
+      const now = new Date()
+      const isNow = next.getMonth() === now.getMonth() && next.getFullYear() === now.getFullYear()
+      setSelectedDay(isNow ? ymd(now) : ymd(next))
+    }
+    const backToToday = () => { setMonthAnchor(startOfMonth(new Date())); setSelectedDay(ymd(new Date())) }
+    const dayLabel = (key: string) => {
+      const today = ymd(new Date()); const yst = ymd(addDays(new Date(), -1)); const tmr = ymd(addDays(new Date(), 1))
+      if (key === today) return 'Hoje'
+      if (key === yst) return 'Ontem'
+      if (key === tmr) return 'Amanhã'
+      return new Date(key + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })
+    }
+    const selPlanned = plannedByDay[selectedDay] ?? []
+    const selDone = doneByDay[selectedDay] ?? []
+
+    return (
+      <div className="space-y-4">
+        {/* Navegação do mês */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-black text-foreground capitalize">
+            <CalendarDays className="w-5 h-5 text-primary" />{monthLabel}
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={() => goMonth(-1)} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronLeft className="w-4 h-4" /></button>
+            <button onClick={backToToday} className="px-3 py-2 rounded-lg bg-secondary text-xs font-bold text-foreground">Hoje</button>
+            <button onClick={() => goMonth(1)} className="p-2 rounded-lg bg-secondary text-muted-foreground hover:bg-secondary/70"><ChevronRight className="w-4 h-4" /></button>
+          </div>
+        </div>
+
+        {/* Grade do mês com bolinhas por dia */}
+        <div className="rounded-2xl p-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+          <div className="grid grid-cols-7 mb-1">
+            {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold text-muted-foreground py-1">{w[0]}</div>)}
+          </div>
+          <div className="grid grid-cols-7 gap-0.5">
+            {monthDays.map(d => {
+              const key = ymd(d)
+              const inMonth = d.getMonth() === monthAnchor.getMonth()
+              const isToday = key === todayKey
+              const isSel = key === selectedDay
+              const items = [...(plannedByDay[key] ?? []).map(p => ({ color: sportInfo(p.sport).color, done: p.completed })),
+                             ...(doneByDay[key] ?? []).map(a => ({ color: sportInfo(a.sport).color, done: true }))]
+              return (
+                <button key={key} onClick={() => setSelectedDay(key)}
+                  className="aspect-square flex flex-col items-center justify-center rounded-xl transition-colors"
+                  style={{
+                    background: isSel ? '#e8001c18' : 'transparent',
+                    border: isSel ? '1.5px solid #e8001c' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
+                    opacity: inMonth ? 1 : 0.35,
+                  }}>
+                  <span className={`text-xs font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{d.getDate()}</span>
+                  <span className="flex items-center gap-0.5 h-2 mt-0.5">
+                    {items.slice(0, 4).map((it, i) => (
+                      <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: it.color, opacity: it.done ? 1 : 0.5 }} />
+                    ))}
+                    {items.length > 4 && <span className="text-[8px] text-muted-foreground">+</span>}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Detalhe do dia selecionado */}
+        <div>
+          <p className="text-sm font-black text-foreground capitalize mb-2">
+            {dayLabel(selectedDay)} <span className="text-muted-foreground font-medium">· {new Date(selectedDay + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
+          </p>
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : (selPlanned.length === 0 && selDone.length === 0) ? (
+            <p className="text-xs text-muted-foreground rounded-xl p-4 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>Nenhum treino neste dia.</p>
+          ) : (
+            <div className="space-y-2">
+              {selPlanned.map(p => {
+                const info = sportInfo(p.sport)
+                return (
+                  <button key={p.id} onClick={() => setDetail(p)} className="w-full text-left rounded-2xl p-4"
+                    style={{ background: 'var(--card)', borderLeft: `4px solid ${p.completed ? '#00d084' : info.color}`, border: '1px solid var(--border)', borderLeftWidth: 4, borderLeftColor: p.completed ? '#00d084' : info.color }}>
+                    <div className="flex items-center gap-2">
+                      <info.icon className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
+                      <span className="text-sm font-bold text-foreground flex-1 min-w-0 truncate">{p.title}</span>
+                      {p.completed
+                        ? <CheckCircle2 className="w-5 h-5 text-[#00d084]" />
+                        : <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>Ver</span>}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
+                    </p>
+                    {p.structure && p.structure.length > 0 && (
+                      <div className="mt-2"><StructureBar structure={p.structure} height={12} /></div>
+                    )}
+                  </button>
+                )
+              })}
+              {selDone.map(a => {
+                const info = sportInfo(a.sport)
+                return (
+                  <div key={a.id} className="rounded-2xl p-4 flex items-center gap-2" style={{ background: 'var(--panel)', border: '1px dashed var(--panel-border)' }}>
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
+                    <span className="text-sm text-foreground flex-1 min-w-0 truncate">{a.name ?? info.label}</span>
+                    {a.tss != null && <span className="text-xs font-bold text-[#00d084]">{a.tss.toFixed(0)} TSS</span>}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {detail && (
+          <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)}
+            onComplete={(rpe, notes) => completeWorkout(detail, rpe, notes)}
+            onReopen={() => toggleDone(detail)} />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">
