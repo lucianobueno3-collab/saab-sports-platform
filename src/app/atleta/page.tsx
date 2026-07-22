@@ -12,7 +12,6 @@ import { StructureBar } from '@/components/athlete/structured-builder'
 import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
-import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
@@ -221,10 +220,7 @@ export default function AtletaPage() {
       {tab === 'nutricao' && athleteId && <NutricaoTab athleteId={athleteId} />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
       {tab === 'evolucao' && athleteId && (
-        <div className="space-y-6">
-          <EvolutionShowcase athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />
-          <EvolucaoTab athleteId={athleteId} />
-        </div>
+        <EvolutionShowcase athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />
       )}
       {tab === 'dados' && athleteId && (
         <MyDataForm athleteId={athleteId} profile={profile} onSaved={p => setProfile(p)} />
