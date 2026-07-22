@@ -339,105 +339,116 @@ export default function ImportPage() {
     let totalImported = 0, totalSkipped = 0, totalFailed = 0
     const details: string[] = []
 
+    // ── Reúne FIT + CSV numa lista única de candidatos ────────────────────
+    type Candidate = {
+      date: string; sport: string; duration: number; source: 'fit' | 'csv'
+      label: string; payload: Record<string, unknown>; base?: Record<string, unknown>
+    }
+    const candidates: Candidate[] = []
+
     for (const uf of readyFiles) {
       if (uf.ext === 'fit') {
         try {
           const act = await parseFitFile(uf.buffer!, athleteThresholds(athlete))
-          const payload = {
-            athlete_id: selectedAthlete,
-            name: act.name,
-            sport: sportToDb(act.sport),
-            started_at: act.date,
-            duration_seconds: act.duration_seconds,
-            distance_meters: act.distance_meters ?? null,
-            avg_power_watts: act.avg_power_watts ?? null,
-            normalized_power: act.normalized_power ?? null,
-            intensity_factor: act.intensity_factor ?? null,
-            tss: act.tss ?? null,
-            tss_method: act.tss_method,
-            zone_data: act.zone_data,
-            avg_hr_bpm: act.avg_hr ?? null,
-            max_hr_bpm: act.max_hr ?? null,
-            avg_cadence_rpm: act.avg_cadence ?? null,
-            elevation_gain_m: act.elevation_gain_m ?? null,
-            calories: act.calories ?? null,
-            source: 'fit' as const,
-            external_id: uf.name,
-            ftp_used: athlete.ftp_watts ?? null,
-          }
-          let { error } = await sb.from('activities').insert(payload)
-          if (error && (error.code === '42703' || error.message?.includes('zone_data'))) {
-            // banco sem a migração 011: importa sem as zonas para não perder o treino
-            const { zone_data: _omit, ...withoutZones } = payload
-            void _omit
-            ;({ error } = await sb.from('activities').insert(withoutZones))
-          }
-          if (error) {
-            const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
-            if (isDuplicate) { totalSkipped++; details.push(`⏭ Duplicata: ${uf.name}`) }
-            else { totalFailed++; details.push(`✗ Falhou: ${uf.name} — ${error.message} (${error.code})`) }
-          } else { totalImported++; details.push(`✓ ${uf.name}`) }
+          candidates.push({
+            date: act.date, sport: sportToDb(act.sport), duration: act.duration_seconds,
+            source: 'fit', label: uf.name,
+            payload: {
+              athlete_id: selectedAthlete, name: act.name, sport: sportToDb(act.sport),
+              started_at: act.date, duration_seconds: act.duration_seconds,
+              distance_meters: act.distance_meters ?? null,
+              avg_power_watts: act.avg_power_watts ?? null, normalized_power: act.normalized_power ?? null,
+              intensity_factor: act.intensity_factor ?? null, tss: act.tss ?? null, tss_method: act.tss_method,
+              zone_data: act.zone_data, avg_hr_bpm: act.avg_hr ?? null, max_hr_bpm: act.max_hr ?? null,
+              avg_cadence_rpm: act.avg_cadence ?? null, elevation_gain_m: act.elevation_gain_m ?? null,
+              calories: act.calories ?? null, source: 'fit', external_id: uf.name, ftp_used: athlete.ftp_watts ?? null,
+            },
+          })
         } catch (err) { totalFailed++; details.push(`✗ ${uf.name} — ${String(err)}`) }
 
       } else if (uf.ext === 'csv' && uf.rawFile) {
         try {
           const acts = await parseTPCSV(uf.rawFile)
-          let csvSkipped = 0
           for (const act of acts) {
-            // base: colunas que já existem no schema
             const base = {
-              athlete_id: selectedAthlete,
-              name: act.title || sportLabel(act.sport),
-              sport: sportToDb(act.sport),
-              started_at: act.date,
-              duration_seconds: act.duration_seconds,
-              distance_meters: act.distance_meters ?? null,
-              tss: act.tss ?? null,
-              normalized_power: act.np ?? null,
-              intensity_factor: act.if_ ?? null,
-              avg_hr_bpm: act.avg_hr ?? null,
-              max_hr_bpm: act.hr_max ?? null,
-              avg_power_watts: act.avg_power ?? null,
-              max_power_watts: act.power_max ?? null,
-              avg_cadence_rpm: act.cadence_avg ?? null,
-              calories: act.calories ?? null,
-              source: 'csv' as const,
-              external_id: `${act.date}-${act.title}`,
-              ftp_used: athlete.ftp_watts ?? null,
+              athlete_id: selectedAthlete, name: act.title || sportLabel(act.sport), sport: sportToDb(act.sport),
+              started_at: act.date, duration_seconds: act.duration_seconds, distance_meters: act.distance_meters ?? null,
+              tss: act.tss ?? null, normalized_power: act.np ?? null, intensity_factor: act.if_ ?? null,
+              avg_hr_bpm: act.avg_hr ?? null, max_hr_bpm: act.hr_max ?? null,
+              avg_power_watts: act.avg_power ?? null, max_power_watts: act.power_max ?? null,
+              avg_cadence_rpm: act.cadence_avg ?? null, calories: act.calories ?? null,
+              source: 'csv', external_id: `${act.date}-${act.title}`, ftp_used: athlete.ftp_watts ?? null,
             }
-            // extra: métricas da migração 025 (velocidade, torque, zonas, RPE...)
             const extra = {
-              max_cadence_rpm: act.cadence_max ?? null,
-              velocity_avg_mps: act.velocity_avg ?? null,
-              velocity_max_mps: act.velocity_max ?? null,
-              energy_kj: act.energy_kj ?? null,
-              avg_torque_nm: act.torque_avg ?? null,
-              max_torque_nm: act.torque_max ?? null,
-              rpe: act.rpe ?? null,
-              feeling: act.feeling ?? null,
-              hr_zone_minutes: act.hr_zone_minutes ?? null,
-              pwr_zone_minutes: act.pwr_zone_minutes ?? null,
-              workout_description: act.workout_description ?? null,
-              coach_comments: act.coach_comments ?? null,
-              athlete_comments: act.athlete_comments ?? null,
-              planned_duration_seconds: act.planned_duration_seconds ?? null,
+              max_cadence_rpm: act.cadence_max ?? null, velocity_avg_mps: act.velocity_avg ?? null,
+              velocity_max_mps: act.velocity_max ?? null, energy_kj: act.energy_kj ?? null,
+              avg_torque_nm: act.torque_avg ?? null, max_torque_nm: act.torque_max ?? null,
+              rpe: act.rpe ?? null, feeling: act.feeling ?? null,
+              hr_zone_minutes: act.hr_zone_minutes ?? null, pwr_zone_minutes: act.pwr_zone_minutes ?? null,
+              workout_description: act.workout_description ?? null, coach_comments: act.coach_comments ?? null,
+              athlete_comments: act.athlete_comments ?? null, planned_duration_seconds: act.planned_duration_seconds ?? null,
               planned_distance_meters: act.planned_distance_meters ?? null,
             }
-            let { error } = await sb.from('activities').insert({ ...base, ...extra })
-            if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
-              // banco sem a migração 025: importa as métricas básicas
-              ;({ error } = await sb.from('activities').insert(base))
-            }
-            if (error) {
-              const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
-              if (isDuplicate) { totalSkipped++; csvSkipped++ }
-              else { totalFailed++; details.push(`✗ CSV: ${act.title} — ${error.message}`) }
-            } else { totalImported++ }
+            candidates.push({
+              date: act.date, sport: sportToDb(act.sport), duration: act.duration_seconds,
+              source: 'csv', label: act.title || sportLabel(act.sport),
+              payload: { ...base, ...extra }, base,
+            })
           }
-          if (csvSkipped > 0) details.push(`⏭ ${csvSkipped} atividades CSV já existiam`)
         } catch (err) { totalFailed++; details.push(`✗ CSV ${uf.name} — ${String(err)}`) }
       }
     }
+
+    // Prefere o CSV (métricas ricas do TP) quando FIT e CSV coincidem
+    candidates.sort((a, b) => (a.source === b.source ? 0 : a.source === 'csv' ? -1 : 1))
+
+    // ── Dedup entre fontes: mesmo dia + modalidade + duração próxima ──────
+    // Só desduplicamos entre fontes DIFERENTES (FIT vs CSV) — assim treinos
+    // duplos no mesmo dia (mesma fonte) continuam sendo importados.
+    const dayKey = (iso: string) => iso.slice(0, 10)
+    const durTol = (d: number) => Math.max(300, d * 0.05) // 5 min ou 5%
+    type Sig = { day: string; sport: string; dur: number; source: string }
+    const seen: Sig[] = []
+    if (candidates.length > 0) {
+      const times = candidates.map(c => new Date(c.date).getTime()).filter(t => !isNaN(t))
+      const minISO = new Date(Math.min(...times) - 86400000).toISOString()
+      const maxISO = new Date(Math.max(...times) + 2 * 86400000).toISOString()
+      const { data: existing } = await sb.from('activities')
+        .select('started_at, duration_seconds, sport, source')
+        .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO)
+      for (const e of existing ?? []) {
+        seen.push({ day: dayKey(e.started_at as string), sport: sportToDb((e.sport as string) ?? ''), dur: (e.duration_seconds as number) ?? 0, source: (e.source as string) ?? '' })
+      }
+    }
+    const crossDup = (c: Candidate) => {
+      const day = dayKey(c.date)
+      return seen.some(s => s.source !== c.source && s.day === day && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
+    }
+
+    // ── Inserção com dedup ────────────────────────────────────────────────
+    let dedupSkipped = 0
+    for (const c of candidates) {
+      if (crossDup(c)) { totalSkipped++; dedupSkipped++; continue }
+      let { error } = await sb.from('activities').insert(c.payload)
+      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? '') || error.message?.includes('zone_data'))) {
+        // banco sem a migração 011/025: tenta a versão reduzida
+        if (c.base) { ({ error } = await sb.from('activities').insert(c.base)) }
+        else {
+          const { zone_data: _omit, ...withoutZones } = c.payload
+          void _omit
+          ;({ error } = await sb.from('activities').insert(withoutZones))
+        }
+      }
+      if (error) {
+        const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
+        if (isDuplicate) { totalSkipped++ }
+        else { totalFailed++; details.push(`✗ ${c.label} — ${error.message} (${error.code ?? ''})`) }
+      } else {
+        totalImported++
+        seen.push({ day: dayKey(c.date), sport: c.sport, dur: c.duration, source: c.source })
+      }
+    }
+    if (dedupSkipped > 0) details.push(`⏭ ${dedupSkipped} treino(s) já cobertos por outra fonte (mesmo dia/duração) — não duplicados`)
 
     if (totalImported > 0) {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })
