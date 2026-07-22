@@ -58,6 +58,27 @@ export type ActivityRow = {
   normalized_power: number | null
   intensity_factor: number | null
   avg_hr_bpm: number | null
+  // métricas ampliadas (migração 025) — opcionais
+  max_hr_bpm?: number | null
+  avg_power_watts?: number | null
+  max_power_watts?: number | null
+  avg_cadence_rpm?: number | null
+  max_cadence_rpm?: number | null
+  velocity_avg_mps?: number | null
+  velocity_max_mps?: number | null
+  energy_kj?: number | null
+  avg_torque_nm?: number | null
+  max_torque_nm?: number | null
+  rpe?: number | null
+  feeling?: string | null
+  calories?: number | null
+  hr_zone_minutes?: number[] | null
+  pwr_zone_minutes?: number[] | null
+  workout_description?: string | null
+  coach_comments?: string | null
+  athlete_comments?: string | null
+  planned_duration_seconds?: number | null
+  planned_distance_meters?: number | null
 }
 
 export type DailyMetricRow = {
@@ -246,17 +267,19 @@ export async function getActivitiesRange(athleteId: string, fromISO: string, toI
   return (data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
 }
 
+const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters'
+
 export async function getAthleteActivities(athleteId: string, limit = 10): Promise<ActivityRow[]> {
   const sb = createClient()
   const { data, error } = await sb
     .from('activities')
-    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm')
+    .select(ACTIVITY_FULL_COLS)
     .eq('athlete_id', athleteId)
     .order('started_at', { ascending: false })
     .limit(limit)
   if (error) {
-    // banco sem a migração 011 (zone_data não existe): repete sem a coluna
-    // para os treinos continuarem visíveis mesmo com o banco desatualizado
+    // banco sem as migrações 011/025 (colunas não existem): repete com o
+    // conjunto mínimo para os treinos continuarem visíveis
     console.error('[queries]', error.message)
     const retry = await sb
       .from('activities')
@@ -267,7 +290,7 @@ export async function getAthleteActivities(athleteId: string, limit = 10): Promi
     if (retry.error) { console.error('[queries]', retry.error.message); return [] }
     return (retry.data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
   }
-  return data ?? []
+  return (data ?? []) as unknown as ActivityRow[]
 }
 
 export async function getAthleteHRV(athleteId: string, days = 30): Promise<DailyMetricRow[]> {

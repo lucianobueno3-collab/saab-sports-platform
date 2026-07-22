@@ -384,7 +384,8 @@ export default function ImportPage() {
           const acts = await parseTPCSV(uf.rawFile)
           let csvSkipped = 0
           for (const act of acts) {
-            const { error } = await sb.from('activities').insert({
+            // base: colunas que já existem no schema
+            const base = {
               athlete_id: selectedAthlete,
               name: act.title || sportLabel(act.sport),
               sport: sportToDb(act.sport),
@@ -395,12 +396,38 @@ export default function ImportPage() {
               normalized_power: act.np ?? null,
               intensity_factor: act.if_ ?? null,
               avg_hr_bpm: act.avg_hr ?? null,
+              max_hr_bpm: act.hr_max ?? null,
               avg_power_watts: act.avg_power ?? null,
+              max_power_watts: act.power_max ?? null,
+              avg_cadence_rpm: act.cadence_avg ?? null,
               calories: act.calories ?? null,
               source: 'csv' as const,
               external_id: `${act.date}-${act.title}`,
               ftp_used: athlete.ftp_watts ?? null,
-            })
+            }
+            // extra: métricas da migração 025 (velocidade, torque, zonas, RPE...)
+            const extra = {
+              max_cadence_rpm: act.cadence_max ?? null,
+              velocity_avg_mps: act.velocity_avg ?? null,
+              velocity_max_mps: act.velocity_max ?? null,
+              energy_kj: act.energy_kj ?? null,
+              avg_torque_nm: act.torque_avg ?? null,
+              max_torque_nm: act.torque_max ?? null,
+              rpe: act.rpe ?? null,
+              feeling: act.feeling ?? null,
+              hr_zone_minutes: act.hr_zone_minutes ?? null,
+              pwr_zone_minutes: act.pwr_zone_minutes ?? null,
+              workout_description: act.workout_description ?? null,
+              coach_comments: act.coach_comments ?? null,
+              athlete_comments: act.athlete_comments ?? null,
+              planned_duration_seconds: act.planned_duration_seconds ?? null,
+              planned_distance_meters: act.planned_distance_meters ?? null,
+            }
+            let { error } = await sb.from('activities').insert({ ...base, ...extra })
+            if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? ''))) {
+              // banco sem a migração 025: importa as métricas básicas
+              ;({ error } = await sb.from('activities').insert(base))
+            }
             if (error) {
               const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
               if (isDuplicate) { totalSkipped++; csvSkipped++ }
@@ -490,6 +517,7 @@ export default function ImportPage() {
             <ul className="text-xs text-muted-foreground space-y-0.5">
               <li><strong>Treinos em lote (ZIP):</strong> Settings → Export → WorkoutFileExport → Download ZIP</li>
               <li><strong>Métricas (ZIP):</strong> Settings → Export → Metrics Export → Download ZIP</li>
+              <li><strong>Planilha de treinos (CSV):</strong> importa potência, FC, cadência, velocidade, torque, energia, zonas de FC/potência, RPE e sensação</li>
               <li><strong>Individual:</strong> Calendário → selecione atividade → Exportar → .FIT</li>
             </ul>
           </div>
