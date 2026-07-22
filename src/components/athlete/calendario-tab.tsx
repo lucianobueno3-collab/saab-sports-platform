@@ -38,6 +38,8 @@ function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDat
 function ymd(d: Date) { return d.toLocaleDateString('en-CA') } // YYYY-MM-DD local
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 function fmtDur(min?: number | null) { if (!min) return null; const h = Math.floor(min / 60), m = min % 60; return h > 0 ? `${h}h${m ? m + '' : ''}` : `${m}min` }
+function fmtPace(secPerKm: number) { const m = Math.floor(secPerKm / 60), s = Math.round(secPerKm % 60); return `${m}:${String(s).padStart(2, '0')}/km` }
+const ZONE_COLORS = ['#3b82f6', '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d']
 function startOfMonth(d: Date) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0, 0, 0, 0); return x }
 function addMonths(d: Date, n: number) { return startOfMonth(new Date(d.getFullYear(), d.getMonth() + n, 1)) }
 
@@ -51,6 +53,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState<{ date: string; edit?: PlannedWorkoutRow } | null>(null)
   const [detail, setDetail] = useState<PlannedWorkoutRow | null>(null)
+  const [detailActivity, setDetailActivity] = useState<ActivityRow | null>(null)
   const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
   const [showLib, setShowLib] = useState(false)
@@ -89,15 +92,26 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     return m
   }, [planned])
   // atividades já vinculadas a um treino planejado (mostradas junto do planejado)
-  const linkedActivityIds = useMemo(() => new Set(planned.map(p => p.activity_id).filter(Boolean) as string[]), [planned])
-  const activityById = useMemo(() => new Map(done.map(a => [a.id, a] as const)), [done])
-  const realizedOf = (p: PlannedWorkoutRow) => (p.activity_id ? activityById.get(p.activity_id) : undefined)
-  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.tss != null ? `${a.tss.toFixed(0)} TSS` : null].filter(Boolean).join(' · ')
+  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.avg_hr_bpm ? `${a.avg_hr_bpm} bpm` : null, a.tss != null ? `${a.tss.toFixed(0)} TSS` : null].filter(Boolean).join(' · ')
   const doneByDay = useMemo(() => {
     const m: Record<string, ActivityRow[]> = {}
-    for (const a of done) { if (linkedActivityIds.has(a.id)) continue; const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
+    for (const a of done) { const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
     return m
-  }, [done, linkedActivityIds])
+  }, [done])
+  // Mescla planejado x realizado do dia: por vínculo do banco (activity_id) ou,
+  // como reforço, por modalidade. Devolve pares (planejado + atividade) e as
+  // atividades sem plano (extras).
+  function mergeDay(dayPlanned: PlannedWorkoutRow[], dayDone: ActivityRow[]) {
+    const used = new Set<string>()
+    const pairs = dayPlanned.map(p => {
+      let act = p.activity_id ? dayDone.find(a => a.id === p.activity_id) : undefined
+      if (!act) act = dayDone.find(a => !used.has(a.id) && a.sport.toLowerCase() === p.sport.toLowerCase())
+      if (act) used.add(act.id)
+      return { p, act }
+    })
+    const extras = dayDone.filter(a => !used.has(a.id))
+    return { pairs, extras }
+  }
 
   // Resumo da semana
   const plannedTss = planned.reduce((s, p) => s + (p.planned_tss ?? 0), 0)
@@ -163,8 +177,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       if (key === tmr) return 'Amanhã'
       return new Date(key + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long' })
     }
-    const selPlanned = plannedByDay[selectedDay] ?? []
-    const selDone = doneByDay[selectedDay] ?? []
+    const sel = mergeDay(plannedByDay[selectedDay] ?? [], doneByDay[selectedDay] ?? [])
 
     return (
       <div className="space-y-4">
@@ -221,27 +234,28 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           </p>
           {loading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
-          ) : (selPlanned.length === 0 && selDone.length === 0) ? (
+          ) : (sel.pairs.length === 0 && sel.extras.length === 0) ? (
             <p className="text-xs text-muted-foreground rounded-xl p-4 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>Nenhum treino neste dia.</p>
           ) : (
             <div className="space-y-2">
-              {selPlanned.map(p => {
+              {sel.pairs.map(({ p, act }) => {
                 const info = sportInfo(p.sport)
+                const doneCol = (p.completed || act) ? '#00d084' : info.color
                 return (
-                  <button key={p.id} onClick={() => setDetail(p)} className="w-full text-left rounded-2xl p-4"
-                    style={{ background: 'var(--card)', borderLeft: `4px solid ${p.completed ? '#00d084' : info.color}`, border: '1px solid var(--border)', borderLeftWidth: 4, borderLeftColor: p.completed ? '#00d084' : info.color }}>
+                  <button key={p.id} onClick={() => (act ? setDetailActivity(act) : setDetail(p))} className="w-full text-left rounded-2xl p-4"
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)', borderLeftWidth: 4, borderLeftColor: doneCol }}>
                     <div className="flex items-center gap-2">
                       <info.icon className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
                       <span className="text-sm font-bold text-foreground flex-1 min-w-0 truncate">{p.title}</span>
-                      {p.completed
+                      {(p.completed || act)
                         ? <CheckCircle2 className="w-5 h-5 text-[#00d084]" />
                         : <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>Ver</span>}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
                       <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
                     </p>
-                    {realizedOf(p) && (
-                      <p className="text-[11px] mt-0.5 font-semibold" style={{ color: '#00d084' }}>Realizado: {realizedLine(realizedOf(p)!)}</p>
+                    {act && (
+                      <p className="text-[11px] mt-0.5 font-semibold" style={{ color: '#00d084' }}>Realizado: {realizedLine(act)} <span className="opacity-70 font-normal">· toque p/ detalhes</span></p>
                     )}
                     {p.structure && p.structure.length > 0 && (
                       <div className="mt-2"><StructureBar structure={p.structure} height={12} /></div>
@@ -249,14 +263,18 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                   </button>
                 )
               })}
-              {selDone.map(a => {
+              {sel.extras.map(a => {
                 const info = sportInfo(a.sport)
                 return (
-                  <div key={a.id} className="rounded-2xl p-4 flex items-center gap-2" style={{ background: 'var(--panel)', border: '1px dashed var(--panel-border)' }}>
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
-                    <span className="text-sm text-foreground flex-1 min-w-0 truncate">{a.name ?? info.label}</span>
-                    {a.tss != null && <span className="text-xs font-bold text-[#00d084]">{a.tss.toFixed(0)} TSS</span>}
-                  </div>
+                  <button key={a.id} onClick={() => setDetailActivity(a)} className="w-full text-left rounded-2xl p-4"
+                    style={{ background: 'var(--card)', border: '1px solid var(--border)', borderLeftWidth: 4, borderLeftColor: '#00d084' }}>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 flex-shrink-0" style={{ color: '#00d084' }} />
+                      <span className="text-sm font-bold text-foreground flex-1 min-w-0 truncate">{a.name ?? info.label}</span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: '#00d08422', color: '#00d084' }}>Realizado</span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">{realizedLine(a)}</p>
+                  </button>
                 )
               })}
             </div>
@@ -268,6 +286,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
             onComplete={(rpe, notes) => completeWorkout(detail, rpe, notes)}
             onReopen={() => toggleDone(detail)} />
         )}
+        {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} />}
       </div>
     )
   }
@@ -350,25 +369,27 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                 </div>
 
                 <div className="space-y-1.5 flex-1">
-                  {/* Planejados */}
-                  {dayPlanned.map(p => {
+                  {(() => { const { pairs, extras } = mergeDay(dayPlanned, dayDone); return <>
+                  {/* Planejado (+ realizado casado) */}
+                  {pairs.map(({ p, act }) => {
                     const info = sportInfo(p.sport)
+                    const isDone = p.completed || !!act
                     return (
                       <button key={p.id} onClick={() => openWorkout(key, p)}
                         className="w-full text-left rounded-lg p-1.5 group"
-                        style={{ background: info.color + '14', borderLeft: `3px solid ${info.color}` }}>
+                        style={{ background: info.color + '14', borderLeft: `3px solid ${isDone ? '#00d084' : info.color}` }}>
                         <div className="flex items-center gap-1">
                           <info.icon className="w-3 h-3 flex-shrink-0" style={{ color: info.color }} />
                           <span className="text-[11px] font-bold text-foreground truncate flex-1">{p.title}</span>
-                          {p.completed
-                            ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" onClick={e => { e.stopPropagation(); if (readOnly) setDetail(p); else toggleDone(p) }} />
+                          {isDone
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084] flex-shrink-0" onClick={e => { e.stopPropagation(); if (act) setDetailActivity(act); else if (readOnly) setDetail(p); else toggleDone(p) }} />
                             : <Circle className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" onClick={e => { e.stopPropagation(); if (readOnly) setDetail(p); else toggleDone(p) }} />}
                         </div>
                         {(p.planned_duration_min || p.planned_tss) && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">{[fmtDur(p.planned_duration_min), p.planned_tss ? `${p.planned_tss} TSS` : null].filter(Boolean).join(' · ')}</p>
                         )}
-                        {realizedOf(p) && (
-                          <p className="text-[10px] mt-0.5 font-semibold flex items-center gap-1" style={{ color: '#00d084' }}><CheckCircle2 className="w-2.5 h-2.5" /> {realizedLine(realizedOf(p)!)}</p>
+                        {act && (
+                          <span onClick={e => { e.stopPropagation(); setDetailActivity(act) }} className="text-[10px] mt-0.5 font-semibold flex items-center gap-1" style={{ color: '#00d084' }}><CheckCircle2 className="w-2.5 h-2.5" /> {realizedLine(act)}</span>
                         )}
                         {p.structure && p.structure.length > 0 && <div className="mt-1"><StructureBar structure={p.structure} height={6} /></div>}
                         {p.description && !(p.structure && p.structure.length) && <p className="text-[10px] text-muted-foreground/80 mt-0.5 line-clamp-2">{p.description}</p>}
@@ -376,17 +397,18 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                     )
                   })}
 
-                  {/* Realizados (importados) */}
-                  {dayDone.map(a => {
+                  {/* Realizados sem plano (clicáveis) */}
+                  {extras.map(a => {
                     const info = sportInfo(a.sport)
                     return (
-                      <div key={a.id} className="rounded-lg p-1.5 flex items-center gap-1" style={{ background: 'var(--panel)', border: '1px dashed var(--panel-border)' }}>
+                      <button key={a.id} onClick={() => setDetailActivity(a)} className="w-full text-left rounded-lg p-1.5 flex items-center gap-1" style={{ background: 'var(--panel)', border: '1px dashed var(--panel-border)' }}>
                         <CheckCircle2 className="w-3 h-3 flex-shrink-0" style={{ color: info.color }} />
                         <span className="text-[10px] text-foreground truncate flex-1">{a.name ?? info.label}</span>
                         {a.tss != null && <span className="text-[9px] font-bold text-[#00d084]">{a.tss.toFixed(0)}</span>}
-                      </div>
+                      </button>
                     )
                   })}
+                  </> })()}
 
                   {dayPlanned.length === 0 && dayDone.length === 0 && !readOnly && (
                     <button onClick={() => setModal({ date: key })} className="w-full py-3 text-[10px] text-muted-foreground/50 hover:text-muted-foreground rounded-lg border border-dashed border-border">+ treino</button>
@@ -438,9 +460,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                         )
                       }
                       return (
-                        <div key={'d' + it.a.id} className="w-full rounded-md px-1.5 py-1 truncate text-[11px] flex items-center gap-1" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>
+                        <button key={'d' + it.a.id} onClick={e => { e.stopPropagation(); setDetailActivity(it.a) }} className="w-full text-left rounded-md px-1.5 py-1 truncate text-[11px] flex items-center gap-1" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>
                           <CheckCircle2 className="w-3 h-3 flex-shrink-0 text-[#00d084]" /><span className="truncate">{it.a.name ?? sportInfo(it.a.sport).label}</span>
-                        </div>
+                        </button>
                       )
                     })}
                     {items.length > 6 && <span className="text-[10px] text-muted-foreground/70 px-1">+{items.length - 6}</span>}
@@ -467,12 +489,93 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           onReopen={() => toggleDone(detail)} />
       )}
 
+      {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} />}
+
       {showPlan && (
         <ApplyPlanModal athleteId={athleteId} defaultSport={defaultSport}
           onClose={() => setShowPlan(false)}
           onApplied={() => { setShowPlan(false); load() }} />
       )}
     </div>
+  )
+}
+
+// Distribuição de minutos por zona (FC ou potência)
+function ZoneBar({ label, minutes }: { label: string; minutes: number[] }) {
+  const total = minutes.reduce((s, v) => s + v, 0)
+  if (total <= 0) return null
+  return (
+    <div>
+      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+      <div className="flex h-3.5 rounded overflow-hidden">
+        {minutes.map((m, i) => m > 0 ? <div key={i} title={`Z${i + 1}: ${m} min`} style={{ width: `${(m / total) * 100}%`, background: ZONE_COLORS[i] }} /> : null)}
+      </div>
+      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
+        {minutes.map((m, i) => m > 0 ? <span key={i} className="text-[9px] text-muted-foreground flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full" style={{ background: ZONE_COLORS[i] }} />Z{i + 1} {m}min</span> : null)}
+      </div>
+    </div>
+  )
+}
+
+// Detalhe do treino REALIZADO (importado): KM, FC, potência, pace, zonas...
+function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; onClose: () => void }) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const info = sportInfo(a.sport)
+  const dist = a.distance_meters ?? 0
+  const pace = a.sport === 'running' && dist >= 400 ? (a.duration_seconds || 0) / (dist / 1000) : null
+  const dateLabel = new Date(a.started_at).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  const hrZones = a.hr_zone_minutes && a.hr_zone_minutes.some(m => m > 0) ? a.hr_zone_minutes
+    : (a.zone_data && a.zone_data.basis === 'hr' ? a.zone_data.seconds.map(s => Math.round(s / 60)) : null)
+  const pwrZones = a.pwr_zone_minutes && a.pwr_zone_minutes.some(m => m > 0) ? a.pwr_zone_minutes
+    : (a.zone_data && a.zone_data.basis === 'power' ? a.zone_data.seconds.map(s => Math.round(s / 60)) : null)
+  const tiles = ([
+    dist > 0 ? { label: 'Distância', value: `${(dist / 1000).toFixed(2)} km` } : null,
+    { label: 'Duração', value: fmtDur(Math.round((a.duration_seconds || 0) / 60)) ?? '—' },
+    pace ? { label: 'Pace', value: fmtPace(pace) } : null,
+    a.tss != null ? { label: 'TSS', value: a.tss.toFixed(0), hi: true } : null,
+    a.intensity_factor != null ? { label: 'IF', value: a.intensity_factor.toFixed(3) } : null,
+    a.avg_hr_bpm ? { label: 'FC média', value: `${a.avg_hr_bpm} bpm` } : null,
+    a.max_hr_bpm ? { label: 'FC máx', value: `${a.max_hr_bpm} bpm` } : null,
+    a.avg_power_watts ? { label: 'Pot. média', value: `${a.avg_power_watts} W` } : null,
+    a.max_power_watts ? { label: 'Pot. máx', value: `${a.max_power_watts} W` } : null,
+    a.normalized_power ? { label: 'NP', value: `${a.normalized_power} W` } : null,
+    a.avg_cadence_rpm ? { label: 'Cadência', value: `${a.avg_cadence_rpm}${a.max_cadence_rpm ? ` / ${a.max_cadence_rpm}` : ''} rpm` } : null,
+    a.velocity_avg_mps ? { label: 'Velocidade', value: `${(a.velocity_avg_mps * 3.6).toFixed(1)} km/h` } : null,
+    a.energy_kj ? { label: 'Energia', value: `${a.energy_kj} kJ` } : null,
+    a.rpe != null ? { label: 'RPE', value: `${a.rpe}` } : null,
+  ].filter(Boolean) as { label: string; value: string; hi?: boolean }[])
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="p-5 border-b border-border" style={{ borderTop: `3px solid ${info.color}` }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>{info.label} · realizado</span>
+              <h2 className="text-lg font-black text-foreground mt-2 leading-tight">{a.name ?? info.label}</h2>
+              <p className="text-xs text-muted-foreground capitalize mt-0.5">{dateLabel}</p>
+            </div>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground flex-shrink-0"><X className="w-5 h-5" /></button>
+          </div>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {tiles.map(t => (
+              <div key={t.label} className="rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{t.label}</p>
+                <p className={`text-sm font-bold mt-0.5 ${t.hi ? 'text-[#ffa800]' : 'text-foreground'}`}>{t.value}</p>
+              </div>
+            ))}
+          </div>
+          {hrZones && <ZoneBar label="Tempo por zona de FC" minutes={hrZones} />}
+          {pwrZones && <ZoneBar label="Tempo por zona de potência" minutes={pwrZones} />}
+          {a.feeling && <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Sensação:</span> {a.feeling}</p>}
+          {a.athlete_comments && <p className="text-xs text-muted-foreground whitespace-pre-line"><span className="font-semibold text-foreground">Atleta:</span> {a.athlete_comments}</p>}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
