@@ -888,17 +888,23 @@ export async function extractPdfViaServer(storagePath: string): Promise<{ ok: bo
   const sb = createClient()
   const { data: { session } } = await sb.auth.getSession()
   if (!session) return { ok: false, error: 'sem sessão' }
+  // Timeout: se o servidor não responder em 30s, aborta (evita spinner eterno).
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 30_000)
   try {
     const res = await fetch('/api/extract-pdf', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ storage_path: storagePath }),
+      signal: ctrl.signal,
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) return { ok: false, error: data.error ?? `erro ${res.status}` }
     return { ok: true, text: data.text ?? '' }
   } catch {
     return { ok: false, error: 'rede' }
+  } finally {
+    clearTimeout(timer)
   }
 }
 

@@ -53,7 +53,7 @@ export async function extractPdfText(file: File): Promise<string> {
 }
 
 // Rejeita se a promessa não resolver no tempo dado — evita "spinner eterno".
-function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+export function withTimeout<T>(p: PromiseLike<T>, ms: number, msg: string): Promise<T> {
   return Promise.race([
     p,
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
