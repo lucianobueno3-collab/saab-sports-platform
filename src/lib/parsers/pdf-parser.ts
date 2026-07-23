@@ -52,7 +52,24 @@ export async function extractPdfText(file: File): Promise<string> {
   return pages.join('\n')
 }
 
-/** Renderiza cada página do PDF em imagem e roda OCR (para PDFs digitalizados sem texto) */
+// Rejeita se a promessa não resolver no tempo dado — evita "spinner eterno".
+function withTimeout<T>(p: Promise<T>, ms: number, msg: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(msg)), ms)),
+  ])
+}
+
+function ocrStatusPt(status: string, progress?: number): string {
+  const pct = progress != null && progress > 0 ? ` ${Math.round(progress * 100)}%` : ''
+  if (/load|initial|download|fetch/i.test(status)) return `carregando modelo de OCR${pct}`
+  if (/recogn/i.test(status)) return `lendo (OCR)${pct}`
+  return status + pct
+}
+
+/** Renderiza cada página do PDF em imagem e roda OCR (para PDFs digitalizados sem texto).
+ *  Os assets do tesseract (worker, core wasm e modelo 'por') são servidos do próprio
+ *  site em /tesseract — sem depender de CDN, que era o motivo do "carregando" infinito. */
 export async function ocrPdf(
   file: File,
   onProgress?: (info: { page: number; totalPages: number; status: string }) => void,
@@ -62,13 +79,28 @@ export async function ocrPdf(
 
   const buf = await file.arrayBuffer()
   const doc = await pdfjs.getDocument({ data: buf }).promise
-  // Modelos português + inglês (laudos costumam misturar unidades em inglês)
-  const worker = await createWorker(['por', 'eng'])
+  const totalPages = doc.numPages
+
+  onProgress?.({ page: 0, totalPages, status: 'carregando modelo de OCR' })
+  // Português + motor LSTM (OEM=1) com assets locais. Timeout de 90s na
+  // inicialização para não travar caso algum arquivo não carregue.
+  const worker = await withTimeout(
+    createWorker('por', 1, {
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/tesseract-core-simd-lstm.wasm.js',
+      langPath: '/tesseract',
+      logger: (m: { status?: string; progress?: number }) => {
+        if (m.status) onProgress?.({ page: 0, totalPages, status: ocrStatusPt(m.status, m.progress) })
+      },
+    }),
+    90_000,
+    'O leitor de OCR não carregou a tempo. Tente novamente ou preencha manualmente.',
+  )
   const pages: string[] = []
 
   try {
-    for (let i = 1; i <= doc.numPages; i++) {
-      onProgress?.({ page: i, totalPages: doc.numPages, status: 'renderizando' })
+    for (let i = 1; i <= totalPages; i++) {
+      onProgress?.({ page: i, totalPages, status: 'renderizando' })
       const page = await doc.getPage(i)
       // Escala 2x melhora a acurácia do OCR em laudos com fonte pequena
       const viewport = page.getViewport({ scale: 2 })
@@ -80,8 +112,10 @@ export async function ocrPdf(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await page.render({ canvasContext: ctx, viewport, canvas } as any).promise
 
-      onProgress?.({ page: i, totalPages: doc.numPages, status: 'lendo (OCR)' })
-      const { data } = await worker.recognize(canvas)
+      onProgress?.({ page: i, totalPages, status: 'lendo (OCR)' })
+      const { data } = await withTimeout(
+        worker.recognize(canvas), 120_000, `O OCR demorou demais na página ${i}.`,
+      )
       pages.push(data.text)
       canvas.width = 0; canvas.height = 0 // libera memória
     }

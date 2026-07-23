@@ -102,7 +102,7 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
       if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
       const file = new File([data], doc.file_name, { type: 'application/pdf' })
       const text = await ocrPdf(file, ({ page, totalPages, status }) =>
-        setOcrProgress(`Página ${page}/${totalPages} — ${status}`))
+        setOcrProgress(page > 0 ? `Página ${page}/${totalPages} — ${status}` : status))
       setOcrProgress(null)
       setOcrDoc(null)
       if (!hasExtractableText(text)) {
