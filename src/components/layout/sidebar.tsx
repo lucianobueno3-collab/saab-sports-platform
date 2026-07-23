@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList
 } from 'lucide-react'
-import { getAthletesForAlerts, getMyAccess } from '@/lib/supabase/queries'
+import { getAthletesForAlerts, getMyAccess, getEnrollments } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
 import { VersionTag } from '@/components/ui/version-tag'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
@@ -19,6 +19,7 @@ import { useAutoRefresh } from '@/lib/use-auto-refresh'
 const navItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/athletes', label: 'Alunos', icon: Users },
+  { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
@@ -31,6 +32,7 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const [criticalCount, setCriticalCount] = useState(0)
+  const [pendingEnrolls, setPendingEnrolls] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [dual, setDual] = useState(false)
   const isAdmin = role === 'admin'
@@ -68,6 +70,7 @@ export function Sidebar() {
   useEffect(() => {
     refreshCriticalCount()
     getMyAccess().then(({ role, dual }) => { setRole(role); setDual(dual) }).catch(() => {})
+    getEnrollments('pending').then(rows => setPendingEnrolls(rows.length)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
@@ -101,6 +104,11 @@ export function Sidebar() {
               {item.alertBadge && criticalCount > 0 && (
                 <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
                   {criticalCount}
+                </span>
+              )}
+              {item.enrollBadge && pendingEnrolls > 0 && (
+                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
+                  {pendingEnrolls}
                 </span>
               )}
             </Link>

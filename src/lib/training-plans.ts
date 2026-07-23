@@ -17,10 +17,13 @@ export interface PlanDef {
 
 type SType =
   | 'easy' | 'long' | 'tempo' | 'intervals' | 'recovery'
+  | 'walkrun' | 'run_base'
   | 'bike_end' | 'bike_int' | 'bike_long'
   | 'swim' | 'brick' | 'strength'
 
 const BASE: Record<SType, { sport: string; dur: number; tss: number; grow: boolean; title: string; desc: string }> = {
+  walkrun:   { sport: 'running', dur: 30,  tss: 22,  grow: false, title: 'Corrida/caminhada',  desc: 'Alterne corrida leve e caminhada (ex.: 2min corre / 1min anda). Total 25–35min, respiração confortável — você consegue conversar.' },
+  run_base:  { sport: 'running', dur: 30,  tss: 30,  grow: true,  title: 'Corrida leve contínua', desc: 'Corra contínuo e leve em Z2. Se cansar, intercale caminhadas curtas e volte a correr. O objetivo é o tempo em pé, não a velocidade.' },
   easy:      { sport: 'running', dur: 45,  tss: 40,  grow: false, title: 'Rodagem leve',      desc: 'Ritmo confortável em Z2 (consegue conversar).' },
   long:      { sport: 'running', dur: 80,  tss: 80,  grow: true,  title: 'Longo',             desc: 'Volume aeróbico em Z2. Base de resistência.' },
   tempo:     { sport: 'running', dur: 50,  tss: 65,  grow: false, title: 'Tempo / limiar',    desc: 'Bloco contínuo em Z3–Z4 (ex.: 2–4x 10min limiar).' },
@@ -86,6 +89,11 @@ export function planTotals(def: PlanDef) {
 
 // ─── Catálogo (dias: 0=seg,1=ter,2=qua,3=qui,4=sex,5=sáb,6=dom) ──────────────
 export const PLAN_LIBRARY: PlanDef[] = [
+  {
+    key: 'run_first5k_12', name: 'Meus primeiros 5 km — 12 semanas', sport: 'running', goal: 'Concluir 5 km', weeks: 12, level: 'iniciante',
+    focus: 'Método corrida/caminhada progressivo (couch-to-5k) para quem está começando do zero. 3 sessões por semana, evoluindo de intervalos curtos até correr 5 km contínuos.',
+    week: [{ day: 0, type: 'walkrun' }, { day: 2, type: 'walkrun' }, { day: 5, type: 'run_base' }],
+  },
   {
     key: 'run_10k_8', name: '10 km — 8 semanas', sport: 'running', goal: 'Prova de 10 km', weeks: 8, level: 'iniciante',
     focus: 'Base aeróbica + limiar. 4 sessões/semana, modelo 80/20 (maioria leve).',
