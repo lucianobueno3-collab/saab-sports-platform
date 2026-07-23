@@ -434,9 +434,12 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
               const inMonth = d.getMonth() === monthAnchor.getMonth()
               const dayPlanned = plannedByDay[key] ?? []
               const dayDone = doneByDay[key] ?? []
+              // Mescla planejado x realizado (mesmo critério da semana): cada
+              // par vira um item; atividades sem plano ficam como extras.
+              const { pairs, extras } = mergeDay(dayPlanned, dayDone)
               const items = [
-                ...dayPlanned.map(p => ({ kind: 'p' as const, p })),
-                ...dayDone.map(a => ({ kind: 'd' as const, a })),
+                ...pairs.map(pr => ({ kind: 'p' as const, p: pr.p, act: pr.act })),
+                ...extras.map(a => ({ kind: 'd' as const, a })),
               ]
               return (
                 <div key={key} {...dropProps(key)} onClick={() => { if (!readOnly) setModal({ date: key }) }}
@@ -447,16 +450,21 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                     {items.slice(0, 6).map((it) => {
                       if (it.kind === 'p') {
                         const info = sportInfo(it.p.sport)
+                        const isDone = it.p.completed || !!it.act
+                        // Casado (planejado + realizado): clique abre o realizado
+                        // (KM, FC, laps); só planejado abre o treino programado.
                         return (
-                          <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); openWorkout(key, it.p) }}
+                          <button key={'p' + it.p.id} onClick={e => { e.stopPropagation(); if (it.act) setDetailActivity(it.act); else openWorkout(key, it.p) }}
                             className="w-full text-left rounded-md px-1.5 py-1 truncate text-[11px] font-semibold flex items-center gap-1"
-                            style={{ background: info.color + '22', color: info.color }}>
+                            style={{ background: info.color + '22', color: info.color, borderLeft: isDone ? '3px solid #00d084' : undefined }}>
                             <info.icon className="w-3 h-3 flex-shrink-0" />
-                            {it.p.completed && <CheckCircle2 className="w-3 h-3 flex-shrink-0" />}
+                            {isDone && <CheckCircle2 className="w-3 h-3 flex-shrink-0 text-[#00d084]" />}
                             <span className="truncate flex-1">{it.p.title}</span>
-                            {(it.p.planned_tss || it.p.planned_duration_min) && (
-                              <span className="text-[10px] font-bold opacity-80 flex-shrink-0">{it.p.planned_tss ? `${it.p.planned_tss}` : fmtDur(it.p.planned_duration_min)}</span>
-                            )}
+                            {it.act
+                              ? <span className="text-[10px] font-bold flex-shrink-0 text-[#00d084]">{it.act.tss != null ? it.act.tss.toFixed(0) : '✓'}</span>
+                              : (it.p.planned_tss || it.p.planned_duration_min) ? (
+                                <span className="text-[10px] font-bold opacity-80 flex-shrink-0">{it.p.planned_tss ? `${it.p.planned_tss}` : fmtDur(it.p.planned_duration_min)}</span>
+                              ) : null}
                           </button>
                         )
                       }
