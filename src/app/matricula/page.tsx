@@ -7,13 +7,19 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 export default function MatriculaPage() {
   return (
-    <div className="relative min-h-screen bg-background flex flex-col items-center px-4 py-8">
+    <div className="relative min-h-screen saab-bg flex flex-col items-center px-4 py-8">
       <div className="absolute top-4 right-4"><ThemeToggle /></div>
 
-      <Link href="/planos/primeiros-5k" className="flex flex-col items-center gap-1.5 mb-6">
+      <Link href="/planos/primeiros-5k" className="flex flex-col items-center gap-1.5 mb-4">
         <Image src="/logo-saab.png" alt="SAAB Sports" width={170} height={44} priority className="h-auto w-[170px] max-w-[55vw] invert dark:invert-0" />
         <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Performance Platform</span>
       </Link>
+
+      <div className="flex items-center gap-2 mb-5 text-sm">
+        <span className="font-black text-foreground">Meus primeiros 5 km</span>
+        <span className="text-muted-foreground/40">·</span>
+        <span className="font-bold" style={{ color: '#e8001c' }}>R$ 19,90/mês · 3 meses</span>
+      </div>
 
       <div className="w-full max-w-lg bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xl">
         <AnamneseFlow packageKey="primeiros_5k" packageTitle="Meus primeiros 5 km" />

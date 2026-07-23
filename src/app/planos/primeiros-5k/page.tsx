@@ -6,6 +6,7 @@ import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Footprints, CalendarDays, HeartPulse, MessageCircle, Trophy, Check } from 'lucide-react'
 
 const RED = '#e8001c'
+const PRICE = { amount: 'R$ 19,90', period: '/mês', duration: '3 meses', total: 'R$ 59,70 no total' }
 
 const INCLUDES = [
   { icon: CalendarDays, t: 'Plano de 12 semanas', d: 'Método corrida/caminhada progressivo, do zero até correr 5 km contínuos.' },
@@ -22,12 +23,11 @@ const STEPS = [
 
 export default function Primeiros5kLanding() {
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen saab-bg">
       <div className="absolute top-4 right-4 z-10"><ThemeToggle /></div>
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 opacity-90" style={{ background: `radial-gradient(1200px 500px at 50% -10%, ${RED}26, transparent)` }} />
         <div className="relative max-w-3xl mx-auto px-5 pt-16 pb-10 text-center">
           <Image src="/logo-saab.png" alt="SAAB Sports" width={190} height={48} priority className="h-auto w-[190px] max-w-[60vw] mx-auto invert dark:invert-0" />
           <span className="inline-block mt-8 text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full" style={{ background: RED + '22', color: RED }}>
@@ -39,19 +39,27 @@ export default function Primeiros5kLanding() {
           <p className="text-base sm:text-lg text-muted-foreground mt-4 max-w-xl mx-auto">
             Sair do sofá e cruzar a linha dos 5 km — com um plano feito pra quem está começando do zero, no seu ritmo e com acompanhamento de verdade.
           </p>
-          <Link href="/matricula"
-            className="inline-flex items-center gap-2 mt-8 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg transition-transform hover:scale-[1.02]"
-            style={{ background: RED }}>
-            <Footprints className="w-5 h-5" /> Quero começar
-          </Link>
+          <div className="mt-7 inline-flex items-baseline gap-1.5 rounded-2xl px-5 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            <span className="text-3xl font-black text-foreground">{PRICE.amount}</span>
+            <span className="text-sm font-bold text-muted-foreground">{PRICE.period}</span>
+            <span className="mx-2 text-muted-foreground/40">·</span>
+            <span className="text-sm font-bold" style={{ color: RED }}>{PRICE.duration}</span>
+          </div>
+          <div>
+            <Link href="/matricula"
+              className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg transition-transform hover:scale-[1.02]"
+              style={{ background: RED }}>
+              <Footprints className="w-5 h-5" /> Quero começar
+            </Link>
+          </div>
           <p className="text-xs text-muted-foreground mt-3">Preencha a anamnese e garanta sua vaga.</p>
         </div>
       </section>
 
       {/* O que está incluso */}
-      <section className="max-w-3xl mx-auto px-5 py-10">
+      <section className="max-w-4xl mx-auto px-5 py-10">
         <h2 className="text-2xl font-black text-foreground text-center mb-7">O que você recebe</h2>
-        <div className="grid sm:grid-cols-2 gap-3.5">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           {INCLUDES.map(({ icon: Icon, t, d }) => (
             <div key={t} className="rounded-2xl p-5 bg-card border border-border">
               <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: RED + '18' }}>
@@ -87,9 +95,17 @@ export default function Primeiros5kLanding() {
               <span key={x} className="inline-flex items-center gap-1.5"><Check className="w-4 h-4" /> {x}</span>
             ))}
           </div>
-          <Link href="/matricula" className="inline-flex items-center gap-2 mt-6 px-7 py-3.5 rounded-2xl text-sm font-black bg-white" style={{ color: RED }}>
-            <Footprints className="w-4 h-4" /> Começar minha jornada
-          </Link>
+          <div className="mt-5 inline-flex items-baseline gap-1.5">
+            <span className="text-3xl font-black text-white">{PRICE.amount}</span>
+            <span className="text-sm font-bold text-white/80">{PRICE.period}</span>
+            <span className="mx-1 text-white/50">·</span>
+            <span className="text-sm font-bold text-white/90">{PRICE.duration} ({PRICE.total})</span>
+          </div>
+          <div>
+            <Link href="/matricula" className="inline-flex items-center gap-2 mt-5 px-7 py-3.5 rounded-2xl text-sm font-black bg-white" style={{ color: RED }}>
+              <Footprints className="w-4 h-4" /> Começar minha jornada
+            </Link>
+          </div>
         </div>
       </section>
 
