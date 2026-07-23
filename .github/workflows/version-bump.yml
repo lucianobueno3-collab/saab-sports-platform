@@ -55,5 +55,7 @@ jobs:
           npm version "${{ steps.level.outputs.level }}" --no-git-tag-version
           VER=$(node -p "require('./package.json').version")
           git add package.json package-lock.json
-          git commit -m "chore(release): v$VER"
+          # [skip netlify]: o proprio merge ja gera 1 deploy; o commit de
+          # release nao precisa gerar um 2o (economiza minutos de build).
+          git commit -m "chore(release): v$VER [skip netlify]"
           git push origin main
