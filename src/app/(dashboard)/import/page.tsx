@@ -441,32 +441,38 @@ export default function ImportPage() {
     // ── Inserção com dedup ────────────────────────────────────────────────
     const isEmpty = (v: unknown) => v === null || v === undefined || (Array.isArray(v) && v.length === 0)
     let dedupSkipped = 0, enriched = 0, fitCoveredNoGain = 0
+    // Completa, num treino que já existe, os campos ricos que estiverem vazios
+    // usando os dados do .FIT (laps, zonas, potência, IF, TSS, elevação...).
+    // Vale tanto para dedup entre fontes (FIT x CSV) quanto para re-import do
+    // mesmo arquivo (FIT x FIT) — importante quando o import antigo foi feito
+    // antes do recurso de laps. Devolve true se algo foi preenchido.
+    const enrichExisting = async (c: Candidate, sig: Sig): Promise<boolean> => {
+      if (c.source !== 'fit' || !sig.id) return false
+      const upd: Record<string, unknown> = {}
+      for (const f of ENRICH_FIELDS) {
+        const val = (c.payload as Record<string, unknown>)[f]
+        const cur = sig.row ? sig.row[f] : undefined
+        // Sem a linha atual (banco antigo), só dá pra completar os laps.
+        const curEmpty = sig.row ? isEmpty(cur) : (f === 'laps' ? !sig.hasLaps : false)
+        if (curEmpty && !isEmpty(val)) upd[f] = val
+      }
+      if (!Object.keys(upd).length) return false
+      const { error } = await sb.from('activities').update(upd).eq('id', sig.id)
+      if (error) return false
+      enriched++
+      if ('laps' in upd) sig.hasLaps = true
+      if (sig.row) Object.assign(sig.row, upd)
+      return true
+    }
+    // Acha um treino já existente no mesmo dia+modalidade+duração (qualquer fonte).
+    const sameSlot = (c: Candidate): Sig | undefined => seen.find(s =>
+      s.id && s.day === dayKey(c.date) && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
     for (const c of candidates) {
       const match = crossMatch(c)
       if (match) {
         // FIT cobre um treino já existente (ex.: resumo do CSV): não duplica,
-        // mas completa os campos ricos que ainda estiverem vazios (laps, zonas,
-        // potência, IF, TSS, elevação, calorias...).
-        if (c.source === 'fit' && match.id) {
-          const upd: Record<string, unknown> = {}
-          for (const f of ENRICH_FIELDS) {
-            const val = (c.payload as Record<string, unknown>)[f]
-            const cur = match.row ? match.row[f] : undefined
-            // Sem a linha atual (banco antigo), só completamos os laps.
-            const curEmpty = match.row ? isEmpty(cur) : (f === 'laps' ? !match.hasLaps : false)
-            if (curEmpty && !isEmpty(val)) upd[f] = val
-          }
-          if (Object.keys(upd).length) {
-            const { error } = await sb.from('activities').update(upd).eq('id', match.id)
-            if (!error) {
-              enriched++
-              if ('laps' in upd) match.hasLaps = true
-              if (match.row) Object.assign(match.row, upd)
-            }
-          } else {
-            fitCoveredNoGain++
-          }
-        }
+        // mas completa os campos ricos que ainda estiverem vazios.
+        if (c.source === 'fit' && !(await enrichExisting(c, match))) fitCoveredNoGain++
         totalSkipped++; dedupSkipped++; continue
       }
       let { data: ins, error } = await sb.from('activities').insert(c.payload).select('id').single()
@@ -481,8 +487,13 @@ export default function ImportPage() {
       }
       if (error) {
         const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
-        if (isDuplicate) { totalSkipped++ }
-        else { totalFailed++; details.push(`✗ ${c.label} — ${error.message} (${error.code ?? ''})`) }
+        if (isDuplicate) {
+          // Mesmo arquivo/fonte já importado (ex.: re-import do mesmo .FIT):
+          // não insere de novo, mas ainda completa o que faltar no treino atual.
+          totalSkipped++
+          const sig = sameSlot(c)
+          if (sig) { if (!(await enrichExisting(c, sig)) && c.source === 'fit') fitCoveredNoGain++ }
+        } else { totalFailed++; details.push(`✗ ${c.label} — ${error.message} (${error.code ?? ''})`) }
       } else {
         totalImported++
         seen.push({ id: ins?.id as string | undefined, day: dayKey(c.date), sport: c.sport, dur: c.duration, source: c.source, hasLaps: Array.isArray((c.payload as { laps?: unknown[] }).laps) })
@@ -492,7 +503,7 @@ export default function ImportPage() {
     if (enriched > 0) details.push(`✓ detalhes (tiro a tiro / zonas / potência) adicionados a ${enriched} treino(s)`)
     if (fitCoveredNoGain > 0) details.push(`ℹ ${fitCoveredNoGain} arquivo(s) .FIT já cobertos e sem novos detalhes (ex.: corrida contínua, sem voltas registradas no arquivo)`)
 
-    if (totalImported > 0) {
+    if (totalImported > 0 || enriched > 0) {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })
       if (rpcErr) details.push(`⚠ PMC: ${rpcErr.message}`)
       else details.push(`✓ PMC recalculado`)
