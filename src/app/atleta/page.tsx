@@ -125,7 +125,7 @@ export default function AtletaPage() {
   function go(k: AtletaTab) { setTab(k); setMoreOpen(false) }
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 pb-28 space-y-5 safe-top">
+    <div className="saab-bg max-w-5xl mx-auto px-4 py-6 pb-28 space-y-5 safe-top">
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -157,7 +157,7 @@ export default function AtletaPage() {
       )}
 
       {tab === 'inicio' && (
-      <div className="space-y-5 max-w-2xl mx-auto">
+      <div className="space-y-5 max-w-4xl mx-auto">
       {/* Forma atual */}
       <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
         <div>
@@ -175,6 +175,8 @@ export default function AtletaPage() {
         <StrengthPlayer athleteId={athleteId} program={data.program} logs={data.strengthLogs} onLogged={reload} />
       )}
 
+      {/* No desktop, treinos recentes e check-ins ficam lado a lado (preenche a tela) */}
+      <div className="grid lg:grid-cols-2 gap-5 items-start">
       {/* Treinos recentes */}
       {data.activities.length > 0 && (
         <div className="bg-card border border-border rounded-2xl p-5">
@@ -213,6 +215,7 @@ export default function AtletaPage() {
           </div>
         </div>
       )}
+      </div>
       </div>
       )}
 
