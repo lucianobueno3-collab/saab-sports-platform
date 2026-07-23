@@ -409,17 +409,28 @@ export default function ImportPage() {
     // duplos no mesmo dia (mesma fonte) continuam sendo importados.
     const dayKey = (iso: string) => iso.slice(0, 10)
     const durTol = (d: number) => Math.max(300, d * 0.05) // 5 min ou 5%
-    type Sig = { day: string; sport: string; dur: number; source: string; id?: string; hasLaps?: boolean }
+    type Sig = { day: string; sport: string; dur: number; source: string; id?: string; hasLaps?: boolean; row?: Record<string, unknown> }
+    // Campos "ricos" que um .FIT pode preencher num treino que já existe (ex.:
+    // resumo importado antes por CSV). Só completamos o que estiver vazio.
+    const ENRICH_FIELDS = ['laps', 'zone_data', 'avg_power_watts', 'normalized_power', 'intensity_factor', 'tss', 'avg_hr_bpm', 'max_hr_bpm', 'avg_cadence_rpm', 'elevation_gain_m', 'calories', 'distance_meters']
+    const RICH_COLS = `id, started_at, duration_seconds, sport, source, ${ENRICH_FIELDS.join(', ')}`
     const seen: Sig[] = []
     if (candidates.length > 0) {
       const times = candidates.map(c => new Date(c.date).getTime()).filter(t => !isNaN(t))
       const minISO = new Date(Math.min(...times) - 86400000).toISOString()
       const maxISO = new Date(Math.max(...times) + 2 * 86400000).toISOString()
-      const { data: existing } = await sb.from('activities')
-        .select('id, started_at, duration_seconds, sport, source, laps')
-        .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO)
+      // Tenta trazer as colunas ricas; se o banco for antigo, cai no mínimo.
+      let existing = (await sb.from('activities').select(RICH_COLS)
+        .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO))
+        .data as unknown as Record<string, unknown>[] | null
+      if (!existing) {
+        existing = (await sb.from('activities').select('id, started_at, duration_seconds, sport, source, laps')
+          .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO))
+          .data as unknown as Record<string, unknown>[] | null
+      }
       for (const e of existing ?? []) {
-        seen.push({ id: e.id as string, day: dayKey(e.started_at as string), sport: sportToDb((e.sport as string) ?? ''), dur: (e.duration_seconds as number) ?? 0, source: (e.source as string) ?? '', hasLaps: Array.isArray((e as { laps?: unknown[] }).laps) })
+        const row = e as Record<string, unknown>
+        seen.push({ id: row.id as string, day: dayKey(row.started_at as string), sport: sportToDb((row.sport as string) ?? ''), dur: (row.duration_seconds as number) ?? 0, source: (row.source as string) ?? '', hasLaps: Array.isArray(row.laps), row })
       }
     }
     const crossMatch = (c: Candidate): Sig | undefined => {
@@ -428,15 +439,33 @@ export default function ImportPage() {
     }
 
     // ── Inserção com dedup ────────────────────────────────────────────────
-    let dedupSkipped = 0, enriched = 0
+    const isEmpty = (v: unknown) => v === null || v === undefined || (Array.isArray(v) && v.length === 0)
+    let dedupSkipped = 0, enriched = 0, fitCoveredNoGain = 0
     for (const c of candidates) {
       const match = crossMatch(c)
       if (match) {
-        // FIT cobre um treino já existente (CSV): não duplica, mas aproveita os laps
-        const laps = (c.payload as { laps?: unknown[] }).laps
-        if (c.source === 'fit' && Array.isArray(laps) && laps.length && match.id && !match.hasLaps) {
-          const { error } = await sb.from('activities').update({ laps }).eq('id', match.id)
-          if (!error) { match.hasLaps = true; enriched++ }
+        // FIT cobre um treino já existente (ex.: resumo do CSV): não duplica,
+        // mas completa os campos ricos que ainda estiverem vazios (laps, zonas,
+        // potência, IF, TSS, elevação, calorias...).
+        if (c.source === 'fit' && match.id) {
+          const upd: Record<string, unknown> = {}
+          for (const f of ENRICH_FIELDS) {
+            const val = (c.payload as Record<string, unknown>)[f]
+            const cur = match.row ? match.row[f] : undefined
+            // Sem a linha atual (banco antigo), só completamos os laps.
+            const curEmpty = match.row ? isEmpty(cur) : (f === 'laps' ? !match.hasLaps : false)
+            if (curEmpty && !isEmpty(val)) upd[f] = val
+          }
+          if (Object.keys(upd).length) {
+            const { error } = await sb.from('activities').update(upd).eq('id', match.id)
+            if (!error) {
+              enriched++
+              if ('laps' in upd) match.hasLaps = true
+              if (match.row) Object.assign(match.row, upd)
+            }
+          } else {
+            fitCoveredNoGain++
+          }
         }
         totalSkipped++; dedupSkipped++; continue
       }
@@ -460,7 +489,8 @@ export default function ImportPage() {
       }
     }
     if (dedupSkipped > 0) details.push(`⏭ ${dedupSkipped} treino(s) já cobertos por outra fonte — não duplicados`)
-    if (enriched > 0) details.push(`✓ laps (tiro a tiro) adicionados a ${enriched} treino(s)`)
+    if (enriched > 0) details.push(`✓ detalhes (tiro a tiro / zonas / potência) adicionados a ${enriched} treino(s)`)
+    if (fitCoveredNoGain > 0) details.push(`ℹ ${fitCoveredNoGain} arquivo(s) .FIT já cobertos e sem novos detalhes (ex.: corrida contínua, sem voltas registradas no arquivo)`)
 
     if (totalImported > 0) {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })
