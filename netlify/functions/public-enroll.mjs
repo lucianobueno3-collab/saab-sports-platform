@@ -66,7 +66,9 @@ export default async (req) => {
       coachId = coachProf?.id ?? null
     }
 
-    await admin.from('profiles').delete().eq('id', uid).catch(() => {}) // defensivo: atleta não fica em profiles
+    // defensivo: atleta não fica em profiles (o builder do supabase não expõe
+    // .catch(), então usamos try/catch)
+    try { await admin.from('profiles').delete().eq('id', uid) } catch { /* ignora */ }
 
     const athletePayload = { full_name, email, user_id: uid, primary_sport: 'running', active: true }
     if (coachId) athletePayload.coach_id = coachId
