@@ -82,20 +82,33 @@ export async function ocrPdf(
   const totalPages = doc.numPages
 
   onProgress?.({ page: 0, totalPages, status: 'carregando modelo de OCR' })
-  // Português + motor LSTM (OEM=1) com assets locais. Timeout de 90s na
-  // inicialização para não travar caso algum arquivo não carregue.
-  const worker = await withTimeout(
-    createWorker('por', 1, {
-      workerPath: '/tesseract/worker.min.js',
-      corePath: '/tesseract/tesseract-core-simd-lstm.wasm.js',
-      langPath: '/tesseract',
-      logger: (m: { status?: string; progress?: number }) => {
-        if (m.status) onProgress?.({ page: 0, totalPages, status: ocrStatusPt(m.status, m.progress) })
-      },
-    }),
-    90_000,
-    'O leitor de OCR não carregou a tempo. Tente novamente ou preencha manualmente.',
-  )
+  const logger = (m: { status?: string; progress?: number }) => {
+    if (m.status) onProgress?.({ page: 0, totalPages, status: ocrStatusPt(m.status, m.progress) })
+  }
+  // Português + motor LSTM (OEM=1). Tenta primeiro os assets locais (/tesseract,
+  // rápido e sem CDN); se algo não carregar, cai no CDN padrão do tesseract.
+  // Assim o OCR funciona de um jeito ou de outro, e nunca fica preso em silêncio.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let worker: any
+  try {
+    worker = await withTimeout(
+      createWorker('por', 1, {
+        workerPath: '/tesseract/worker.min.js',
+        corePath: '/tesseract/tesseract-core-simd-lstm.wasm.js',
+        langPath: '/tesseract',
+        logger,
+      }),
+      45_000,
+      'assets locais não carregaram',
+    )
+  } catch {
+    onProgress?.({ page: 0, totalPages, status: 'baixando modelo de OCR…' })
+    worker = await withTimeout(
+      createWorker('por', 1, { logger }),
+      90_000,
+      'O leitor de OCR não carregou. Verifique a conexão e tente novamente, ou preencha manualmente.',
+    )
+  }
   const pages: string[] = []
 
   try {
@@ -113,7 +126,7 @@ export async function ocrPdf(
       await page.render({ canvasContext: ctx, viewport, canvas } as any).promise
 
       onProgress?.({ page: i, totalPages, status: 'lendo (OCR)' })
-      const { data } = await withTimeout(
+      const { data } = await withTimeout<{ data: { text: string } }>(
         worker.recognize(canvas), 120_000, `O OCR demorou demais na página ${i}.`,
       )
       pages.push(data.text)
