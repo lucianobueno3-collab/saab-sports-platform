@@ -291,9 +291,44 @@ function extractInBody(text: string): ExtractedBodyComp | null {
   return { weight_kg: weight, body_fat_pct: bodyFat, muscle_mass_kg: smm, bone_mass_kg: null, visceral_fat: null }
 }
 
+/**
+ * Relatórios "Comparativo Antropométrico" (ex.: FlexNutri / Dr. César Torres)
+ * trazem várias datas em colunas — o valor ATUAL é o da última coluna — e os
+ * rótulos vêm separados dos números no texto. Extraímos por âncora + faixa
+ * plausível, pegando sempre o ÚLTIMO valor de cada métrica (medição mais recente).
+ */
+function extractComparativeAnthro(text: string): ExtractedBodyComp | null {
+  if (!/massa\s+magra/i.test(text) || !/massa\s+gorda/i.test(text)) return null
+  const cut = text.search(/massa\s+gorda/i)
+  const before = cut > 0 ? text.slice(0, cut) : text // bloco Peso/Altura/IMC
+  const after = cut > 0 ? text.slice(cut) : ''        // bloco de composição
+
+  const lastKg = (s: string, min: number, max: number): number | null => {
+    const re = /(\d{1,3}(?:\.\d{3})*,\d+)\s*kg/gi
+    let m: RegExpExecArray | null, last: number | null = null
+    while ((m = re.exec(s)) !== null) { const v = parseBrNumber(m[1]); if (v >= min && v <= max) last = v }
+    return last
+  }
+  // Peso: último kg antes do bloco de composição (exclui massa gorda/magra).
+  const weight = lastKg(before, 30, 300)
+  // Massa Magra: kg no bloco de composição, faixa alta (exclui massa gorda < 40).
+  const muscle = lastKg(after, 40, 250)
+  // % de gordura: último percentual plausível (<=55 exclui a % de massa magra).
+  let bodyFat: number | null = null
+  const pr = /(\d{1,3},\d+)\s*%/g
+  let pm: RegExpExecArray | null
+  while ((pm = pr.exec(text)) !== null) { const v = parseBrNumber(pm[1]); if (v >= 3 && v <= 55) bodyFat = v }
+
+  if (weight == null && bodyFat == null && muscle == null) return null
+  return { weight_kg: weight, body_fat_pct: bodyFat, muscle_mass_kg: muscle, bone_mass_kg: null, visceral_fat: null }
+}
+
 export function extractBodyCompFromText(text: string): ExtractedBodyComp {
   const inbody = extractInBody(text)
   if (inbody && inbody.weight_kg != null) return inbody
+
+  const comparative = extractComparativeAnthro(text)
+  if (comparative && comparative.weight_kg != null) return comparative
 
   const find = (patterns: RegExp[]): number | null => {
     for (const p of patterns) {

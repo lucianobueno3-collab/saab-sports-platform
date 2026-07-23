@@ -69,6 +69,29 @@ describe('extractBodyCompFromText', () => {
     expect(comp.body_fat_pct).toBeNull()
   })
 
+  it('extrai laudo Comparativo Antropométrico (pega a última coluna = mais recente)', () => {
+    // trecho real (FlexNutri / Dr. César Torres): rótulos separados dos números,
+    // 4 datas em colunas — o valor atual é o da última.
+    const text = `
+      Relatório Comparativo Antropométrico
+      Data Altura Peso IMC
+      29/01/2026 05/03/2026 13/05/2026 03/07/2026
+      1,91 m 1,91 m 1,91 m 1,91 m
+      119,40 kg 114,50 kg (-4,90) 109,40 kg (-5,10) 108,10 kg (-1,30)
+      32,73 31,39 29,99 (-1,40) 29,63 (-0,36)
+      Massa Gorda % Massa Gorda Massa Magra % Massa Magra
+      39,49 kg 26,78 kg (-7,39) 24,45 kg (-2,33)
+      33,07% 24,48% (-5,36) 22,61% (-1,87)
+      79,91 kg 82,62 kg (+2,29) 83,65 kg (+1,03)
+      66,93% 75,52% (+5,36) 77,39% (+1,87)
+    `
+    const comp = extractBodyCompFromText(text)
+    expect(comp.weight_kg).toBe(108.1)
+    expect(comp.muscle_mass_kg).toBe(83.65)
+    expect(comp.body_fat_pct).toBe(22.61)
+    expect(extractDateFromText(text)).toBe('2026-07-03')
+  })
+
   it('extrai laudo InBody (peso, %gordura calculado, massa muscular)', () => {
     // trecho real de um laudo InBody120 (sem rótulos junto dos números)
     const text = '[InBody120] 65,7 ( ) 45,1~55,2 (kg) 17,8 ( ) 12,1~14,8 (kg) 6,73 ( ) 4,18~5,10 (kg) 19,1 ( ) 9,6~19,3 (kg) 109,4 ( ) 68,2~92,3 (kg) 51,8 34,7~42,4 kg 90,3 61,4~75,0 kcal Ver.LookinBody120'
