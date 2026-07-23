@@ -1152,3 +1152,84 @@ export async function getDashboardSummary() {
     weeklyActivities: weeklyActivities ?? 0,
   }
 }
+
+// ─── Matrícula pública + anamnese (funil "Meus primeiros 5 km") ─────────────
+
+export type EnrollmentRow = {
+  id: string
+  created_at: string
+  athlete_id: string | null
+  user_id: string | null
+  package_key: string
+  status: 'pending' | 'active' | 'rejected'
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  age: number | null
+  height_cm: number | null
+  weight_kg: number | null
+  currently_running: boolean | null
+  running_level: string | null
+  activity_level: string | null
+  days_running: string | null
+  weekly_distance: string | null
+  goal: string | null
+  preferred_days: number[] | null
+  coach_notes: string | null
+  plan_applied_at: string | null
+}
+
+export type PublicEnrollInput = {
+  full_name: string; email: string; phone?: string; password: string
+  package_key?: string
+  age?: number | null; height_cm?: number | null; weight_kg?: number | null
+  currently_running?: boolean | null
+  running_level?: string | null; activity_level?: string | null
+  days_running?: string | null; weekly_distance?: string | null
+  goal?: string | null; preferred_days?: number[] | null
+  website?: string // honeypot
+}
+
+/** Matrícula pública (sem login): cria conta + atleta + anamnese via Function. */
+export async function publicEnroll(input: PublicEnrollInput): Promise<{ ok: boolean; error?: string; userId?: string; athleteId?: string }> {
+  try {
+    const res = await fetch('/api/public-enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    const text = await res.text()
+    let data: { error?: string; userId?: string; athleteId?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? (text ? `Erro ${res.status}` : `Erro ${res.status}`) }
+    return { ok: true, userId: data.userId, athleteId: data.athleteId }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao concluir a matrícula.' }
+  }
+}
+
+/** Lista as anamneses/matrículas (staff). Opcionalmente filtra por status. */
+export async function getEnrollments(status?: 'pending' | 'active' | 'rejected'): Promise<EnrollmentRow[]> {
+  const sb = createClient()
+  let q = sb.from('anamneses').select('*').order('created_at', { ascending: false })
+  if (status) q = q.eq('status', status)
+  const { data, error } = await q
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as EnrollmentRow[]
+}
+
+/** Atualiza status e/ou observações do treinador numa matrícula. */
+export async function updateEnrollment(id: string, patch: Partial<Pick<EnrollmentRow, 'status' | 'coach_notes'>>): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('anamneses').update(patch).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Marca a matrícula como ativa (plano aplicado). */
+export async function markEnrollmentPlanApplied(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('anamneses').update({ status: 'active', plan_applied_at: new Date().toISOString() }).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
