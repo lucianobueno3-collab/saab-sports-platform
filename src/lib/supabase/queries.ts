@@ -888,9 +888,9 @@ export async function extractPdfViaServer(storagePath: string): Promise<{ ok: bo
   const sb = createClient()
   const { data: { session } } = await sb.auth.getSession()
   if (!session) return { ok: false, error: 'sem sessão' }
-  // Timeout: se o servidor não responder em 30s, aborta (evita spinner eterno).
+  // Timeout de 60s (cold start do Netlify + carga do pdf.js podem demorar).
   const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), 30_000)
+  const timer = setTimeout(() => ctrl.abort(), 60_000)
   try {
     const res = await fetch('/api/extract-pdf', {
       method: 'POST',
@@ -899,10 +899,10 @@ export async function extractPdfViaServer(storagePath: string): Promise<{ ok: bo
       signal: ctrl.signal,
     })
     const data = await res.json().catch(() => ({}))
-    if (!res.ok) return { ok: false, error: data.error ?? `erro ${res.status}` }
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` }
     return { ok: true, text: data.text ?? '' }
-  } catch {
-    return { ok: false, error: 'rede' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'timeout 60s' : 'rede/fetch' }
   } finally {
     clearTimeout(timer)
   }
