@@ -69,17 +69,20 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
   async function handleExtract(doc: AthleteDocumentRow) {
     setError(null)
     setExtracting(doc.id)
+    let serverMsg = ''
     try {
       // 1) Servidor (Node) — robusto em qualquer navegador (já tem timeout).
       const srv = await extractPdfViaServer(doc.storage_path)
       if (srv.ok) {
-        if (srv.text && hasExtractableText(srv.text)) { onExtractText(srv.text, doc.file_name) }
-        else { setOcrDoc(doc) } // PDF sem camada de texto (digitalizado) → OCR
+        if (srv.text && hasExtractableText(srv.text)) { onExtractText(srv.text, doc.file_name); return }
+        // Servidor respondeu mas sem texto útil → PDF digitalizado → OCR.
+        setOcrDoc(doc)
+        setError(`O servidor leu o arquivo, mas não achou texto (${(srv.text ?? '').replace(/\s/g, '').length} caracteres). Parece digitalizado — use "Rodar OCR" abaixo.`)
         return
       }
+      serverMsg = srv.error ?? 'falhou'
 
       // 2) Fallback: leitura no navegador (pdfjs) caso o servidor falhe.
-      //    Timeout de 40s para o pdf.js não travar (comum no iOS/Safari).
       const sb = createClient()
       const { data, error: dlErr } = await withTimeout(
         sb.storage.from('athlete-docs').download(doc.storage_path), 30_000, 'download demorou')
@@ -88,10 +91,11 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
       const text = await withTimeout(extractPdfText(file), 40_000, 'leitura demorou')
       if (!hasExtractableText(text)) setOcrDoc(doc)
       else onExtractText(text, doc.file_name)
-    } catch {
-      // Em vez de girar pra sempre: oferece o OCR e explica o que fazer.
+    } catch (e) {
+      // Mostra o motivo exato de cada etapa para facilitar o diagnóstico.
+      const clientMsg = e instanceof Error ? e.message : String(e)
       setOcrDoc(doc)
-      setError('Não consegui ler o texto automaticamente. Use "Ler com OCR" abaixo ou preencha manualmente.')
+      setError(`Leitura automática falhou — servidor: ${serverMsg || 'ok'} · navegador: ${clientMsg}. Use "Rodar OCR" abaixo ou preencha manualmente.`)
     } finally {
       setExtracting(null) // sempre para o spinner, aconteça o que acontecer
     }
