@@ -194,9 +194,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           </div>
         </div>
 
-        {/* No desktop: calendário à esquerda e detalhe do dia à direita —
-            preenche a largura em vez de esticar as células. No celular, empilha. */}
-        <div className="grid lg:grid-cols-[1.5fr_1fr] gap-4 lg:gap-5 items-start">
+        {/* No desktop: calendário ocupa a largura e o detalhe do dia é uma
+            coluna fixa e enxuta à direita. No celular, empilha. */}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4 lg:gap-5 items-start">
         {/* Grade do mês com bolinhas por dia */}
         <div className="rounded-2xl p-2" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <div className="grid grid-cols-7 mb-1">
