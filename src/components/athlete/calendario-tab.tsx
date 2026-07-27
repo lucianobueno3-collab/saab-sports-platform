@@ -202,28 +202,40 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           <div className="grid grid-cols-7 mb-1">
             {WEEKDAYS.map(w => <div key={w} className="text-center text-[10px] font-bold text-muted-foreground py-1">{w[0]}</div>)}
           </div>
-          <div className="grid grid-cols-7 gap-0.5">
+          {/* No desktop as linhas dividem a altura (auto-rows-fr) e cada dia mostra
+              o nome do treino; no celular fica compacto com bolinhas. */}
+          <div className="grid grid-cols-7 gap-0.5 lg:gap-1 lg:auto-rows-fr lg:min-h-[64vh]">
             {monthDays.map(d => {
               const key = ymd(d)
               const inMonth = d.getMonth() === monthAnchor.getMonth()
               const isToday = key === todayKey
               const isSel = key === selectedDay
-              const items = [...(plannedByDay[key] ?? []).map(p => ({ color: sportInfo(p.sport).color, done: p.completed })),
-                             ...(doneByDay[key] ?? []).map(a => ({ color: sportInfo(a.sport).color, done: true }))]
+              const items = [
+                ...(plannedByDay[key] ?? []).map(p => ({ color: sportInfo(p.sport).color, done: p.completed, title: p.title })),
+                ...(doneByDay[key] ?? []).map(a => ({ color: sportInfo(a.sport).color, done: true, title: a.name ?? sportInfo(a.sport).label })),
+              ]
               return (
                 <button key={key} onClick={() => setSelectedDay(key)}
-                  className="aspect-square flex flex-col items-center justify-center rounded-xl transition-colors"
+                  className="flex flex-col items-center lg:items-stretch justify-start rounded-xl transition-colors p-1 lg:p-1.5 min-h-[44px] aspect-square lg:aspect-auto"
                   style={{
                     background: isSel ? '#e8001c18' : 'transparent',
                     border: isSel ? '1.5px solid #e8001c' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
-                    opacity: inMonth ? 1 : 0.35,
+                    opacity: inMonth ? 1 : 0.4,
                   }}>
-                  <span className={`text-xs font-bold ${isToday ? 'text-primary' : 'text-foreground'}`}>{d.getDate()}</span>
-                  <span className="flex items-center gap-0.5 h-2 mt-0.5">
+                  <span className={`text-xs lg:text-sm font-bold lg:self-start ${isToday ? 'text-primary' : 'text-foreground'}`}>{d.getDate()}</span>
+                  {/* celular: bolinhas */}
+                  <span className="lg:hidden flex items-center gap-0.5 h-2 mt-0.5">
                     {items.slice(0, 4).map((it, i) => (
                       <span key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: it.color, opacity: it.done ? 1 : 0.5 }} />
                     ))}
                     {items.length > 4 && <span className="text-[8px] text-muted-foreground">+</span>}
+                  </span>
+                  {/* desktop: nome do treino */}
+                  <span className="hidden lg:flex flex-col gap-0.5 mt-1 w-full overflow-hidden">
+                    {items.slice(0, 3).map((it, i) => (
+                      <span key={i} className="truncate rounded px-1.5 py-0.5 text-[11px] font-semibold text-left" style={{ background: it.color + '22', color: it.color, opacity: it.done ? 1 : 0.85 }}>{it.title}</span>
+                    ))}
+                    {items.length > 3 && <span className="text-[9px] text-muted-foreground px-1">+{items.length - 3}</span>}
                   </span>
                 </button>
               )
