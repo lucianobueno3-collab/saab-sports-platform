@@ -1239,3 +1239,53 @@ export async function markEnrollmentPlanApplied(id: string): Promise<boolean> {
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
+
+// ─── Métricas do atleta (exames/laudos → métricas, migração 030) ────────────
+
+export type AthleteMetricRow = {
+  id: string
+  athlete_id: string
+  measured_at: string
+  category: string
+  metric_key: string
+  label: string
+  value: number
+  unit: string | null
+  source: string | null
+}
+
+export type AthleteMetricInput = {
+  measured_at: string
+  category: string
+  metric_key: string
+  label: string
+  value: number
+  unit: string | null
+}
+
+/** Salva (upsert por chave+data) um conjunto de métricas do atleta. */
+export async function saveAthleteMetrics(athleteId: string, rows: AthleteMetricInput[], source?: string): Promise<{ ok: boolean; count: number; error?: string }> {
+  const sb = createClient()
+  const payload = rows.map(r => ({ athlete_id: athleteId, source: source ?? null, ...r }))
+  const { error } = await sb.from('athlete_metrics').upsert(payload, { onConflict: 'athlete_id,metric_key,measured_at' })
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: payload.length }
+}
+
+/** Todas as métricas do atleta (mais recentes primeiro). */
+export async function getAthleteMetrics(athleteId: string): Promise<AthleteMetricRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athlete_metrics')
+    .select('*').eq('athlete_id', athleteId)
+    .order('measured_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as AthleteMetricRow[]
+}
+
+/** Remove uma métrica específica. */
+export async function deleteAthleteMetric(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athlete_metrics').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}

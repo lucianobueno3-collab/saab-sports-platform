@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractExamsFromText, extractBodyCompFromText, extractDateFromText, parseBrNumber } from './pdf-parser'
+import { extractExamsFromText, extractBodyCompFromText, extractDateFromText, parseBrNumber, extractAnthropometryMetrics } from './pdf-parser'
 
 describe('parseBrNumber', () => {
   it('converte formatos brasileiros e internacionais', () => {
@@ -99,6 +99,44 @@ describe('extractBodyCompFromText', () => {
     expect(comp.weight_kg).toBe(109.4)
     expect(comp.muscle_mass_kg).toBe(51.8)
     expect(comp.body_fat_pct).toBe(17.5)
+  })
+})
+
+describe('extractAnthropometryMetrics (layout homologado: Comparativo Antropométrico)', () => {
+  const text = `
+    Relatório Comparativo Antropométrico
+    Data Altura Peso IMC
+    29/01/2026 05/03/2026 13/05/2026 03/07/2026
+    1,91 m 1,91 m 1,91 m 1,91 m
+    119,40 kg 114,50 kg (-4,90) 109,40 kg (-5,10) 108,10 kg (-1,30)
+    32,73 31,39 29,99 (-1,40) 29,63 (-0,36)
+    Massa Gorda % Massa Gorda Massa Magra % Massa Magra
+    39,49 kg 26,78 kg (-7,39) 24,45 kg (-2,33)
+    33,07% 24,48% (-5,36) 22,61% (-1,87)
+    79,91 kg 82,62 kg (+2,29) 83,65 kg (+1,03)
+    66,93% 75,52% (+5,36) 77,39% (+1,87)
+    Circunferências
+    Ombro Peitoral Cintura Abdomen Quadril Panturrilha direita Panturrilha esquerda Punho Direito Punho Esquerdo Coxa proximal direita Coxa proximal esquerda Braço relaxado direito Braço relaxado esquerdo Braço contraido direito Braço contraido esquerdo Antebraço Direito Antebraço Esquerdo
+    127,00 cm 114,00 cm 98,00 cm 110,00 cm 112,00 cm 38,00 cm 38,00 cm 16,00 cm 16,00 cm 64,00 cm 64,00 cm 37,00 cm 38,00 cm 40,00 cm 40,00 cm 28,00 cm 28,00 cm
+    124,00 cm (-3,00) 114,00 cm 97,00 cm (-1,00) 110,00 cm 110,00 cm (-2,00) 38,00 cm 38,00 cm 16,00 cm 16,00 cm 64,00 cm 64,00 cm 37,00 cm 38,00 cm 40,00 cm 40,00 cm 28,00 cm 28,00 cm
+    Pregas Cutâneas
+  `
+  it('extrai composição e circunferências da coluna mais recente', () => {
+    const r = extractAnthropometryMetrics(text)
+    expect(r).not.toBeNull()
+    const by = Object.fromEntries(r!.metrics.map(m => [m.key, m.value]))
+    expect(r!.measured_at).toBe('2026-07-03')
+    expect(by['peso']).toBe(108.1)
+    expect(by['imc']).toBe(29.63)
+    expect(by['perc_gordura']).toBe(22.61)
+    expect(by['massa_magra']).toBe(83.65)
+    expect(by['cintura']).toBe(97)     // última coluna
+    expect(by['abdomen']).toBe(110)
+    expect(r!.metrics.filter(m => m.category === 'circunferencia')).toHaveLength(17)
+  })
+
+  it('ignora PDFs que não são desse layout', () => {
+    expect(extractAnthropometryMetrics('Plano alimentar da semana')).toBeNull()
   })
 })
 
