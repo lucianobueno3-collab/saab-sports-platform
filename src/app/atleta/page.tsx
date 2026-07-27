@@ -126,10 +126,50 @@ export default function AtletaPage() {
   const moreActive = moreTabs.some(t => t.key === tab)
   function go(k: AtletaTab) { setTab(k); setMoreOpen(false) }
 
+  const allTabs = [...primaryTabs, ...moreTabs]
   return (
-    <div className="saab-bg max-w-5xl mx-auto px-4 py-6 pb-28 space-y-5 safe-top">
-      {/* Cabeçalho */}
-      <div className="flex items-center justify-between">
+    <div className="saab-bg flex min-h-dvh">
+      {/* Barra lateral (desktop) — mesmo padrão do painel do treinador */}
+      <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-border bg-sidebar">
+        <button onClick={() => go('dados')} className="flex items-center gap-3 px-5 py-5 border-b border-border text-left hover:bg-secondary/40 transition-colors">
+          <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }}>
+            {profile?.avatar_url
+              ? <img src={profile.avatar_url} alt={a.full_name} className="w-full h-full object-cover" />
+              : (profile?.full_name ?? a.full_name).split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-black text-foreground truncate">{profile?.full_name ?? a.full_name}</span>
+            <span className="block text-[11px] text-muted-foreground">{sportLabel(a.primary_sport)} · Atleta</span>
+          </span>
+        </button>
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          {allTabs.map(({ key, label, icon: Icon }) => (
+            <button key={key} onClick={() => go(key)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
+              style={tab === key ? { background: '#e8001c15', color: '#e8001c', border: '1px solid #e8001c40' } : { color: 'var(--muted-foreground)' }}>
+              <Icon className="w-4 h-4 flex-shrink-0" /><span className="flex-1 text-left">{label}</span>
+            </button>
+          ))}
+        </nav>
+        <div className="px-3 py-3 border-t border-border space-y-1">
+          {canCoach && (
+            <button onClick={switchToCoach} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+              <ShieldCheck className="w-4 h-4" /><span className="flex-1 text-left">Painel do treinador</span>
+            </button>
+          )}
+          <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+            <LogOut className="w-4 h-4" /><span className="flex-1 text-left">Sair</span>
+          </button>
+          <VersionTag className="text-[10px] text-muted-foreground/50 px-3 pt-1" />
+        </div>
+      </aside>
+
+      {/* Coluna principal */}
+      <div className="flex-1 min-w-0 flex flex-col">
+      <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 lg:pb-8 safe-top">
+      <div className="max-w-5xl mx-auto w-full space-y-5">
+      {/* Cabeçalho (só no celular — no desktop a identidade está na sidebar) */}
+      <div className="flex items-center justify-between lg:hidden">
         <div className="flex items-center gap-3">
           <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Editar meus dados">
             {profile?.avatar_url
@@ -232,12 +272,14 @@ export default function AtletaPage() {
         <MyDataForm athleteId={athleteId} profile={profile} onSaved={p => setProfile(p)} />
       )}
 
-      <div className="text-center pt-2 space-y-0.5">
+      <div className="text-center pt-2 space-y-0.5 lg:hidden">
         <p className="text-[10px] text-muted-foreground/60">Saab Sports Performance Platform</p>
         <VersionTag className="text-[10px] text-muted-foreground/50" />
       </div>
+      </div>{/* /conteúdo max-w-5xl */}
+      </main>
 
-      {/* Folha "Mais" (abas secundárias) */}
+      {/* Folha "Mais" (abas secundárias) — só no celular */}
       {moreOpen && (
         <>
           <div className="fixed inset-0 z-[60] bg-black/50" onClick={() => setMoreOpen(false)} />
@@ -257,8 +299,8 @@ export default function AtletaPage() {
         </>
       )}
 
-      {/* Menu inferior fixo (estilo TrainingPeaks) */}
-      <nav className="fixed left-0 right-0 bottom-0 z-40 bg-card/95 backdrop-blur border-t border-border safe-bottom">
+      {/* Menu inferior fixo (estilo TrainingPeaks) — só no celular */}
+      <nav className="lg:hidden fixed left-0 right-0 bottom-0 z-40 bg-card/95 backdrop-blur border-t border-border safe-bottom">
         <div className="max-w-5xl mx-auto flex items-stretch">
           {primaryTabs.map(({ key, label, icon: Icon }) => {
             const active = tab === key
@@ -279,6 +321,7 @@ export default function AtletaPage() {
           </button>
         </div>
       </nav>
+      </div>{/* /coluna principal */}
     </div>
   )
 }
