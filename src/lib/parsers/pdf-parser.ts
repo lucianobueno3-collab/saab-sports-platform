@@ -323,6 +323,84 @@ function extractComparativeAnthro(text: string): ExtractedBodyComp | null {
   return { weight_kg: weight, body_fat_pct: bodyFat, muscle_mass_kg: muscle, bone_mass_kg: null, visceral_fat: null }
 }
 
+// ─── Métricas antropométricas completas (layouts homologados) ────────────────
+
+export interface AnthroMetric {
+  category: 'composicao' | 'circunferencia' | 'dobra'
+  key: string
+  label: string
+  value: number
+  unit: string
+}
+export interface AnthroExtract { measured_at: string | null; metrics: AnthroMetric[] }
+
+// Circunferências na ordem em que aparecem no laudo comparativo (FlexNutri).
+const CIRC_LABELS = [
+  'Ombro', 'Peitoral', 'Cintura', 'Abdômen', 'Quadril',
+  'Panturrilha direita', 'Panturrilha esquerda', 'Punho direito', 'Punho esquerdo',
+  'Coxa proximal direita', 'Coxa proximal esquerda',
+  'Braço relaxado direito', 'Braço relaxado esquerdo',
+  'Braço contraído direito', 'Braço contraído esquerdo',
+  'Antebraço direito', 'Antebraço esquerdo',
+]
+
+const slug = (s: string) =>
+  s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+
+/**
+ * Layout HOMOLOGADO: "Relatório Comparativo Antropométrico" (FlexNutri /
+ * Dr. César Torres). Extrai TODAS as métricas da medição mais recente (última
+ * coluna): composição + circunferências. Valores verificados contra o laudo
+ * real. As dobras cutâneas ainda não são homologadas (o PDF embaralha a ordem).
+ */
+export function extractAnthropometryMetrics(text: string): AnthroExtract | null {
+  const isComparative = /comparativo\s+antropom[ée]trico/i.test(text) ||
+    (/massa\s+magra/i.test(text) && /massa\s+gorda/i.test(text) && /circunfer[êe]ncias/i.test(text))
+  if (!isComparative) return null
+
+  const metrics: AnthroMetric[] = []
+  const push = (category: AnthroMetric['category'], key: string, label: string, value: number | null, unit: string) => {
+    if (value != null && !isNaN(value)) metrics.push({ category, key, label, value, unit })
+  }
+  const lastKg = (s: string, min: number, max: number): number | null => {
+    const re = /(\d{1,3}(?:\.\d{3})*,\d+)\s*kg/gi
+    let m: RegExpExecArray | null, last: number | null = null
+    while ((m = re.exec(s)) !== null) { const v = parseBrNumber(m[1]); if (v >= min && v <= max) last = v }
+    return last
+  }
+
+  // ── Composição (última coluna) ──
+  const cut = text.search(/massa\s+gorda/i)
+  const before = cut > 0 ? text.slice(0, cut) : text
+  const after = cut > 0 ? text.slice(cut) : ''
+  push('composicao', 'peso', 'Peso', lastKg(before, 30, 300), 'kg')
+  // IMC: número simples (sem unidade) no bloco superior, faixa plausível.
+  let imc: number | null = null
+  for (const t of before.split(/\s+/)) { const mm = /^(\d{2},\d{1,2})$/.exec(t); if (mm) { const v = parseBrNumber(mm[1]); if (v >= 15 && v <= 45) imc = v } }
+  push('composicao', 'imc', 'IMC', imc, '')
+  push('composicao', 'massa_gorda', 'Massa Gorda', lastKg(after, 5, 40), 'kg')
+  push('composicao', 'massa_magra', 'Massa Magra', lastKg(after, 40, 250), 'kg')
+  let pctFat: number | null = null, pctLean: number | null = null
+  { let m: RegExpExecArray | null; const re = /(\d{1,3},\d+)\s*%/g; while ((m = re.exec(text)) !== null) { const v = parseBrNumber(m[1]); if (v >= 3 && v <= 55) pctFat = v; else if (v > 55 && v <= 95) pctLean = v } }
+  push('composicao', 'perc_gordura', '% Gordura', pctFat, '%')
+  push('composicao', 'perc_massa_magra', '% Massa Magra', pctLean, '%')
+
+  // ── Circunferências (última coluna) ──
+  const ci = text.search(/circunfer[êe]ncias/i)
+  if (ci >= 0) {
+    const pi = text.search(/pregas\s+cut[âa]neas/i)
+    const seg = text.slice(ci, pi > ci ? pi : undefined)
+    const cm = [...seg.matchAll(/(\d{1,3},\d{2})\s*cm/g)].map(m => parseBrNumber(m[1]))
+    const latest = cm.slice(-CIRC_LABELS.length)
+    if (latest.length === CIRC_LABELS.length) {
+      CIRC_LABELS.forEach((l, i) => push('circunferencia', slug(l), l, latest[i], 'cm'))
+    }
+  }
+
+  return metrics.length > 0 ? { measured_at: extractDateFromText(text), metrics } : null
+}
+
 export function extractBodyCompFromText(text: string): ExtractedBodyComp {
   const inbody = extractInBody(text)
   if (inbody && inbody.weight_kg != null) return inbody

@@ -11,13 +11,14 @@ import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -40,7 +41,7 @@ type AthleteProfile = {
   vo2max_ml_kg_min: number | null
   avatar_url: string | null; full_name: string | null
 }
-type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'provas' | 'evolucao' | 'dados'
+type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'metricas' | 'provas' | 'evolucao' | 'dados'
 
 export default function AtletaPage() {
   const sb = createClient()
@@ -118,6 +119,7 @@ export default function AtletaPage() {
   ]
   const moreTabs: TabDef[] = [
     { key: 'nutricao', label: 'Nutrição', icon: Utensils },
+    { key: 'metricas', label: 'Métricas', icon: Ruler },
     { key: 'provas', label: 'Provas', icon: Trophy },
     { key: 'dados', label: 'Meus dados', icon: UserRound },
   ]
@@ -221,6 +223,7 @@ export default function AtletaPage() {
 
       {tab === 'saude' && athleteId && <SaudeTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
       {tab === 'nutricao' && athleteId && <NutricaoTab athleteId={athleteId} />}
+      {tab === 'metricas' && athleteId && <MetricasTab athleteId={athleteId} />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
       {tab === 'evolucao' && athleteId && (
         <EvolutionShowcase athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />

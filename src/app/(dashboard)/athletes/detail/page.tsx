@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2 } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2, Ruler } from 'lucide-react'
 import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
@@ -22,6 +22,7 @@ import {
 import { trainingReadiness } from '@/lib/readiness'
 import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { ForcaTab } from '@/components/athlete/forca-tab'
@@ -87,7 +88,7 @@ function AthleteDetailContent() {
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
-  const [activeTab, setActiveTab] = useState<'performance' | 'calendario' | 'saude' | 'forca' | 'nutricao' | 'provas' | 'evolucao'>('performance')
+  const [activeTab, setActiveTab] = useState<'performance' | 'calendario' | 'saude' | 'forca' | 'nutricao' | 'metricas' | 'provas' | 'evolucao'>('performance')
   const [checkins, setCheckins] = useState<CheckinRow[]>([])
 
   useEffect(() => {
@@ -367,6 +368,7 @@ function AthleteDetailContent() {
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
             { key: 'forca', label: 'Força', icon: Dumbbell },
             { key: 'nutricao', label: 'Nutrição', icon: Utensils },
+            { key: 'metricas', label: 'Métricas', icon: Ruler },
             { key: 'provas', label: 'Provas', icon: Trophy },
             { key: 'evolucao', label: 'Evolução', icon: Target },
           ] as { key: typeof activeTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
@@ -640,6 +642,7 @@ function AthleteDetailContent() {
         {activeTab === 'saude' && <SaudeTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
         {activeTab === 'forca' && <ForcaTab athleteId={id} weightKg={athlete.weight_kg} />}
         {activeTab === 'nutricao' && <NutricaoTab athleteId={id} />}
+        {activeTab === 'metricas' && <MetricasTab athleteId={id} />}
         {activeTab === 'provas' && <ProvasTab athleteId={id} />}
         {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
       </div>

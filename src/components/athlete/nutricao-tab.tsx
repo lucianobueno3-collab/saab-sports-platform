@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getAthleteBodyComposition, getAthleteNutritionPlans, type BodyCompositionRow, type NutritionPlanRow } from '@/lib/supabase/queries'
-import { extractBodyCompFromText, extractDateFromText } from '@/lib/parsers/pdf-parser'
+import { getAthleteBodyComposition, getAthleteNutritionPlans, saveAthleteMetrics, type BodyCompositionRow, type NutritionPlanRow } from '@/lib/supabase/queries'
+import { extractBodyCompFromText, extractDateFromText, extractAnthropometryMetrics } from '@/lib/parsers/pdf-parser'
 import { todayLocalISO } from '@/lib/dates'
 import { DocsSection } from './docs-section'
 import { Plus, X, Scale, Utensils, TrendingDown, TrendingUp, Minus, Pencil } from 'lucide-react'
@@ -180,11 +180,25 @@ export function NutricaoTab({ athleteId }: Props) {
     setPlanOpen(true)
   }
 
-  function handlePdfText(text: string, fileName: string) {
+  async function handlePdfText(text: string, fileName: string) {
+    // Layout homologado (Comparativo Antropométrico): salva TODAS as métricas
+    // (composição + circunferências) com histórico, além de preencher a medição.
+    const anthro = extractAnthropometryMetrics(text)
+    if (anthro && anthro.metrics.length > 0) {
+      const measured_at = anthro.measured_at ?? todayLocalISO()
+      const res = await saveAthleteMetrics(
+        athleteId,
+        anthro.metrics.map(m => ({ measured_at, category: m.category, metric_key: m.key, label: m.label, value: m.value, unit: m.unit })),
+        fileName,
+      )
+      if (res.ok) { load(); window.alert(`${res.count} métricas importadas (${measured_at.split('-').reverse().join('/')}). Veja na aba Métricas.`) }
+      else window.alert(`Não consegui salvar as métricas: ${res.error ?? 'erro'}`)
+    }
+
     const comp = extractBodyCompFromText(text)
     const found = Object.values(comp).some(v => v != null)
     if (!found) {
-      window.alert('Nenhum dado de composição corporal detectado neste PDF (peso, % gordura, massa muscular...). Preencha manualmente.')
+      if (!anthro) window.alert('Nenhum dado de composição corporal detectado neste PDF (peso, % gordura, massa muscular...). Preencha manualmente.')
       return
     }
     // Pré-preenche o formulário de medição e abre o modal para revisão
