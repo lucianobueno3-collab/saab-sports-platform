@@ -166,8 +166,8 @@ export default function AtletaPage() {
 
       {/* Coluna principal */}
       <div className="flex-1 min-w-0 flex flex-col">
-      <main className="flex-1 overflow-y-auto px-4 py-6 pb-28 lg:pb-8 safe-top">
-      <div className="max-w-5xl mx-auto w-full space-y-5">
+      <main className="flex-1 overflow-y-auto px-4 lg:px-6 py-6 pb-28 lg:pb-8 safe-top">
+      <div className="max-w-6xl mx-auto w-full space-y-5">
       {/* Cabeçalho (só no celular — no desktop a identidade está na sidebar) */}
       <div className="flex items-center justify-between lg:hidden">
         <div className="flex items-center gap-3">
