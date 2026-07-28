@@ -1260,6 +1260,28 @@ export async function getMyEnrollmentStatus(): Promise<{ status: 'pending' | 'ac
   return (data as { status: 'pending' | 'active' | 'rejected'; full_name: string | null; package_key: string } | null) ?? null
 }
 
+/** Envia o e-mail de "plano pronto" ao aluno (staff). Não bloqueia a aprovação:
+ *  retorna skipped quando o provedor de e-mail ainda não está configurado. */
+export async function notifyEnrollmentApproved(athleteId: string): Promise<{ ok: boolean; sent?: boolean; skipped?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada.' }
+  try {
+    const res = await fetch('/api/notify-enrollment-approved', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ athlete_id: athleteId }),
+    })
+    const text = await res.text()
+    let data: { error?: string; sent?: boolean; skipped?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, sent: data.sent, skipped: data.skipped }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao enviar o e-mail.' }
+  }
+}
+
 // ─── Métricas do atleta (exames/laudos → métricas, migração 030) ────────────
 
 export type AthleteMetricRow = {
