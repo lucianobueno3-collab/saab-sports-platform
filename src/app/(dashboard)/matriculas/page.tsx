@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   getEnrollments, updateEnrollment, markEnrollmentPlanApplied, notifyEnrollmentApproved,
@@ -9,7 +10,7 @@ import {
 } from '@/lib/supabase/queries'
 import { PLAN_LIBRARY, generatePlan } from '@/lib/training-plans'
 import { recommendProgram, expandProgram } from '@/lib/program-templates'
-import { ClipboardList, Loader2, Check, X, CalendarDays, Footprints, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
+import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye } from 'lucide-react'
 
 const RED = '#e8001c'
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -135,6 +136,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   const [start, setStart] = useState(ymd(nextMonday()))
   const [busy, setBusy] = useState<null | 'apply' | 'reject' | 'notes'>(null)
   const [msg, setMsg] = useState<string | null>(null)
+  const [preview, setPreview] = useState<PlannedWorkoutInput[] | null>(null)
 
   // Programas compostos (compositor) + roteamento pela anamnese.
   const [programs, setPrograms] = useState<TrainingProgramRow[]>([])
@@ -160,9 +162,9 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   const planKey = PKG_PLAN[enr.package_key] ?? 'run_first5k_12'
   const fallbackPlan = useMemo(() => PLAN_LIBRARY.find(p => p.key === planKey) ?? null, [planKey])
 
-  async function applyPlan() {
-    if (!enr.athlete_id) { setMsg('Sem atleta vinculado.'); return }
-    setBusy('apply'); setMsg(null)
+  // Monta os treinos (com dias flutuantes), sem gravar — usado na pré-visualização.
+  function buildRows(): PlannedWorkoutInput[] | null {
+    if (!enr.athlete_id) { setMsg('Sem atleta vinculado.'); return null }
     const startDate = new Date(start + 'T12:00:00')
     const pref = (enr.preferred_days ?? []).slice().sort((a, b) => a - b)
     let rows: PlannedWorkoutInput[] = []
@@ -184,8 +186,21 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
         })
       }
-    } else { setMsg('Nenhum programa disponível para aplicar.'); setBusy(null); return }
+    } else { setMsg('Nenhum programa disponível para aplicar.'); return null }
+    return rows
+  }
 
+  // Abre a pré-visualização (valida os dias antes de gravar).
+  function openPreview() {
+    setMsg(null)
+    const rows = buildRows()
+    if (rows && rows.length) setPreview(rows)
+    else if (rows) setMsg('O programa selecionado não gerou treinos.')
+  }
+
+  // Grava de fato no calendário do aluno (após confirmar na pré-visualização).
+  async function commit(rows: PlannedWorkoutInput[]) {
+    setBusy('apply'); setMsg(null)
     const res = await bulkCreatePlannedWorkouts(rows)
     if (!res.ok) { setMsg(res.error ?? 'Falha ao aplicar.'); setBusy(null); return }
     if (notes.trim() !== (enr.coach_notes ?? '')) await updateEnrollment(enr.id, { coach_notes: notes.trim() })
@@ -197,7 +212,8 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
       const n = await notifyEnrollmentApproved(enr.athlete_id)
       mail = n.sent ? ' E-mail de boas-vindas enviado. 📧' : (n.skipped === 'email_nao_configurado' ? '' : '')
     }
-    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário. Acesso do aluno liberado. ✅${mail}`)
+    setBusy(null); setPreview(null)
+    setMsg(`Aplicado: ${res.count} treinos no calendário. Acesso do aluno liberado. ✅${mail}`)
     onChanged()
   }
 
@@ -300,10 +316,10 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
             <input type="date" value={start} onChange={e => setStart(e.target.value)}
               className="rounded-lg px-2.5 py-1.5 text-sm bg-background border border-border text-foreground" />
           </label>
-          <button onClick={applyPlan} disabled={busy !== null || !enr.athlete_id}
+          <button onClick={openPreview} disabled={busy !== null || !enr.athlete_id}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-black text-white disabled:opacity-50" style={{ background: RED }}>
-            {busy === 'apply' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Footprints className="w-4 h-4" />}
-            {enr.status === 'active' ? 'Reaplicar' : 'Aplicar programa'}
+            {busy === 'apply' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+            {enr.status === 'active' ? 'Revisar e reaplicar' : 'Revisar e aplicar'}
           </button>
         </div>
         <p className="text-[10px] text-muted-foreground mt-2">Dias flutuantes: o longão vai para {enr.long_run_day != null ? WEEKDAYS[enr.long_run_day] : 'o último dia preferido'}, as outras corridas nos demais dias preferidos ({(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || 'não informados'}) e a força nos dias que sobram.</p>
@@ -326,7 +342,124 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           </button>
         )}
       </div>
+
+      {preview && (
+        <PlanPreview
+          rows={preview} start={start}
+          programName={selectedProgram?.name ?? fallbackPlan?.name ?? 'Plano'}
+          athleteName={enr.full_name ?? 'aluno'}
+          longRunDay={enr.long_run_day}
+          busy={busy === 'apply'}
+          onCancel={() => setPreview(null)}
+          onConfirm={() => commit(preview)}
+        />
+      )}
     </div>
+  )
+}
+
+// ─── Pré-visualização do plano antes de gravar ──────────────────────────────
+const SPORT_META: Record<string, { label: string; color: string }> = {
+  running: { label: 'Corrida', color: '#ff6b00' },
+  cycling: { label: 'Ciclismo', color: '#0088ff' },
+  swimming: { label: 'Natação', color: '#00b4d8' },
+  strength: { label: 'Força', color: '#e8001c' },
+  triathlon: { label: 'Triathlon', color: '#8b5cf6' },
+}
+const sportMeta = (s: string) => SPORT_META[s] ?? { label: s, color: '#64748b' }
+function wdMon(dateStr: string) { return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7 } // 0=Seg … 6=Dom
+function fmtDM(dateStr: string) { const d = new Date(dateStr + 'T12:00:00'); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
+
+function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, onCancel, onConfirm }: {
+  rows: PlannedWorkoutInput[]; start: string; programName: string; athleteName: string
+  longRunDay: number | null; busy: boolean; onCancel: () => void; onConfirm: () => void
+}) {
+  const startMs = new Date(start + 'T12:00:00').getTime()
+  const weekOf = (d: string) => Math.floor((new Date(d + 'T12:00:00').getTime() - startMs) / (7 * 86400000))
+
+  // Agrupa por semana do programa (blocos de 7 dias a partir do início).
+  const weeks = useMemo(() => {
+    const map = new Map<number, PlannedWorkoutInput[]>()
+    for (const r of rows) {
+      const w = Math.max(0, weekOf(r.date))
+      if (!map.has(w)) map.set(w, [])
+      map.get(w)!.push(r)
+    }
+    return [...map.entries()].sort((a, b) => a[0] - b[0])
+      .map(([w, list]) => [w, list.slice().sort((a, b) => a.date.localeCompare(b.date))] as const)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, start])
+
+  // Padrão semanal (da 1ª semana): dias com corrida x força e checagem de dias seguidos.
+  const firstWeek = weeks[0]?.[1] ?? []
+  const runDays = [...new Set(firstWeek.filter(r => r.sport !== 'strength').map(r => wdMon(r.date)))].sort((a, b) => a - b)
+  const strengthDays = [...new Set(firstWeek.filter(r => r.sport === 'strength').map(r => wdMon(r.date)))].sort((a, b) => a - b)
+  const consecutiveRuns = runDays.some((d, i) => runDays.slice(i + 1).some(e => e - d === 1 || (d === 0 && e === 6)))
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-2xl shadow-2xl max-h-[92vh] flex flex-col">
+        {/* Cabeçalho */}
+        <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-black text-foreground flex items-center gap-2"><Eye className="w-4 h-4 text-primary" /> Revisar o plano de {athleteName}</h2>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{programName} · {weeks.length} semanas · {rows.length} treinos · início {fmtDM(start)}</p>
+          </div>
+          <button onClick={onCancel} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+
+        {/* Resumo dos dias */}
+        <div className="px-5 py-3 border-b border-border space-y-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+            <span className="text-muted-foreground">Longão: <strong className="text-foreground">{longRunDay != null ? WEEKDAYS[longRunDay] : '—'}</strong></span>
+            <span className="text-muted-foreground">Corridas: <strong className="text-foreground">{runDays.map(d => WEEKDAYS[d]).join(', ') || '—'}</strong></span>
+            <span className="text-muted-foreground">Força: <strong className="text-foreground">{strengthDays.map(d => WEEKDAYS[d]).join(', ') || '—'}</strong></span>
+          </div>
+          {consecutiveRuns && (
+            <p className="text-[11px] font-semibold rounded-lg px-2.5 py-1.5" style={{ background: '#f59e0b18', color: '#b45309' }}>
+              ⚠️ Há corridas em dias seguidos. Para iniciante, o ideal é intercalar com descanso — ajuste os dias preferidos na anamnese se quiser mudar.
+            </p>
+          )}
+        </div>
+
+        {/* Semanas */}
+        <div className="overflow-y-auto px-5 py-3 space-y-3">
+          {weeks.map(([w, list]) => (
+            <div key={w}>
+              <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground mb-1.5">Semana {w + 1}</p>
+              <div className="space-y-1.5">
+                {list.map((r, i) => {
+                  const m = sportMeta(r.sport)
+                  return (
+                    <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                      <span className="text-[11px] font-black w-10 shrink-0 text-center rounded" style={{ color: m.color }}>{WEEKDAYS[wdMon(r.date)]}</span>
+                      <span className="text-[10px] text-muted-foreground w-10 shrink-0">{fmtDM(r.date)}</span>
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: m.color }} />
+                      <span className="text-sm font-semibold text-foreground truncate flex-1">{r.title}</span>
+                      {r.planned_duration_min ? <span className="text-[11px] text-muted-foreground shrink-0">{r.planned_duration_min}min</span> : null}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Ações */}
+        <div className="flex items-center gap-2 px-5 py-4 border-t border-border">
+          <button onClick={onCancel} disabled={busy}
+            className="flex-1 py-2.5 rounded-lg text-sm font-bold text-muted-foreground border border-border hover:bg-secondary disabled:opacity-50">
+            Voltar e ajustar
+          </button>
+          <button onClick={onConfirm} disabled={busy}
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-black text-white disabled:opacity-60" style={{ background: RED }}>
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+            {busy ? 'Gravando…' : 'Confirmar e gravar'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
