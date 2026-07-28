@@ -1242,6 +1242,24 @@ export async function markEnrollmentPlanApplied(id: string): Promise<boolean> {
   return true
 }
 
+/** Status da matrícula do próprio aluno (portão de aprovação no portal).
+ *  Retorna null quando não há anamnese — ex.: aluno cadastrado direto pelo
+ *  treinador, que tem acesso liberado normalmente. */
+export async function getMyEnrollmentStatus(): Promise<{ status: 'pending' | 'active' | 'rejected'; full_name: string | null; package_key: string } | null> {
+  const sb = createClient()
+  const { data: u } = await sb.auth.getUser()
+  const uid = u.user?.id
+  if (!uid) return null
+  const { data, error } = await sb.from('anamneses')
+    .select('status, full_name, package_key')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data as { status: 'pending' | 'active' | 'rejected'; full_name: string | null; package_key: string } | null) ?? null
+}
+
 // ─── Métricas do atleta (exames/laudos → métricas, migração 030) ────────────
 
 export type AthleteMetricRow = {

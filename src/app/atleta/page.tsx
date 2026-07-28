@@ -4,6 +4,7 @@ import { useEffect, useState, type ElementType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   getMyAthleteId, getMyRole, getAthleteSelf, updatePlannedWorkout, uploadAvatar,
+  getMyEnrollmentStatus,
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
@@ -19,7 +20,7 @@ import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -54,6 +55,9 @@ export default function AtletaPage() {
   const [canCoach, setCanCoach] = useState(false)
   const [tab, setTab] = useState<AtletaTab>('calendario')
   const [moreOpen, setMoreOpen] = useState(false)
+  // portão de aprovação: enquanto a anamnese estiver 'pending', o aluno vê a
+  // tela de boas-vindas em vez do portal (o treinador ainda vai montar o plano).
+  const [enrollStatus, setEnrollStatus] = useState<'pending' | 'active' | 'rejected' | null>(null)
 
   useEffect(() => {
     (async () => {
@@ -65,7 +69,14 @@ export default function AtletaPage() {
       if (!id) { window.location.href = '/dashboard'; return }
       setAthleteId(id)
       // conta dupla (treinador que também é atleta): habilita voltar ao painel
-      getMyRole().then(r => setCanCoach(r === 'coach' || r === 'admin')).catch(() => {})
+      const role = await getMyRole().catch(() => null)
+      const isStaff = role === 'coach' || role === 'admin'
+      setCanCoach(isStaff)
+      // staff nunca é barrado pelo portão; alunos do funil aguardam aprovação
+      if (!isStaff) {
+        const enr = await getMyEnrollmentStatus().catch(() => null)
+        setEnrollStatus(enr?.status ?? null)
+      }
       const { data: prof } = await sb.from('athletes')
         .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min, avatar_url, full_name')
         .eq('id', id).single()
@@ -95,6 +106,10 @@ export default function AtletaPage() {
   }
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center gap-2 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /> <span className="text-sm">Carregando...</span></div>
+  }
+  // Portão de aprovação — aluno recém-matriculado aguarda o treinador montar o plano.
+  if (!canCoach && (enrollStatus === 'pending' || enrollStatus === 'rejected')) {
+    return <EnrollmentGate status={enrollStatus} name={profile?.full_name ?? null} onLogout={logout} onRefresh={() => window.location.reload()} />
   }
   if (!data?.summary) {
     return <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
@@ -337,6 +352,71 @@ export default function AtletaPage() {
         </div>
       </nav>
       </div>{/* /coluna principal */}
+    </div>
+  )
+}
+
+// Portão de aprovação — tela de boas-vindas enquanto o treinador não montou o plano
+function EnrollmentGate({ status, name, onLogout, onRefresh }: {
+  status: 'pending' | 'rejected'; name: string | null; onLogout: () => void; onRefresh: () => void
+}) {
+  const RED = '#e8001c'
+  const firstName = (name ?? '').trim().split(/\s+/)[0] || null
+  const rejected = status === 'rejected'
+  return (
+    <div className="saab-bg min-h-dvh flex flex-col items-center justify-center px-6 text-center">
+      <div className="w-full max-w-md rounded-3xl p-8 sm:p-10" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+        <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center" style={{ background: RED + '18' }}>
+          {rejected ? <Clock className="w-8 h-8" style={{ color: RED }} /> : <PartyPopper className="w-8 h-8" style={{ color: RED }} />}
+        </div>
+
+        {rejected ? (
+          <>
+            <h1 className="text-2xl font-black text-foreground mt-5 text-balance">Sua matrícula está em análise</h1>
+            <p className="text-sm text-muted-foreground mt-3 text-pretty">
+              Precisamos de mais alguns dados antes de liberar seu plano. Fale com o seu treinador para concluir a matrícula.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-2xl font-black text-foreground mt-5 text-balance">
+              {firstName ? `Bem-vindo(a), ${firstName}! 🎉` : 'Matrícula recebida! 🎉'}
+            </h1>
+            <p className="text-sm text-muted-foreground mt-3 text-pretty">
+              Recebemos sua anamnese. Agora é a vez do seu <strong className="text-foreground">treinador montar o seu plano</strong> personalizado com base nas suas respostas.
+            </p>
+            <div className="mt-6 space-y-2.5 text-left">
+              {[
+                { done: true, t: 'Anamnese enviada' },
+                { done: false, t: 'Treinador montando seu plano' },
+                { done: false, t: 'Treinos liberados no seu calendário' },
+              ].map((s, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-xl px-3.5 py-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                  {s.done
+                    ? <CheckCircle2 className="w-5 h-5 shrink-0" style={{ color: '#00d084' }} />
+                    : <span className="w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center" style={{ borderColor: i === 1 ? RED : 'var(--border)' }}>{i === 1 && <Loader2 className="w-3 h-3 animate-spin" style={{ color: RED }} />}</span>}
+                  <span className={`text-sm font-semibold ${s.done ? 'text-foreground' : 'text-muted-foreground'}`}>{s.t}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-5 text-pretty">
+              Assim que o plano estiver pronto, seus treinos aparecem aqui. Você pode voltar mais tarde e atualizar esta página.
+            </p>
+          </>
+        )}
+
+        <div className="flex items-center gap-2 mt-7">
+          <button onClick={onRefresh}
+            className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-black text-white" style={{ background: RED }}>
+            <RefreshCw className="w-4 h-4" /> Atualizar
+          </button>
+          <button onClick={onLogout}
+            className="inline-flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-sm font-bold text-muted-foreground border border-border hover:bg-secondary">
+            <LogOut className="w-4 h-4" /> Sair
+          </button>
+        </div>
+      </div>
+      <p className="text-xs text-muted-foreground mt-6">SAAB Sports Performance</p>
     </div>
   )
 }
