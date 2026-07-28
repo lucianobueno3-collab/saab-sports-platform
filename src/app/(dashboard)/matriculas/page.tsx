@@ -4,10 +4,12 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   getEnrollments, updateEnrollment, markEnrollmentPlanApplied,
-  bulkCreatePlannedWorkouts, type EnrollmentRow, type PlannedWorkoutInput,
+  bulkCreatePlannedWorkouts, getTrainingPrograms,
+  type EnrollmentRow, type PlannedWorkoutInput, type TrainingProgramRow,
 } from '@/lib/supabase/queries'
 import { PLAN_LIBRARY, generatePlan } from '@/lib/training-plans'
-import { ClipboardList, Loader2, Check, X, CalendarDays, Footprints, ExternalLink, Sparkles } from 'lucide-react'
+import { recommendProgram, expandProgram } from '@/lib/program-templates'
+import { ClipboardList, Loader2, Check, X, CalendarDays, Footprints, ExternalLink, Sparkles, Wand2 } from 'lucide-react'
 
 const RED = '#e8001c'
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -113,35 +115,61 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   const [busy, setBusy] = useState<null | 'apply' | 'reject' | 'notes'>(null)
   const [msg, setMsg] = useState<string | null>(null)
 
+  // Programas compostos (compositor) + roteamento pela anamnese.
+  const [programs, setPrograms] = useState<TrainingProgramRow[]>([])
+  const [programId, setProgramId] = useState<string>('')
+  useEffect(() => {
+    getTrainingPrograms().then(list => {
+      setPrograms(list)
+      const rec = recommendProgram({
+        currently_running: enr.currently_running, running_level: enr.running_level,
+        activity_level: enr.activity_level, goal: enr.goal,
+      }, list)
+      setProgramId(rec?.id ?? list[0]?.id ?? '')
+    }).catch(() => {})
+  }, [enr.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const recommended = useMemo(() => recommendProgram({
+    currently_running: enr.currently_running, running_level: enr.running_level,
+    activity_level: enr.activity_level, goal: enr.goal,
+  }, programs), [programs, enr])
+  const selectedProgram = programs.find(p => p.id === programId) ?? null
+
+  // Fallback: plano paramétrico embutido, caso ainda não haja programas criados.
   const planKey = PKG_PLAN[enr.package_key] ?? 'run_first5k_12'
-  const plan = useMemo(() => PLAN_LIBRARY.find(p => p.key === planKey) ?? null, [planKey])
+  const fallbackPlan = useMemo(() => PLAN_LIBRARY.find(p => p.key === planKey) ?? null, [planKey])
 
   async function applyPlan() {
-    if (!enr.athlete_id || !plan) { setMsg('Sem atleta vinculado ou plano não encontrado.'); return }
+    if (!enr.athlete_id) { setMsg('Sem atleta vinculado.'); return }
     setBusy('apply'); setMsg(null)
-
-    // Remapeia os dias do plano para os dias preferidos do aluno (se houver).
-    const planDays = [...new Set(plan.week.map(w => w.day))].sort((a, b) => a - b)
-    const pref = (enr.preferred_days ?? []).slice().sort((a, b) => a - b)
-    const dayMap: Record<number, number> = {}
-    planDays.forEach((pd, i) => { dayMap[pd] = pref[i] ?? pd })
-
     const startDate = new Date(start + 'T12:00:00')
-    const gen = generatePlan(plan)
-    const rows: PlannedWorkoutInput[] = []
-    for (const wk of gen) for (const s of wk.workouts) {
-      const day = dayMap[s.day] ?? s.day
-      const d = addDays(startDate, (wk.week - 1) * 7 + day)
-      rows.push({
-        athlete_id: enr.athlete_id, date: ymd(d), sport: s.sport, title: s.title,
-        description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
-      })
-    }
+    const pref = (enr.preferred_days ?? []).slice().sort((a, b) => a - b)
+    let rows: PlannedWorkoutInput[] = []
+
+    if (selectedProgram) {
+      // Programa composto: dias flutuantes (corrida nos preferidos, força nos livres).
+      rows = expandProgram(selectedProgram.weeks, startDate, pref).map(x => ({
+        athlete_id: enr.athlete_id!, date: x.date, sport: x.sport, title: x.title,
+        description: x.description, planned_duration_min: x.planned_duration_min, planned_tss: x.planned_tss,
+      }))
+    } else if (fallbackPlan) {
+      const planDays = [...new Set(fallbackPlan.week.map(w => w.day))].sort((a, b) => a - b)
+      const dayMap: Record<number, number> = {}
+      planDays.forEach((pd, i) => { dayMap[pd] = pref[i] ?? pd })
+      for (const wk of generatePlan(fallbackPlan)) for (const s of wk.workouts) {
+        const day = dayMap[s.day] ?? s.day
+        rows.push({
+          athlete_id: enr.athlete_id, date: ymd(addDays(startDate, (wk.week - 1) * 7 + day)), sport: s.sport, title: s.title,
+          description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
+        })
+      }
+    } else { setMsg('Nenhum programa disponível para aplicar.'); setBusy(null); return }
+
     const res = await bulkCreatePlannedWorkouts(rows)
-    if (!res.ok) { setMsg(res.error ?? 'Falha ao aplicar o plano.'); setBusy(null); return }
+    if (!res.ok) { setMsg(res.error ?? 'Falha ao aplicar.'); setBusy(null); return }
     if (notes.trim() !== (enr.coach_notes ?? '')) await updateEnrollment(enr.id, { coach_notes: notes.trim() })
     await markEnrollmentPlanApplied(enr.id)
-    setBusy(null); setMsg(`Plano aplicado: ${res.count} treinos no calendário do aluno.`)
+    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário do aluno.`)
     onChanged()
   }
 
@@ -192,13 +220,32 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           placeholder="Anotações sobre o perfil, lesões, etc." />
       </div>
 
-      {/* Aplicar plano */}
+      {/* Aplicar programa (com roteamento pela anamnese) */}
       <div className="rounded-xl p-4" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-        <div className="flex items-center gap-2 mb-2">
-          <Sparkles className="w-4 h-4 text-primary" />
-          <span className="text-sm font-black text-foreground">{plan?.name ?? 'Plano'}</span>
-        </div>
-        <p className="text-[11px] text-muted-foreground mb-3">{plan?.focus}</p>
+        {programs.length > 0 ? (
+          <>
+            <div className="flex items-center gap-2 mb-2">
+              <Wand2 className="w-4 h-4 text-primary" />
+              <span className="text-sm font-black text-foreground">Programa</span>
+              {recommended && programId === recommended.id && (
+                <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: '#00d08422', color: '#00d084' }}>Recomendado</span>
+              )}
+            </div>
+            <select value={programId} onChange={e => setProgramId(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2">
+              {programs.map(p => (
+                <option key={p.id} value={p.id}>{p.name}{recommended?.id === p.id ? ' ⭐ (recomendado)' : ''}</option>
+              ))}
+            </select>
+            {selectedProgram && <p className="text-[11px] text-muted-foreground mb-3">{selectedProgram.weeks.length} semanas · {selectedProgram.description}</p>}
+          </>
+        ) : (
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-primary" />
+            <span className="text-sm font-black text-foreground">{fallbackPlan?.name ?? 'Plano'}</span>
+            <span className="text-[10px] text-muted-foreground">(crie programas em Treinos → Programas)</span>
+          </div>
+        )}
         <div className="flex flex-wrap items-end gap-3">
           <label className="text-xs">
             <span className="block text-muted-foreground mb-1 flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Início</span>
@@ -208,10 +255,10 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           <button onClick={applyPlan} disabled={busy !== null || !enr.athlete_id}
             className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-black text-white disabled:opacity-50" style={{ background: RED }}>
             {busy === 'apply' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Footprints className="w-4 h-4" />}
-            {enr.status === 'active' ? 'Reaplicar plano' : 'Aplicar plano'}
+            {enr.status === 'active' ? 'Reaplicar' : 'Aplicar programa'}
           </button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2">Os treinos vão para os dias preferidos do aluno, quando informados.</p>
+        <p className="text-[10px] text-muted-foreground mt-2">Dias flutuantes: a corrida vai para os dias preferidos do aluno ({(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || 'não informados'}) e a força nos dias que sobram.</p>
       </div>
 
       {msg && <p className="text-sm font-semibold" style={{ color: '#00d084' }}>{msg}</p>}
