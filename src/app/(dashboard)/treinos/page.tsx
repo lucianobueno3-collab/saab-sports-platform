@@ -13,8 +13,9 @@ import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import { buildSampleLibraryRows, SAMPLE_COUNT } from '@/lib/sample-workouts'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
-  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles,
+  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays,
 } from 'lucide-react'
+import { ProgramComposer } from '@/components/treinos/program-composer'
 
 const SPORTS = [
   { key: 'strength', label: 'Força', color: '#e8001c', icon: Dumbbell },
@@ -32,6 +33,7 @@ export default function TreinosPage() {
   const [filter, setFilter] = useState('all')
   const [modal, setModal] = useState<{ edit?: WorkoutLibraryRow } | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [view, setView] = useState<'biblioteca' | 'programas'>('biblioteca')
 
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
   useEffect(() => { load() }, [])
@@ -53,7 +55,20 @@ export default function TreinosPage() {
 
   return (
     <div>
-      <Topbar title="Treinos" subtitle="Biblioteca central — força, corrida, bike e mais" />
+      <Topbar title="Treinos" subtitle="Biblioteca central e programas de treino" />
+      {/* Seletor Biblioteca / Programas */}
+      <div className="px-4 md:px-6 pt-4">
+        <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit">
+          <button onClick={() => setView('biblioteca')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors" style={view === 'biblioteca' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            <Library className="w-3.5 h-3.5" /> Biblioteca
+          </button>
+          <button onClick={() => setView('programas')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors" style={view === 'programas' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            <CalendarDays className="w-3.5 h-3.5" /> Programas
+          </button>
+        </div>
+      </div>
+
+      {view === 'programas' ? <ProgramComposer /> : (
       <div className="p-4 md:p-6 space-y-5">
         {/* Ações + filtro */}
         <div className="flex flex-wrap items-center gap-2 justify-between">
@@ -129,6 +144,7 @@ export default function TreinosPage() {
           </div>
         )}
       </div>
+      )}
 
       {modal && <LibraryModal edit={modal.edit} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
     </div>
