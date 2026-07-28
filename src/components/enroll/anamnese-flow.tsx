@@ -62,6 +62,8 @@ const RED = '#e8001c'
 // Link de checkout do Hotmart. Pode ser sobrescrito por NEXT_PUBLIC_HOTMART_URL
 // no Netlify; senão usa o padrão abaixo. Se vazio, o funil segue sem pagamento.
 const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? 'https://go.hotmart.com/O106914424J').trim()
+// Cupons que liberam a matrícula sem pagamento (não chamam o Hotmart).
+const FREE_COUPONS = ['SAAB100']
 
 export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus primeiros 5 km' }: { packageKey?: string; packageTitle?: string }) {
   const [d, setD] = useState<Data>(EMPTY)
@@ -69,6 +71,14 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [coupon, setCoupon] = useState('')
+  const [couponMsg, setCouponMsg] = useState<string | null>(null)
+  const [freeAccess, setFreeAccess] = useState(false)
+
+  function applyCoupon() {
+    if (FREE_COUPONS.includes(coupon.trim().toUpperCase())) { setFreeAccess(true); setCouponMsg(null) }
+    else setCouponMsg('Cupom inválido.')
+  }
 
   const set = (patch: Partial<Data>) => setD(prev => ({ ...prev, ...patch }))
 
@@ -142,6 +152,21 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
   }
 
   if (done) {
+    // Cupom válido: matrícula liberada, sem pagamento.
+    if (freeAccess) {
+      return (
+        <div className="text-center py-14 px-6">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: '#00d08422' }}>
+            <Check className="w-8 h-8" style={{ color: '#00d084' }} />
+          </div>
+          <h2 className="text-2xl font-black text-foreground">Matrícula liberada! 🎉</h2>
+          <p className="text-muted-foreground mt-2 max-w-md mx-auto">Seu cupom foi aplicado e a matrícula no <strong>{packageTitle}</strong> está confirmada. Bem-vindo(a)!</p>
+          <a href="/atleta" className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg" style={{ background: RED }}>
+            <Footprints className="w-5 h-5" /> Acessar meu portal
+          </a>
+        </div>
+      )
+    }
     // Fluxo com pagamento (Hotmart): a matrícula só é confirmada após pagar.
     if (HOTMART_URL) {
       // Só pré-preenche o e-mail no checkout completo (pay.hotmart.com); em
@@ -162,6 +187,16 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
             className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg" style={{ background: RED }}>
             <Footprints className="w-5 h-5" /> Pagar e confirmar matrícula
           </a>
+          {/* Cupom (antes de chamar o link) */}
+          <div className="mt-6 max-w-xs mx-auto">
+            <p className="text-xs text-muted-foreground mb-1.5">Tem um cupom?</p>
+            <div className="flex gap-2">
+              <input value={coupon} onChange={e => { setCoupon(e.target.value); setCouponMsg(null) }}
+                placeholder="Digite o cupom" className="flex-1 rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground uppercase focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+              <button onClick={applyCoupon} className="px-4 py-2 rounded-lg text-sm font-bold border border-border text-foreground hover:bg-secondary">Aplicar</button>
+            </div>
+            {couponMsg && <p className="text-xs text-red-500 mt-1">{couponMsg}</p>}
+          </div>
           <p className="mt-4 text-xs text-muted-foreground">
             Já pagou? <a href="/atleta" className="font-bold text-foreground underline">Acessar meu portal</a>
           </p>
