@@ -45,9 +45,9 @@ export function couchTo5k8Weeks() {
     name: 'Do 0 aos 5 km — 8 semanas (com força)',
     description: 'Iniciante do zero: método corrida/caminhada progressivo até 5 km contínuos + 2 sessões de força de prevenção. Os dias são definidos pela anamnese (corrida nos dias preferidos, força nos dias que sobram).',
     sport: 'running',
-    goal: 'concluir_5_10k',
+    goal: '5km',
     level: 'iniciante',
-    routing: { currently_running: false, levels: ['iniciante'], goals: ['concluir_5_10k'], min_days: 2, max_days: 3 } as ProgramRouting,
+    routing: { currently_running: false, levels: ['iniciante'], goals: ['5km'], min_days: 2, max_days: 3 } as ProgramRouting,
     weeks,
   }
 }

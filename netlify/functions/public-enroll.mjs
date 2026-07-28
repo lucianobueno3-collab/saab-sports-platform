@@ -15,7 +15,7 @@ const RUN_LEVELS = ['iniciante', 'intermediario', 'avancado', 'competitivo']
 const ACT_LEVELS = ['iniciante', 'intermediario', 'avancado']
 const DAYS_RUNNING = ['1_2', '3', '4', '5_mais']
 const WEEKLY_DIST = ['ate_15', '15_30', '30_40', '40_mais']
-const GOALS = ['concluir_5_10k', 'meia_21k', 'maratona_42k', 'melhorar_ritmo']
+const GOALS = ['5km', '10km', '21km', '42km']
 const pick = (v, allowed) => (allowed.includes(v) ? v : null)
 
 // Matrícula pública: cria a conta do aluno + registro em athletes + anamnese.
