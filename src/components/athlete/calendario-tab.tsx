@@ -12,6 +12,7 @@ import {
   PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, type PlanDef,
 } from '@/lib/training-plans'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
+import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
@@ -758,9 +759,8 @@ function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
         <div className="p-5 space-y-4">
           {workout.structure && workout.structure.length > 0 && (
             <div>
-              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Estrutura</p>
-              <StructureBar structure={workout.structure} height={14} />
-              <p className="text-xs text-muted-foreground mt-2">{structureSummary(workout.structure)}</p>
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Passos (para o relógio)</p>
+              <WorkoutSteps title={workout.title} sport={workout.sport} structure={workout.structure} />
             </div>
           )}
           {workout.description && (

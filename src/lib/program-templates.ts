@@ -1,5 +1,7 @@
 // Composições de programas de treino (compositor visual) + exemplos prontos.
 
+import { estimateStructure, structureSummary, type WorkoutStructure, type Zone } from './workout-structure'
+
 export type ProgramWorkout = {
   day: number            // 0=segunda … 6=domingo
   sport: string
@@ -7,6 +9,7 @@ export type ProgramWorkout = {
   description?: string
   duration_min?: number | null
   tss?: number | null
+  structure?: WorkoutStructure | null
 }
 export type ProgramWeek = { label: string; workouts: ProgramWorkout[] }
 export type ProgramRouting = {
@@ -18,32 +21,67 @@ export type ProgramRouting = {
 }
 
 // ─── Exemplo: Do 0 aos 5 km em 8 semanas (método corrida/caminhada) ──────────
-// 3 sessões por semana (seg / qua / sáb). Progressão do run/walk até 5 km contínuos.
-const C25K: { label: string; base: string; dur: number; tss: number; long: string; longDur: number; longTss: number }[] = [
-  { label: 'Base',        base: '8× (1 min corrida leve + 2 min caminhada). Respiração confortável.', dur: 30, tss: 20, long: '9× (1 min corrida + 2 min caminhada).', longDur: 33, longTss: 24 },
-  { label: 'Base',        base: '7× (1min30 corrida + 2 min caminhada).', dur: 30, tss: 24, long: '8× (1min30 corrida + 2 min caminhada).', longDur: 33, longTss: 28 },
-  { label: 'Adaptação',   base: '6× (2 min corrida + 2 min caminhada).', dur: 32, tss: 28, long: '6× (2 min corrida + 1min30 caminhada).', longDur: 32, longTss: 32 },
-  { label: 'Adaptação',   base: '5× (3 min corrida + 2 min caminhada).', dur: 33, tss: 32, long: '4× (4 min corrida + 2 min caminhada).', longDur: 34, longTss: 36 },
-  { label: 'Desenvolvimento', base: '4× (5 min corrida + 2 min caminhada).', dur: 34, tss: 38, long: '3× (6 min corrida + 2 min caminhada).', longDur: 34, longTss: 42 },
-  { label: 'Desenvolvimento', base: '3× (8 min corrida + 2 min caminhada).', dur: 34, tss: 44, long: '2× (10 min corrida + 2 min caminhada) + 5 min leve.', longDur: 35, longTss: 48 },
-  { label: 'Específico',  base: '2× (12 min corrida + 2 min caminhada).', dur: 33, tss: 50, long: '20 min corrida contínua leve (caminhe se precisar).', longDur: 30, longTss: 52 },
-  { label: 'Prova',       base: '10 min aquecendo + 15 min corrida contínua.', dur: 28, tss: 48, long: 'Prova: 5 km contínuos no seu ritmo. 🎉', longDur: 35, longTss: 60 },
+// 3 corridas + 2 forças por semana. Todas as corridas são ESTRUTURADAS (passos
+// por zona), então o aluno vê o passo a passo no relógio, igual às demais.
+//
+// Zonas: Z1 recuperação/caminhada · Z2 aeróbico (corrida leve) · Z3 tempo.
+
+// Aquecimento (Z1) → séries corrida/caminhada → desaquecimento (Z1).
+function walkRun(warm: number, times: number, run: number, runZone: Zone, walk: number, cool: number): WorkoutStructure {
+  return [
+    { type: 'step', step: { kind: 'warmup', min: warm, zone: 1, note: 'caminhada leve' } },
+    { type: 'repeat', times, steps: [
+      { kind: 'work', min: run, zone: runZone, note: 'corrida' },
+      { kind: 'recovery', min: walk, zone: 1, note: 'caminhada' },
+    ] },
+    { type: 'step', step: { kind: 'cooldown', min: cool, zone: 1, note: 'caminhada leve' } },
+  ]
+}
+// Aquecimento (Z1) → corrida contínua → desaquecimento (Z1).
+function contRun(warm: number, cont: number, contZone: Zone, cool: number, note: string): WorkoutStructure {
+  return [
+    { type: 'step', step: { kind: 'warmup', min: warm, zone: 1, note: 'caminhada leve' } },
+    { type: 'step', step: { kind: 'steady', min: cont, zone: contZone, note } },
+    { type: 'step', step: { kind: 'cooldown', min: cool, zone: 1, note: 'caminhada leve' } },
+  ]
+}
+
+const C25K: { label: string; base: WorkoutStructure; long: WorkoutStructure; longTitle?: string }[] = [
+  { label: 'Base',            base: walkRun(3, 8, 1, 2, 2, 3),   long: walkRun(3, 9, 1, 2, 2, 3) },
+  { label: 'Base',            base: walkRun(3, 7, 1.5, 2, 2, 3), long: walkRun(3, 8, 1.5, 2, 2, 3) },
+  { label: 'Adaptação',       base: walkRun(4, 6, 2, 2, 2, 4),   long: walkRun(4, 6, 2, 2, 1.5, 5) },
+  { label: 'Adaptação',       base: walkRun(4, 5, 3, 2, 2, 4),   long: walkRun(4, 4, 4, 2, 2, 4) },
+  { label: 'Desenvolvimento', base: walkRun(5, 4, 5, 2, 2, 3),   long: walkRun(5, 3, 6, 3, 2, 4) },
+  { label: 'Desenvolvimento', base: walkRun(5, 3, 8, 3, 2, 3),   long: [
+    { type: 'step', step: { kind: 'warmup', min: 5, zone: 1, note: 'caminhada leve' } },
+    { type: 'repeat', times: 2, steps: [ { kind: 'work', min: 10, zone: 3, note: 'corrida' }, { kind: 'recovery', min: 2, zone: 1, note: 'caminhada' } ] },
+    { type: 'step', step: { kind: 'steady', min: 5, zone: 2, note: 'corrida leve' } },
+    { type: 'step', step: { kind: 'cooldown', min: 3, zone: 1, note: 'caminhada leve' } },
+  ] },
+  { label: 'Específico',      base: walkRun(4, 2, 12, 3, 2, 4),  long: contRun(5, 20, 2, 5, 'corrida contínua leve — caminhe se precisar') },
+  { label: 'Prova',           base: contRun(10, 15, 3, 3, 'corrida contínua'), long: contRun(5, 25, 3, 5, 'Prova: 5 km contínuos no seu ritmo 🎉'), longTitle: 'Prova 5 km' },
 ]
+
+// Monta um treino de corrida estruturado, derivando duração e TSS da estrutura.
+function runWorkout(day: number, title: string, structure: WorkoutStructure): ProgramWorkout {
+  const est = estimateStructure(structure)
+  return { day, sport: 'running', title, description: structureSummary(structure), duration_min: est.min, tss: est.tss, structure }
+}
 
 export function couchTo5k8Weeks() {
   const weeks: ProgramWeek[] = C25K.map((w, i) => ({
     label: `Semana ${i + 1} · ${w.label}`,
     workouts: [
-      { day: 0, sport: 'running', title: 'Corrida/caminhada', description: w.base, duration_min: w.dur, tss: w.tss },
-      { day: 1, sport: 'strength', title: STRENGTH_A.title, description: STRENGTH_A.description, duration_min: STRENGTH_A.duration_min, tss: STRENGTH_A.tss },
-      { day: 2, sport: 'running', title: 'Corrida/caminhada', description: w.base, duration_min: w.dur, tss: w.tss },
-      { day: 3, sport: 'strength', title: STRENGTH_B.title, description: STRENGTH_B.description, duration_min: STRENGTH_B.duration_min, tss: STRENGTH_B.tss },
-      { day: 5, sport: 'running', title: i === 7 ? 'Prova 5 km' : 'Corrida/caminhada (longo)', description: w.long, duration_min: w.longDur, tss: w.longTss },
+      runWorkout(0, 'Corrida/caminhada', w.base),
+      { day: 1, sport: 'strength', title: STRENGTH_A.title, description: STRENGTH_A.description, duration_min: STRENGTH_A.duration_min, tss: STRENGTH_A.tss, structure: null },
+      runWorkout(2, 'Corrida/caminhada', w.base),
+      { day: 3, sport: 'strength', title: STRENGTH_B.title, description: STRENGTH_B.description, duration_min: STRENGTH_B.duration_min, tss: STRENGTH_B.tss, structure: null },
+      runWorkout(5, i === 7 ? (w.longTitle ?? 'Prova 5 km') : 'Corrida/caminhada (longo)', w.long),
     ],
   }))
   return {
     name: 'Do 0 aos 5 km — 8 semanas (com força)',
-    description: 'Iniciante do zero: método corrida/caminhada progressivo até 5 km contínuos + 2 sessões de força de prevenção. Os dias são definidos pela anamnese (corrida nos dias preferidos, força nos dias que sobram).',
+    description: 'Iniciante do zero: método corrida/caminhada progressivo até 5 km contínuos + 2 sessões de força de prevenção. Corridas estruturadas (passo a passo por zona). Os dias são definidos pela anamnese (corrida nos dias preferidos, força nos dias que sobram).',
     sport: 'running',
     goal: '5km',
     level: 'iniciante',
@@ -92,7 +130,7 @@ export function recommendProgram<T extends ProgramLike>(anamnese: AnamneseLike, 
 }
 
 // ─── Encaixe flutuante: sessões → dias reais conforme a anamnese ─────────────
-export type ExpandedWorkout = { date: string; sport: string; title: string; description: string | null; planned_duration_min: number | null; planned_tss: number | null }
+export type ExpandedWorkout = { date: string; sport: string; title: string; description: string | null; planned_duration_min: number | null; planned_tss: number | null; structure: WorkoutStructure | null }
 
 function ymd(d: Date) { return d.toLocaleDateString('en-CA') }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
@@ -149,6 +187,7 @@ export function expandProgram(
       date: ymd(addDays(startDate, week * 7 + day)),
       sport: x.sport, title: x.title, description: x.description ?? null,
       planned_duration_min: x.duration_min ?? null, planned_tss: x.tss ?? null,
+      structure: x.structure ?? null,
     })
   }
 }
