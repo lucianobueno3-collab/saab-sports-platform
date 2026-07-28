@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { publicEnroll, type PublicEnrollInput } from '@/lib/supabase/queries'
 import { ChevronLeft, ChevronRight, Check, Loader2, Footprints, AlertTriangle } from 'lucide-react'
@@ -184,11 +184,6 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
     }
     // Fluxo com pagamento (Hotmart): a matrícula só é confirmada após pagar.
     if (HOTMART_URL) {
-      // Só pré-preenche o e-mail no checkout completo (pay.hotmart.com); em
-      // links curtos (go.hotmart.com) usamos a URL como está, para não quebrar o redirect.
-      const link = /pay\.hotmart\.com/.test(HOTMART_URL)
-        ? HOTMART_URL + (HOTMART_URL.includes('?') ? '&' : '?') + 'email=' + encodeURIComponent(d.email.trim().toLowerCase())
-        : HOTMART_URL
       return (
         <div className="text-center py-12 px-6">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: RED + '22' }}>
@@ -196,16 +191,13 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
           </div>
           <h2 className="text-2xl font-black text-foreground">Falta 1 passo: pagamento</h2>
           <p className="text-muted-foreground mt-2 max-w-md mx-auto">
-            Sua anamnese foi recebida. Para confirmar sua matrícula no <strong>{packageTitle}</strong>, finalize o pagamento com segurança pelo Hotmart. Assim que confirmar, seu treino é liberado.
+            Sua anamnese foi recebida. Para confirmar sua matrícula no <strong>{packageTitle}</strong>, finalize o pagamento com segurança. Assim que confirmar, seu treino é liberado.
           </p>
           <div className="mt-4 inline-flex flex-col items-center rounded-2xl px-5 py-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
             <span className="text-2xl font-black text-foreground">R$ 59,70<span className="text-sm font-bold text-muted-foreground"> / trimestre</span></span>
             <span className="text-xs font-semibold" style={{ color: RED }}>pagamento único · equivale a R$ 19,90/mês (3 meses)</span>
           </div>
-          <a href={link} target="_blank" rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg" style={{ background: RED }}>
-            <Footprints className="w-5 h-5" /> Pagar e confirmar matrícula
-          </a>
+          <HotmartPayButton url={HOTMART_URL} email={d.email.trim().toLowerCase()} />
           {/* Cupom (antes de chamar o link) */}
           <div className="mt-6 max-w-xs mx-auto">
             <p className="text-xs text-muted-foreground mb-1.5">Tem um cupom?</p>
@@ -391,6 +383,55 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
         )}
       </div>
     </div>
+  )
+}
+
+// Botão de pagamento: checkout incorporado (lightbox) para links pay.hotmart.com,
+// que abre a tela de pagamento numa camada sobre a própria página, sem sair do app.
+// Para links curtos (go.hotmart.com) ou outros, cai no redirect em nova aba.
+function HotmartPayButton({ url, email }: { url: string; email: string }) {
+  const isPay = /pay\.hotmart\.com/.test(url)
+
+  useEffect(() => {
+    if (!isPay) return
+    const CSS = 'https://static.hotmart.com/css/hotmart-fire-checkout.css'
+    const JS = 'https://static.hotmart.com/checkout/widget.min.js'
+    if (!document.querySelector('link[data-hotmart-checkout]')) {
+      const l = document.createElement('link')
+      l.rel = 'stylesheet'; l.href = CSS; l.setAttribute('data-hotmart-checkout', '1')
+      document.head.appendChild(l)
+    }
+    if (!document.querySelector('script[data-hotmart-checkout]')) {
+      const s = document.createElement('script')
+      s.src = JS; s.async = true; s.setAttribute('data-hotmart-checkout', '1')
+      document.body.appendChild(s)
+    }
+  }, [isPay])
+
+  const withEmail = (u: string) => (email ? u + (u.includes('?') ? '&' : '?') + 'email=' + encodeURIComponent(email) : u)
+  const btnCls = 'inline-flex items-center gap-2 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg'
+
+  if (isPay) {
+    // checkoutMode=2 → o widget intercepta o clique e abre o pagamento em lightbox.
+    // Sem o widget (ex.: script bloqueado), o href simplesmente abre o checkout.
+    const embed = withEmail(url + (url.includes('?') ? '&' : '?') + 'checkoutMode=2')
+    return (
+      <div className="mt-6">
+        <a href={embed} className={`hotmart-fire-checkout ${btnCls}`} style={{ background: RED }}>
+          <Footprints className="w-5 h-5" /> Pagar aqui e confirmar
+        </a>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          A tela de pagamento abre aqui mesmo, sem sair da página. Problemas?{' '}
+          <a href={withEmail(url)} target="_blank" rel="noopener noreferrer" className="underline">abrir em nova aba</a>.
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <a href={url} target="_blank" rel="noopener noreferrer" className={`mt-6 ${btnCls}`} style={{ background: RED }}>
+      <Footprints className="w-5 h-5" /> Pagar e confirmar matrícula
+    </a>
   )
 }
 
