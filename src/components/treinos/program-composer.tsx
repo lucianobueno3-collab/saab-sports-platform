@@ -23,8 +23,7 @@ const sportInfo = (s: string) => SPORTS.find(x => x.key === s) ?? SPORTS[4]
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 const LEVELS = [{ v: 'iniciante', t: 'Iniciante' }, { v: 'intermediario', t: 'Intermediário' }, { v: 'avancado', t: 'Avançado' }]
 const GOALS = [
-  { v: 'concluir_5_10k', t: 'Concluir 5–10 km' }, { v: 'meia_21k', t: 'Meia (21 km)' },
-  { v: 'maratona_42k', t: 'Maratona (42 km)' }, { v: 'melhorar_ritmo', t: 'Melhorar ritmo' },
+  { v: '5km', t: '5 km' }, { v: '10km', t: '10 km' }, { v: '21km', t: 'Meia (21 km)' }, { v: '42km', t: 'Maratona (42 km)' },
 ]
 const cls = 'w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
 
@@ -112,7 +111,7 @@ function ProgramEditor({ program, onClose }: { program: TrainingProgramRow | nul
   const [description, setDescription] = useState(program?.description ?? '')
   const [sport, setSport] = useState(program?.sport ?? 'running')
   const [level, setLevel] = useState(program?.level ?? 'iniciante')
-  const [goal, setGoal] = useState(program?.goal ?? 'concluir_5_10k')
+  const [goal, setGoal] = useState(program?.goal ?? '5km')
   const [currentlyRunning, setCurrentlyRunning] = useState<boolean | null>(program?.routing?.currently_running ?? null)
   const [weeks, setWeeks] = useState<ProgramWeek[]>(program?.weeks ?? [{ label: 'Semana 1', workouts: [] }])
   const [library, setLibrary] = useState<WorkoutLibraryRow[]>([])

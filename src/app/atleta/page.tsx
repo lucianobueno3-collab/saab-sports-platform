@@ -201,6 +201,13 @@ export default function AtletaPage() {
 
       {tab === 'inicio' && (
       <div className="space-y-5 max-w-4xl mx-auto">
+      {/* Boas-vindas enquanto o plano ainda não foi montado */}
+      {data.plannedWorkouts.length === 0 && (
+        <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, #e8001c, #7a0010)' }}>
+          <p className="text-lg font-black text-white">Bem-vindo(a), {(profile?.full_name ?? a.full_name).split(' ')[0]}! 🎉</p>
+          <p className="text-sm text-white/90 mt-1">Recebemos seu cadastro. Seu treinador está montando o seu plano — em breve seus treinos aparecem aqui no Calendário. Enquanto isso, complete seus dados em <strong>Meus dados</strong>.</p>
+        </div>
+      )}
       {/* Forma atual */}
       <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
         <div>

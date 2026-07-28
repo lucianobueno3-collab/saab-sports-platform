@@ -53,14 +53,14 @@ describe('expandProgram (dias flutuantes)', () => {
 describe('recommendProgram', () => {
   it('escolhe o programa que casa objetivo + nível + corre/não', () => {
     const programs = [
-      { id: 'a', active: true, routing: { currently_running: false, levels: ['iniciante'], goals: ['concluir_5_10k'] } },
-      { id: 'b', active: true, routing: { currently_running: true, levels: ['avancado'], goals: ['maratona_42k'] } },
+      { id: 'a', active: true, routing: { currently_running: false, levels: ['iniciante'], goals: ['5km'] } },
+      { id: 'b', active: true, routing: { currently_running: true, levels: ['avancado'], goals: ['42km'] } },
     ]
-    const rec = recommendProgram({ currently_running: false, activity_level: 'iniciante', goal: 'concluir_5_10k' }, programs)
+    const rec = recommendProgram({ currently_running: false, activity_level: 'iniciante', goal: '5km' }, programs)
     expect(rec?.id).toBe('a')
   })
   it('sem casar objetivo, não recomenda', () => {
-    const programs = [{ id: 'a', active: true, routing: { goals: ['maratona_42k'] } }]
-    expect(recommendProgram({ goal: 'concluir_5_10k' }, programs)).toBeNull()
+    const programs = [{ id: 'a', active: true, routing: { goals: ['42km'] } }]
+    expect(recommendProgram({ goal: '5km' }, programs)).toBeNull()
   })
 })

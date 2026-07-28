@@ -18,8 +18,7 @@ const LBL_RUN: Record<string, string> = { iniciante: 'Iniciante', intermediario:
 const LBL_DAYS: Record<string, string> = { '1_2': '1 ou 2 dias', '3': '3 dias', '4': '4 dias', '5_mais': '5+ dias' }
 const LBL_DIST: Record<string, string> = { ate_15: 'até 15 km', '15_30': '15–30 km', '30_40': '30–40 km', '40_mais': '40+ km' }
 const LBL_GOAL: Record<string, string> = {
-  concluir_5_10k: 'Concluir de 5 a 10 km', meia_21k: 'Meia maratona (21 km)',
-  maratona_42k: 'Maratona (42 km)', melhorar_ritmo: 'Melhorar o ritmo',
+  '5km': 'Correr 5 km', '10km': 'Correr 10 km', '21km': 'Meia maratona (21 km)', '42km': 'Maratona (42 km)',
 }
 const PKG_TITLE: Record<string, string> = { primeiros_5k: 'Meus primeiros 5 km' }
 

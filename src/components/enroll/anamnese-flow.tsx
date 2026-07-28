@@ -48,10 +48,10 @@ const WEEKLY_DIST = [
   { v: '30_40', t: 'De 30 a 40 km' }, { v: '40_mais', t: '40 km ou mais' },
 ]
 const GOALS = [
-  { v: 'concluir_5_10k', t: 'Desenvolver minha capacidade e concluir de 5 a 10 km' },
-  { v: 'meia_21k', t: 'Progredir até uma meia maratona (21 km)' },
-  { v: 'maratona_42k', t: 'Correr uma maratona (42 km)' },
-  { v: 'melhorar_ritmo', t: 'Melhorar meu ritmo nas distâncias que já corro' },
+  { v: '5km', t: 'Correr 5 km' },
+  { v: '10km', t: 'Correr 10 km' },
+  { v: '21km', t: 'Meia maratona — 21 km' },
+  { v: '42km', t: 'Maratona — 42 km' },
 ]
 const WEEKDAYS = [
   { v: 0, t: 'Segunda' }, { v: 1, t: 'Terça' }, { v: 2, t: 'Quarta' }, { v: 3, t: 'Quinta' },
@@ -59,6 +59,9 @@ const WEEKDAYS = [
 ]
 
 const RED = '#e8001c'
+// Link de checkout do Hotmart (definido em NEXT_PUBLIC_HOTMART_URL no Netlify).
+// Se vazio, o funil segue sem pagamento (vai direto ao portal).
+const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? '').trim()
 
 export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus primeiros 5 km' }: { packageKey?: string; packageTitle?: string }) {
   const [d, setD] = useState<Data>(EMPTY)
@@ -127,17 +130,40 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
     const res = await publicEnroll(input)
     if (!res.ok) { setError(res.error ?? 'Não foi possível concluir a matrícula.'); setSubmitting(false); return }
 
-    // Entra automaticamente com a conta recém-criada e leva pro portal.
+    // Entra automaticamente com a conta recém-criada.
     try {
       const sb = createClient()
       await sb.auth.signInWithPassword({ email: input.email, password: d.password })
     } catch { /* se falhar, a pessoa pode logar manualmente */ }
     setDone(true)
     setSubmitting(false)
-    setTimeout(() => { window.location.href = '/atleta' }, 1600)
+    // Se houver checkout (Hotmart), a pessoa vai pagar; senão, direto ao portal.
+    if (!HOTMART_URL) setTimeout(() => { window.location.href = '/atleta' }, 1600)
   }
 
   if (done) {
+    // Fluxo com pagamento (Hotmart): a matrícula só é confirmada após pagar.
+    if (HOTMART_URL) {
+      const link = HOTMART_URL + (HOTMART_URL.includes('?') ? '&' : '?') + 'email=' + encodeURIComponent(d.email.trim().toLowerCase())
+      return (
+        <div className="text-center py-12 px-6">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: RED + '22' }}>
+            <Check className="w-8 h-8" style={{ color: RED }} />
+          </div>
+          <h2 className="text-2xl font-black text-foreground">Falta 1 passo: pagamento</h2>
+          <p className="text-muted-foreground mt-2 max-w-md mx-auto">
+            Sua anamnese foi recebida. Para confirmar sua matrícula no <strong>{packageTitle}</strong>, finalize o pagamento com segurança pelo Hotmart. Assim que confirmar, seu treino é liberado.
+          </p>
+          <a href={link} target="_blank" rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg" style={{ background: RED }}>
+            <Footprints className="w-5 h-5" /> Pagar e confirmar matrícula
+          </a>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Já pagou? <a href="/atleta" className="font-bold text-foreground underline">Acessar meu portal</a>
+          </p>
+        </div>
+      )
+    }
     return (
       <div className="text-center py-14 px-6">
         <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: RED + '22' }}>
