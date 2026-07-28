@@ -168,7 +168,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
     if (!res.ok) { setMsg(res.error ?? 'Falha ao aplicar.'); setBusy(null); return }
     if (notes.trim() !== (enr.coach_notes ?? '')) await updateEnrollment(enr.id, { coach_notes: notes.trim() })
     await markEnrollmentPlanApplied(enr.id)
-    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário do aluno.`)
+    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário. Acesso do aluno liberado. ✅`)
     onChanged()
   }
 
@@ -259,6 +259,9 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           </button>
         </div>
         <p className="text-[10px] text-muted-foreground mt-2">Dias flutuantes: o longão vai para {enr.long_run_day != null ? WEEKDAYS[enr.long_run_day] : 'o último dia preferido'}, as outras corridas nos demais dias preferidos ({(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || 'não informados'}) e a força nos dias que sobram.</p>
+        {enr.status === 'pending' && (
+          <p className="text-[10px] font-semibold mt-1.5" style={{ color: RED }}>O aluno está aguardando aprovação — aplicar o programa libera o acesso dele ao portal.</p>
+        )}
       </div>
 
       {msg && <p className="text-sm font-semibold" style={{ color: '#00d084' }}>{msg}</p>}
