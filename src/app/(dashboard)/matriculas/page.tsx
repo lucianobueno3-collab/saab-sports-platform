@@ -5,12 +5,12 @@ import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
   getEnrollments, updateEnrollment, markEnrollmentPlanApplied, notifyEnrollmentApproved,
-  bulkCreatePlannedWorkouts, getTrainingPrograms,
-  type EnrollmentRow, type PlannedWorkoutInput, type TrainingProgramRow,
+  bulkCreatePlannedWorkouts, getTrainingPrograms, getWorkoutLibrary,
+  type EnrollmentRow, type PlannedWorkoutInput, type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { PLAN_LIBRARY, generatePlan } from '@/lib/training-plans'
 import { recommendProgram, expandProgram } from '@/lib/program-templates'
-import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye, Plus, Pencil, Trash2 } from 'lucide-react'
+import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye, Plus, Pencil, Trash2, Library } from 'lucide-react'
 
 const RED = '#e8001c'
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -141,6 +141,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   // Programas compostos (compositor) + roteamento pela anamnese.
   const [programs, setPrograms] = useState<TrainingProgramRow[]>([])
   const [programId, setProgramId] = useState<string>('')
+  const [library, setLibrary] = useState<WorkoutLibraryRow[]>([])
   useEffect(() => {
     getTrainingPrograms().then(list => {
       setPrograms(list)
@@ -150,6 +151,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
       }, list)
       setProgramId(rec?.id ?? list[0]?.id ?? '')
     }).catch(() => {})
+    getWorkoutLibrary().then(setLibrary).catch(() => {})
   }, [enr.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const recommended = useMemo(() => recommendProgram({
@@ -349,6 +351,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           programName={selectedProgram?.name ?? fallbackPlan?.name ?? 'Plano'}
           athleteName={enr.full_name ?? 'aluno'}
           longRunDay={enr.long_run_day}
+          library={library}
           busy={busy === 'apply'}
           onCancel={() => setPreview(null)}
           onConfirm={rows => commit(rows)}
@@ -380,9 +383,9 @@ const SPORT_OPTS = ['running', 'strength', 'cycling', 'swimming'] as const
 
 type PreviewItem = PlannedWorkoutInput & { _uid: number }
 
-function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, onCancel, onConfirm }: {
+function PlanPreview({ rows, start, programName, athleteName, longRunDay, library, busy, onCancel, onConfirm }: {
   rows: PlannedWorkoutInput[]; start: string; programName: string; athleteName: string
-  longRunDay: number | null; busy: boolean; onCancel: () => void; onConfirm: (rows: PlannedWorkoutInput[]) => void
+  longRunDay: number | null; library: WorkoutLibraryRow[]; busy: boolean; onCancel: () => void; onConfirm: (rows: PlannedWorkoutInput[]) => void
 }) {
   const startMs = new Date(start + 'T12:00:00').getTime()
   const weekOf = (d: string) => Math.max(0, Math.floor((new Date(d + 'T12:00:00').getTime() - startMs) / (7 * 86400000)))
@@ -393,6 +396,16 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
 
   const patch = (uid: number, p: Partial<PlannedWorkoutInput>) => setItems(list => list.map(it => it._uid === uid ? { ...it, ...p } : it))
   const remove = (uid: number) => setItems(list => list.filter(it => it._uid !== uid))
+  // Carrega um treino da biblioteca com o máximo de detalhe (título, modalidade,
+  // duração, TSS, descrição e estrutura passo a passo, quando houver).
+  const applyLib = (uid: number, libId: string) => {
+    const w = library.find(l => l.id === libId); if (!w) return
+    patch(uid, {
+      sport: w.sport, title: w.title, description: w.description ?? null,
+      planned_duration_min: w.duration_min ?? null, planned_tss: w.tss ?? null,
+      structure: w.structure ?? null,
+    })
+  }
   const addToWeek = (w: number) => {
     const uid = uidRef.current++
     // procura um dia livre da semana; senão, cai na segunda
@@ -476,6 +489,14 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
                       </div>
                       {isEd && (
                         <div className="grid grid-cols-2 gap-2 px-3 pb-3 pt-1 border-t border-border">
+                          {library.length > 0 && (
+                            <label className="text-[10px] font-semibold text-muted-foreground col-span-2 flex items-center gap-1"><Library className="w-3 h-3 text-primary" /> Carregar da biblioteca
+                              <select value="" onChange={e => { if (e.target.value) applyLib(it._uid, e.target.value) }} className={`${inCls} w-full mt-0.5`}>
+                                <option value="">Escolher um treino salvo…</option>
+                                {library.map(l => <option key={l.id} value={l.id}>{sportMeta(l.sport).label} · {l.title}{l.duration_min ? ` (${l.duration_min}min)` : ''}</option>)}
+                              </select>
+                            </label>
+                          )}
                           <label className="text-[10px] font-semibold text-muted-foreground">Dia
                             <select value={wdMon(it.date)} onChange={e => patch(it._uid, { date: dateForWeekday(start, w, Number(e.target.value)) })} className={`${inCls} w-full mt-0.5`}>
                               {WEEKDAYS.map((d, idx) => <option key={idx} value={idx}>{d}</option>)}
@@ -495,6 +516,13 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
                           <label className="text-[10px] font-semibold text-muted-foreground">TSS
                             <input type="number" min="0" value={it.planned_tss ?? ''} onChange={e => patch(it._uid, { planned_tss: e.target.value ? parseInt(e.target.value) : null })} className={`${inCls} w-full mt-0.5`} />
                           </label>
+                          <label className="text-[10px] font-semibold text-muted-foreground col-span-2">Descrição / estrutura
+                            <textarea value={it.description ?? ''} onChange={e => patch(it._uid, { description: e.target.value || null })} rows={2}
+                              className={`${inCls} w-full mt-0.5 resize-none`} placeholder="ex: 5min aquec · 20min Z2 · 5min solto" />
+                          </label>
+                          {it.structure && it.structure.length > 0 && (
+                            <p className="col-span-2 text-[10px] text-muted-foreground">Treino estruturado ({it.structure.length} blocos) carregado da biblioteca — o aluno vê o passo a passo.</p>
+                          )}
                         </div>
                       )}
                     </div>
