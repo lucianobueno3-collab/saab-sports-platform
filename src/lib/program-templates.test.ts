@@ -12,21 +12,31 @@ describe('couchTo5k8Weeks', () => {
 })
 
 describe('expandProgram (dias flutuantes)', () => {
-  it('coloca corrida nos dias preferidos e força nos dias que sobram', () => {
+  it('coloca corrida nos dias preferidos, longão no dia escolhido e força nos livres', () => {
     const p = couchTo5k8Weeks()
     const monday = new Date('2026-08-03T12:00:00') // uma segunda-feira
-    const rows = expandProgram(p.weeks, monday, [0, 2, 6]) // seg, qua, dom
+    const rows = expandProgram(p.weeks, monday, [0, 2, 6], 6) // seg, qua, dom · longão no dom
 
-    // Semana 1 = primeiros 5 treinos (datas 03..09/08)
     const wk1 = rows.filter(r => r.date >= '2026-08-03' && r.date <= '2026-08-09')
-    const byDate = Object.fromEntries(wk1.map(r => [r.date, r.sport]))
-    expect(byDate['2026-08-03']).toBe('running') // segunda (preferido)
-    expect(byDate['2026-08-05']).toBe('running') // quarta (preferido)
-    expect(byDate['2026-08-09']).toBe('running') // domingo (preferido)
-    // força cai em 2 dias livres (ter/qui = 04 e 06)
-    expect(byDate['2026-08-04']).toBe('strength')
-    expect(byDate['2026-08-06']).toBe('strength')
+    const byDate = Object.fromEntries(wk1.map(r => [r.date, r]))
+    expect(byDate['2026-08-03'].sport).toBe('running') // segunda (preferido)
+    expect(byDate['2026-08-05'].sport).toBe('running') // quarta (preferido)
+    expect(byDate['2026-08-09'].sport).toBe('running') // domingo (preferido)
+    // o longão (maior duração) cai no domingo escolhido
+    expect(byDate['2026-08-09'].planned_duration_min).toBe(33)
+    expect(byDate['2026-08-03'].planned_duration_min).toBe(30)
+    // força nos dias livres (ter/qui = 04 e 06)
+    expect(byDate['2026-08-04'].sport).toBe('strength')
+    expect(byDate['2026-08-06'].sport).toBe('strength')
     expect(wk1).toHaveLength(5)
+  })
+
+  it('longão respeita o dia escolhido mesmo no meio da semana (quarta)', () => {
+    const p = couchTo5k8Weeks()
+    const monday = new Date('2026-08-03T12:00:00')
+    const rows = expandProgram(p.weeks, monday, [0, 2, 5], 2) // longão na quarta
+    const wed = rows.find(r => r.date === '2026-08-05')
+    expect(wed?.planned_duration_min).toBe(33) // longão foi para a quarta
   })
 
   it('outro atleta, outros dias (ter/qui/sáb) → corrida segue os preferidos', () => {

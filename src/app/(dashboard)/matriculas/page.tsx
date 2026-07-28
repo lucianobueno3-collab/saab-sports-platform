@@ -148,7 +148,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
 
     if (selectedProgram) {
       // Programa composto: dias flutuantes (corrida nos preferidos, força nos livres).
-      rows = expandProgram(selectedProgram.weeks, startDate, pref).map(x => ({
+      rows = expandProgram(selectedProgram.weeks, startDate, pref, enr.long_run_day).map(x => ({
         athlete_id: enr.athlete_id!, date: x.date, sport: x.sport, title: x.title,
         description: x.description, planned_duration_min: x.planned_duration_min, planned_tss: x.planned_tss,
       }))
@@ -203,7 +203,8 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
         {enr.currently_running && <Info k="Dias/semana" v={LBL_DAYS[enr.days_running ?? ''] ?? '—'} />}
         {enr.currently_running && <Info k="Volume semanal" v={LBL_DIST[enr.weekly_distance ?? ''] ?? '—'} />}
         <Info k="Objetivo" v={LBL_GOAL[enr.goal ?? ''] ?? '—'} wide />
-        <Info k="Dias preferidos" v={(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || '—'} wide />
+        <Info k="Dias preferidos" v={(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || '—'} />
+        <Info k="Dia do longão" v={enr.long_run_day != null ? WEEKDAYS[enr.long_run_day] : '—'} />
       </div>
 
       {enr.athlete_id && (
@@ -258,7 +259,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
             {enr.status === 'active' ? 'Reaplicar' : 'Aplicar programa'}
           </button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-2">Dias flutuantes: a corrida vai para os dias preferidos do aluno ({(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || 'não informados'}) e a força nos dias que sobram.</p>
+        <p className="text-[10px] text-muted-foreground mt-2">Dias flutuantes: o longão vai para {enr.long_run_day != null ? WEEKDAYS[enr.long_run_day] : 'o último dia preferido'}, as outras corridas nos demais dias preferidos ({(enr.preferred_days ?? []).map(i => WEEKDAYS[i]).join(', ') || 'não informados'}) e a força nos dias que sobram.</p>
       </div>
 
       {msg && <p className="text-sm font-semibold" style={{ color: '#00d084' }}>{msg}</p>}

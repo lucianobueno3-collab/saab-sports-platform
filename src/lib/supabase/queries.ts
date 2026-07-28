@@ -1182,6 +1182,7 @@ export type EnrollmentRow = {
   weekly_distance: string | null
   goal: string | null
   preferred_days: number[] | null
+  long_run_day: number | null
   coach_notes: string | null
   plan_applied_at: string | null
 }
@@ -1193,7 +1194,7 @@ export type PublicEnrollInput = {
   currently_running?: boolean | null
   running_level?: string | null; activity_level?: string | null
   days_running?: string | null; weekly_distance?: string | null
-  goal?: string | null; preferred_days?: number[] | null
+  goal?: string | null; preferred_days?: number[] | null; long_run_day?: number | null
   website?: string // honeypot
 }
 

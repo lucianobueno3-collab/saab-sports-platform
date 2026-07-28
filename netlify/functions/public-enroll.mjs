@@ -93,6 +93,7 @@ export default async (req) => {
       preferred_days: Array.isArray(body.preferred_days)
         ? body.preferred_days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
         : null,
+      long_run_day: Number.isInteger(body.long_run_day) && body.long_run_day >= 0 && body.long_run_day <= 6 ? body.long_run_day : null,
     }
     const { error: anErr } = await admin.from('anamneses').insert(anamnese)
     if (anErr) throw anErr
