@@ -76,7 +76,7 @@ const WEEKDAYS = [
 const RED = '#e8001c'
 // Link de checkout do Hotmart. Pode ser sobrescrito por NEXT_PUBLIC_HOTMART_URL
 // no Netlify; senão usa o padrão abaixo. Se vazio, o funil segue sem pagamento.
-const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? 'https://go.hotmart.com/O106914424J').trim()
+const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? 'https://pay.hotmart.com/O106914424J').trim()
 // Cupons que liberam a matrícula sem pagamento (não chamam o Hotmart).
 const FREE_COUPONS = ['SAAB100']
 
@@ -394,17 +394,18 @@ function HotmartPayButton({ url, email }: { url: string; email: string }) {
 
   useEffect(() => {
     if (!isPay) return
-    const CSS = 'https://static.hotmart.com/css/hotmart-fire-checkout.css'
+    // Widget oficial do Hotmart (variante "hotmart-fb", igual ao snippet do produto).
+    const CSS = 'https://static.hotmart.com/css/hotmart-fb.min.css'
     const JS = 'https://static.hotmart.com/checkout/widget.min.js'
     if (!document.querySelector('link[data-hotmart-checkout]')) {
       const l = document.createElement('link')
-      l.rel = 'stylesheet'; l.href = CSS; l.setAttribute('data-hotmart-checkout', '1')
+      l.rel = 'stylesheet'; l.type = 'text/css'; l.href = CSS; l.setAttribute('data-hotmart-checkout', '1')
       document.head.appendChild(l)
     }
     if (!document.querySelector('script[data-hotmart-checkout]')) {
       const s = document.createElement('script')
       s.src = JS; s.async = true; s.setAttribute('data-hotmart-checkout', '1')
-      document.body.appendChild(s)
+      document.head.appendChild(s)
     }
   }, [isPay])
 
@@ -413,11 +414,11 @@ function HotmartPayButton({ url, email }: { url: string; email: string }) {
 
   if (isPay) {
     // checkoutMode=2 → o widget intercepta o clique e abre o pagamento em lightbox.
-    // Sem o widget (ex.: script bloqueado), o href simplesmente abre o checkout.
     const embed = withEmail(url + (url.includes('?') ? '&' : '?') + 'checkoutMode=2')
     return (
       <div className="mt-6">
-        <a href={embed} className={`hotmart-fire-checkout ${btnCls}`} style={{ background: RED }}>
+        <a href={embed} onClick={e => e.preventDefault()}
+          className={`hotmart-fb hotmart__button-checkout ${btnCls}`} style={{ background: RED }}>
           <Footprints className="w-5 h-5" /> Pagar aqui e confirmar
         </a>
         <p className="mt-2 text-[11px] text-muted-foreground">
