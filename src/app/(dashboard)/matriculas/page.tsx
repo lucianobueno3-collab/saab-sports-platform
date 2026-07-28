@@ -165,15 +165,17 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   const fallbackPlan = useMemo(() => PLAN_LIBRARY.find(p => p.key === planKey) ?? null, [planKey])
 
   // Monta os treinos (com dias flutuantes), sem gravar — usado na pré-visualização.
-  function buildRows(): PlannedWorkoutInput[] | null {
+  // Aceita override dos dias preferidos e do longão (ajuste na tela de revisão).
+  function buildRows(prefOverride?: number[], longOverride?: number | null): PlannedWorkoutInput[] | null {
     if (!enr.athlete_id) { setMsg('Sem atleta vinculado.'); return null }
     const startDate = new Date(start + 'T12:00:00')
-    const pref = (enr.preferred_days ?? []).slice().sort((a, b) => a - b)
+    const pref = (prefOverride ?? enr.preferred_days ?? []).slice().filter(d => d >= 0 && d <= 6).sort((a, b) => a - b)
+    const longDay = longOverride !== undefined ? longOverride : enr.long_run_day
     let rows: PlannedWorkoutInput[] = []
 
     if (selectedProgram) {
       // Programa composto: dias flutuantes (corrida nos preferidos, força nos livres).
-      rows = expandProgram(selectedProgram.weeks, startDate, pref, enr.long_run_day).map(x => ({
+      rows = expandProgram(selectedProgram.weeks, startDate, pref, longDay).map(x => ({
         athlete_id: enr.athlete_id!, date: x.date, sport: x.sport, title: x.title,
         description: x.description, planned_duration_min: x.planned_duration_min, planned_tss: x.planned_tss,
         structure: x.structure,
@@ -351,7 +353,9 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           rows={preview} start={start}
           programName={selectedProgram?.name ?? fallbackPlan?.name ?? 'Plano'}
           athleteName={enr.full_name ?? 'aluno'}
-          longRunDay={enr.long_run_day}
+          initialPref={(enr.preferred_days ?? []).filter(d => d >= 0 && d <= 6)}
+          initialLong={enr.long_run_day}
+          reexpand={(pref, long) => buildRows(pref, long)}
           library={library}
           busy={busy === 'apply'}
           onCancel={() => setPreview(null)}
@@ -384,9 +388,11 @@ const SPORT_OPTS = ['running', 'strength', 'cycling', 'swimming'] as const
 
 type PreviewItem = PlannedWorkoutInput & { _uid: number }
 
-function PlanPreview({ rows, start, programName, athleteName, longRunDay, library, busy, onCancel, onConfirm }: {
+function PlanPreview({ rows, start, programName, athleteName, initialPref, initialLong, reexpand, library, busy, onCancel, onConfirm }: {
   rows: PlannedWorkoutInput[]; start: string; programName: string; athleteName: string
-  longRunDay: number | null; library: WorkoutLibraryRow[]; busy: boolean; onCancel: () => void; onConfirm: (rows: PlannedWorkoutInput[]) => void
+  initialPref: number[]; initialLong: number | null
+  reexpand: (pref: number[], long: number | null) => PlannedWorkoutInput[] | null
+  library: WorkoutLibraryRow[]; busy: boolean; onCancel: () => void; onConfirm: (rows: PlannedWorkoutInput[]) => void
 }) {
   const startMs = new Date(start + 'T12:00:00').getTime()
   const weekOf = (d: string) => Math.max(0, Math.floor((new Date(d + 'T12:00:00').getTime() - startMs) / (7 * 86400000)))
@@ -394,6 +400,25 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, librar
   const [items, setItems] = useState<PreviewItem[]>(() => rows.map((r, i) => ({ ...r, _uid: i })))
   const [editing, setEditing] = useState<number | null>(null)
   const uidRef = useRef(rows.length)
+
+  // Dias da semana (ajustáveis): reorganizam o plano inteiro ao mudar.
+  const [pref, setPref] = useState<number[]>(() => [...initialPref].sort((a, b) => a - b))
+  const [longDay, setLongDay] = useState<number | null>(initialLong)
+
+  const relayout = (nextPref: number[], nextLong: number | null) => {
+    const r = reexpand(nextPref, nextLong)
+    if (!r) return
+    uidRef.current = r.length
+    setItems(r.map((x, i) => ({ ...x, _uid: i })))
+    setEditing(null)
+  }
+  const toggleDay = (d: number) => {
+    const next = pref.includes(d) ? pref.filter(x => x !== d) : [...pref, d].sort((a, b) => a - b)
+    if (next.length === 0) return // precisa de ao menos 1 dia de corrida
+    const nextLong = (longDay != null && !next.includes(longDay)) ? null : longDay
+    setPref(next); setLongDay(nextLong); relayout(next, nextLong)
+  }
+  const chooseLong = (d: number | null) => { setLongDay(d); relayout(pref, d) }
 
   const patch = (uid: number, p: Partial<PlannedWorkoutInput>) => setItems(list => list.map(it => it._uid === uid ? { ...it, ...p } : it))
   const remove = (uid: number) => setItems(list => list.filter(it => it._uid !== uid))
@@ -450,19 +475,40 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, librar
           <button onClick={onCancel} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
 
-        {/* Resumo dos dias */}
-        <div className="px-5 py-3 border-b border-border space-y-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-            <span className="text-muted-foreground">Longão: <strong className="text-foreground">{longRunDay != null ? WEEKDAYS[longRunDay] : '—'}</strong></span>
-            <span className="text-muted-foreground">Corridas: <strong className="text-foreground">{runDays.map(d => WEEKDAYS[d]).join(', ') || '—'}</strong></span>
-            <span className="text-muted-foreground">Força: <strong className="text-foreground">{strengthDays.map(d => WEEKDAYS[d]).join(', ') || '—'}</strong></span>
+        {/* Ajuste dos dias — reorganiza o plano inteiro */}
+        <div className="px-5 py-3 border-b border-border space-y-2.5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground mb-1">Dias de corrida</p>
+            <div className="flex flex-wrap gap-1.5">
+              {WEEKDAYS.map((lbl, d) => {
+                const on = pref.includes(d)
+                return (
+                  <button key={d} onClick={() => toggleDay(d)}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                    style={on ? { background: RED, color: '#fff' } : { background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
+                    {lbl}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+              Longão
+              <select value={longDay ?? ''} onChange={e => chooseLong(e.target.value === '' ? null : Number(e.target.value))}
+                className="rounded-lg px-2 py-1 text-xs font-bold bg-background border border-border text-foreground normal-case tracking-normal">
+                <option value="">Automático (último dia)</option>
+                {pref.map(d => <option key={d} value={d}>{WEEKDAYS[d]}</option>)}
+              </select>
+            </label>
+            <span className="text-[11px] text-muted-foreground">Força: <strong className="text-foreground">{strengthDays.map(d => WEEKDAYS[d]).join(', ') || 'dias livres'}</strong></span>
           </div>
           {consecutiveRuns && (
             <p className="text-[11px] font-semibold rounded-lg px-2.5 py-1.5" style={{ background: '#f59e0b18', color: '#b45309' }}>
-              ⚠️ Há corridas em dias seguidos. Para iniciante, o ideal é intercalar com descanso — ajuste o dia no treino abaixo se quiser.
+              ⚠️ Você escolheu dias de corrida seguidos. Para iniciante, o ideal é intercalar com descanso.
             </p>
           )}
-          <p className="text-[10px] text-muted-foreground">Toque no lápis para mudar dia, modalidade, título ou duração de cada treino.</p>
+          <p className="text-[10px] text-muted-foreground">Ajuste os dias acima para reorganizar tudo, ou toque no lápis de um treino para mudar caso a caso.</p>
         </div>
 
         {/* Semanas */}
