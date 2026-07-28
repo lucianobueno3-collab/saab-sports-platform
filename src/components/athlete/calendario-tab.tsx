@@ -16,7 +16,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, Library, BookmarkPlus, GripVertical,
+  Sparkles, Library, BookmarkPlus, Pencil, Copy,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -57,7 +57,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [detailActivity, setDetailActivity] = useState<ActivityRow | null>(null)
   const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
-  const [showLib, setShowLib] = useState(false)
+  const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
 
@@ -145,6 +145,24 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       athlete_id: athleteId, date, sport: w.sport, title: w.title,
       description: w.description ?? null, planned_duration_min: w.duration_min ?? null,
       planned_tss: w.tss ?? null, structure: w.structure ?? null,
+    })
+    load()
+  }
+  // Adiciona um treino da biblioteca direto num dia (toque, sem arrastar).
+  async function addFromLibrary(date: string, w: WorkoutLibraryRow) {
+    await createPlannedWorkout({
+      athlete_id: athleteId, date, sport: w.sport, title: w.title,
+      description: w.description ?? null, planned_duration_min: w.duration_min ?? null,
+      planned_tss: w.tss ?? null, structure: w.structure ?? null,
+    })
+    load()
+  }
+  // Duplica um treino planejado (mesmo dia).
+  async function duplicateWorkout(p: PlannedWorkoutRow) {
+    await createPlannedWorkout({
+      athlete_id: athleteId, date: p.date, sport: p.sport, title: p.title,
+      description: p.description, planned_duration_min: p.planned_duration_min,
+      planned_tss: p.planned_tss, structure: p.structure,
     })
     load()
   }
@@ -326,10 +344,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           </div>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#0088ff18', color: '#0088ff' }}>Planejado {plannedTss} TSS</span>
           <span className="px-2.5 py-1 rounded-lg font-bold" style={{ background: '#00d08418', color: '#00d084' }}>Realizado {doneTss.toFixed(0)} TSS</span>
-          {!readOnly && library.length > 0 && (
-            <button onClick={() => setShowLib(v => !v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-              style={showLib ? { background: '#7c3aed', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--foreground)' }}>
-              <GripVertical className="w-3.5 h-3.5" /> Arrastar treino
+          {!readOnly && (
+            <button onClick={() => setDaySheet(selectedDay)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: 'var(--secondary)', color: 'var(--foreground)' }}>
+              <Plus className="w-3.5 h-3.5" /> Treino
             </button>
           )}
           {!readOnly && (
@@ -340,31 +357,6 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
         </div>
       </div>
 
-      {/* Rail de treinos para arrastar até um dia (modelo TrainingPeaks/Garmin) */}
-      {!readOnly && showLib && library.length > 0 && (
-        <div className="rounded-xl p-3" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
-          <p className="text-[11px] text-muted-foreground mb-2">Arraste um treino para um dia do calendário para programá-lo.</p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {library.map(w => {
-              const info = sportInfo(w.sport)
-              return (
-                <div key={w.id} draggable
-                  onDragStart={() => setDragLib(w)}
-                  onDragEnd={() => { setDragLib(null); setDragOverDay(null) }}
-                  className="flex-shrink-0 cursor-grab active:cursor-grabbing rounded-lg px-3 py-2 select-none"
-                  style={{ background: info.color + '14', borderLeft: `3px solid ${info.color}`, minWidth: 160 }}>
-                  <div className="flex items-center gap-1.5">
-                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                    <info.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: info.color }} />
-                    <span className="text-xs font-bold text-foreground truncate">{w.title}</span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5 pl-5">{info.label}{w.duration_min ? ` · ${fmtDur(w.duration_min)}` : ''}{w.tss ? ` · ${w.tss} TSS` : ''}</p>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
@@ -382,7 +374,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                   <span className={`text-[11px] font-bold ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>
                     {WEEKDAYS[(d.getDay() + 6) % 7]} {d.getDate()}
                   </span>
-                  {!readOnly && <button onClick={() => setModal({ date: key })} className="p-1 rounded-md hover:bg-secondary text-muted-foreground" aria-label="Adicionar treino"><Plus className="w-3.5 h-3.5" /></button>}
+                  {!readOnly && <button onClick={() => setDaySheet(key)} className="p-1 rounded-md hover:bg-secondary text-muted-foreground" aria-label="Adicionar treino"><Plus className="w-3.5 h-3.5" /></button>}
                 </div>
 
                 <div className="space-y-1.5 flex-1">
@@ -428,7 +420,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                   </> })()}
 
                   {dayPlanned.length === 0 && dayDone.length === 0 && !readOnly && (
-                    <button onClick={() => setModal({ date: key })} className="w-full py-3 text-[10px] text-muted-foreground/50 hover:text-muted-foreground rounded-lg border border-dashed border-border">+ treino</button>
+                    <button onClick={() => setDaySheet(key)} className="w-full py-3 text-[10px] text-muted-foreground/50 hover:text-muted-foreground rounded-lg border border-dashed border-border">+ treino</button>
                   )}
                 </div>
               </div>
@@ -458,7 +450,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                 ...extras.map(a => ({ kind: 'd' as const, a })),
               ]
               return (
-                <div key={key} {...dropProps(key)} onClick={() => { if (!readOnly) setModal({ date: key }) }}
+                <div key={key} {...dropProps(key)} onClick={() => { if (!readOnly) setDaySheet(key) }}
                   className={`rounded-lg p-1.5 min-h-[84px] flex flex-col transition-colors hover:border-primary/40 ${readOnly ? '' : 'cursor-pointer'}`}
                   style={{ background: 'var(--card)', border: `1px solid ${dragOverDay === key ? '#7c3aed' : isToday ? '#7c3aed' : 'var(--border)'}`, boxShadow: dragOverDay === key ? '0 0 0 2px #7c3aed55' : undefined, opacity: inMonth ? 1 : 0.45 }}>
                   <span className={`text-[11px] font-bold px-0.5 ${isToday ? 'text-[#7c3aed]' : 'text-muted-foreground'}`}>{d.getDate()}</span>
@@ -521,7 +513,102 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           onClose={() => setShowPlan(false)}
           onApplied={() => { setShowPlan(false); load() }} />
       )}
+
+      {daySheet && !readOnly && (
+        <DaySheet
+          date={daySheet} planned={plannedByDay[daySheet] ?? []} library={library}
+          onClose={() => setDaySheet(null)}
+          onNew={() => { const d = daySheet; setDaySheet(null); setModal({ date: d }) }}
+          onEdit={p => { const d = daySheet; setDaySheet(null); setModal({ date: d, edit: p }) }}
+          onDelete={async p => { await remove(p.id) }}
+          onDuplicate={async p => { await duplicateWorkout(p) }}
+          onAddLib={async w => { await addFromLibrary(daySheet, w) }}
+        />
+      )}
     </div>
+  )
+}
+
+// ─── Folha de ações do dia (treinador): tocar no dia → adicionar/editar/excluir ──
+function DaySheet({ date, planned, library, onClose, onNew, onEdit, onDelete, onDuplicate, onAddLib }: {
+  date: string; planned: PlannedWorkoutRow[]; library: WorkoutLibraryRow[]
+  onClose: () => void; onNew: () => void
+  onEdit: (p: PlannedWorkoutRow) => void
+  onDelete: (p: PlannedWorkoutRow) => Promise<void>
+  onDuplicate: (p: PlannedWorkoutRow) => Promise<void>
+  onAddLib: (w: WorkoutLibraryRow) => Promise<void>
+}) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const [q, setQ] = useState('')
+  const [busy, setBusy] = useState(false)
+  const label = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  const lib = library.filter(w => !q.trim() || w.title.toLowerCase().includes(q.trim().toLowerCase()))
+
+  async function run(fn: () => Promise<void>) { setBusy(true); await fn(); setBusy(false) }
+
+  if (!mounted) return null
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="w-full sm:max-w-md bg-card border-t sm:border border-border sm:rounded-2xl rounded-t-2xl shadow-2xl max-h-[85vh] flex flex-col safe-bottom" onClick={e => e.stopPropagation()}>
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <p className="text-sm font-black text-foreground capitalize">{label}</p>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground"><X className="w-5 h-5" /></button>
+        </div>
+
+        <div className="overflow-y-auto p-4 space-y-4">
+          {/* Treinos do dia */}
+          {planned.length > 0 && (
+            <div className="space-y-2">
+              {planned.map(p => {
+                const info = sportInfo(p.sport)
+                return (
+                  <div key={p.id} className="flex items-center gap-2 rounded-xl p-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)', borderLeft: `3px solid ${info.color}` }}>
+                    <info.icon className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-foreground truncate">{p.title}</p>
+                      <p className="text-[10px] text-muted-foreground">{[fmtDur(p.planned_duration_min), p.planned_tss ? `${p.planned_tss} TSS` : null].filter(Boolean).join(' · ')}</p>
+                    </div>
+                    <button onClick={() => onEdit(p)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Editar"><Pencil className="w-4 h-4" /></button>
+                    <button disabled={busy} onClick={() => run(() => onDuplicate(p))} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Duplicar"><Copy className="w-4 h-4" /></button>
+                    <button disabled={busy} onClick={() => run(() => onDelete(p))} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Ações */}
+          <button onClick={onNew} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white" style={{ background: '#e8001c' }}>
+            <Plus className="w-4 h-4" /> Novo treino
+          </button>
+
+          {/* Biblioteca (toque para adicionar) */}
+          {library.length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Da biblioteca</p>
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar treino…" className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2 focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+              <div className="space-y-1.5 max-h-56 overflow-y-auto">
+                {lib.map(w => {
+                  const info = sportInfo(w.sport)
+                  return (
+                    <button key={w.id} disabled={busy} onClick={() => run(() => onAddLib(w))}
+                      className="w-full text-left flex items-center gap-2 rounded-lg p-2 hover:bg-secondary transition-colors" style={{ background: info.color + '10' }}>
+                      <info.icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: info.color }} />
+                      <span className="text-sm font-semibold text-foreground truncate flex-1">{w.title}</span>
+                      <span className="text-[10px] text-muted-foreground">{[fmtDur(w.duration_min), w.tss ? `${w.tss} TSS` : null].filter(Boolean).join(' · ')}</span>
+                      <Plus className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    </button>
+                  )
+                })}
+                {lib.length === 0 && <p className="text-xs text-muted-foreground py-2 text-center">Nenhum treino encontrado.</p>}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
