@@ -1185,6 +1185,10 @@ export type EnrollmentRow = {
   long_run_day: number | null
   coach_notes: string | null
   plan_applied_at: string | null
+  paid_at: string | null
+  payment_status: 'approved' | 'refunded' | 'canceled' | null
+  payment_ref: string | null
+  payment_source: string | null
 }
 
 export type PublicEnrollInput = {

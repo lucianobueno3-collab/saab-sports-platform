@@ -79,7 +79,10 @@ export default function MatriculasPage() {
                 style={{ background: 'var(--card)', border: `1px solid ${sel?.id === r.id ? RED : 'var(--border)'}` }}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold text-foreground truncate">{r.full_name ?? 'Sem nome'}</span>
-                  <StatusBadge status={r.status} />
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <PaymentBadge enr={r} />
+                    <StatusBadge status={r.status} />
+                  </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5 truncate">{PKG_TITLE[r.package_key] ?? r.package_key} · {new Date(r.created_at).toLocaleDateString('pt-BR')}</p>
               </button>
@@ -105,6 +108,15 @@ function StatusBadge({ status }: { status: string }) {
     pending: { t: 'Pendente', c: '#ffa800' }, active: { t: 'Ativa', c: '#00d084' }, rejected: { t: 'Recusada', c: '#94a3b8' },
   }
   const s = map[status] ?? map.pending
+  return <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded flex-shrink-0" style={{ background: s.c + '22', color: s.c }}>{s.t}</span>
+}
+
+function PaymentBadge({ enr }: { enr: EnrollmentRow }) {
+  const map: Record<string, { t: string; c: string }> = {
+    approved: { t: 'Pago', c: '#00d084' }, refunded: { t: 'Estornado', c: '#ef4444' }, canceled: { t: 'Cancelado', c: '#94a3b8' },
+  }
+  const s = enr.payment_status ? map[enr.payment_status] : null
+  if (!s) return null
   return <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded flex-shrink-0" style={{ background: s.c + '22', color: s.c }}>{s.t}</span>
 }
 
@@ -197,8 +209,27 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           <h2 className="text-xl font-black text-foreground">{enr.full_name}</h2>
           <p className="text-xs text-muted-foreground">{[enr.email, enr.phone].filter(Boolean).join(' · ')}</p>
         </div>
-        <StatusBadge status={enr.status} />
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <PaymentBadge enr={enr} />
+          <StatusBadge status={enr.status} />
+        </div>
       </div>
+
+      {enr.payment_status && (
+        <div className="rounded-xl px-3.5 py-2.5 text-xs" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+          {enr.payment_status === 'approved' ? (
+            <span className="font-bold" style={{ color: '#00d084' }}>
+              ✅ Pagamento confirmado{enr.paid_at ? ` em ${new Date(enr.paid_at).toLocaleDateString('pt-BR')}` : ''}
+              {enr.payment_source ? ` · ${enr.payment_source}` : ''}{enr.payment_ref ? ` · ${enr.payment_ref}` : ''}
+            </span>
+          ) : (
+            <span className="font-bold" style={{ color: enr.payment_status === 'refunded' ? '#ef4444' : '#94a3b8' }}>
+              {enr.payment_status === 'refunded' ? '↩︎ Pagamento estornado' : '⨯ Pagamento cancelado'}
+              {enr.payment_ref ? ` · ${enr.payment_ref}` : ''}
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Respostas da anamnese */}
       <div className="grid grid-cols-2 gap-2">
