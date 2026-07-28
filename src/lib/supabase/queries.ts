@@ -1342,3 +1342,41 @@ export async function deleteTrainingProgram(id: string): Promise<boolean> {
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
+
+// ─── Parceiros (portal do aluno, migração 034) ──────────────────────────────
+
+export type PartnerRow = {
+  id: string
+  name: string
+  url: string | null
+  logo_url: string | null
+  description: string | null
+  sort: number
+  active: boolean
+}
+
+export async function getPartners(onlyActive = true): Promise<PartnerRow[]> {
+  const sb = createClient()
+  let q = sb.from('partners').select('id, name, url, logo_url, description, sort, active').order('sort').order('created_at')
+  if (onlyActive) q = q.eq('active', true)
+  const { data, error } = await q
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as PartnerRow[]
+}
+
+export async function savePartner(p: Partial<PartnerRow> & { name: string }): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const payload = { name: p.name, url: p.url ?? null, logo_url: p.logo_url ?? null, description: p.description ?? null, sort: p.sort ?? 0, active: p.active ?? true }
+  const { error } = p.id
+    ? await sb.from('partners').update(payload).eq('id', p.id)
+    : await sb.from('partners').insert(payload)
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deletePartner(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('partners').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
