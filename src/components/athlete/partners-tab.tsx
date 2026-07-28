@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react'
 import { getPartners, type PartnerRow } from '@/lib/supabase/queries'
-import { Loader2, ExternalLink, Handshake } from 'lucide-react'
+import { Loader2, ExternalLink } from 'lucide-react'
 
 const RED = '#e8001c'
 
-/** Faixa compacta de parceiros (propaganda) para o Hoje e abaixo do Calendário.
+/** Faixa de parceiros (propaganda) para o Hoje e abaixo do Calendário.
+ *  Visual limpo: só os logos em chips flutuantes, sem caixa e sem rótulo.
  *  Some se não houver parceiros. */
 export function PartnersStrip() {
   const [partners, setPartners] = useState<PartnerRow[]>([])
@@ -14,23 +15,16 @@ export function PartnersStrip() {
   if (partners.length === 0) return null
   const open = (p: PartnerRow) => { if (p.url) window.open(p.url, '_blank', 'noopener') }
   return (
-    <div className="rounded-2xl p-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-      <div className="flex items-center gap-1.5 mb-2 px-1">
-        <Handshake className="w-3.5 h-3.5 text-primary" />
-        <span className="text-[11px] font-black text-muted-foreground uppercase tracking-wider">Parceiros</span>
-      </div>
-      <div className="flex gap-2.5 overflow-x-auto pb-1">
-        {partners.map(p => (
-          <button key={p.id} onClick={() => open(p)} disabled={!p.url}
-            className="flex-shrink-0 rounded-xl overflow-hidden disabled:cursor-default transition-transform hover:scale-[1.03]"
-            style={{ width: 132, border: '1px solid var(--border)' }} title={p.name}>
-            {p.logo_url
-              ? <span className="block w-full h-16 flex items-center justify-center p-2" style={{ background: '#fff' }}><img src={p.logo_url} alt={p.name} className="max-h-12 w-auto object-contain" /></span>
-              : <span className="block w-full h-16 flex items-center justify-center text-sm font-black" style={{ background: RED + '14', color: RED }}>{p.name}</span>}
-            <span className="block text-[10px] font-semibold text-foreground truncate px-2 py-1 text-center">{p.name}</span>
-          </button>
-        ))}
-      </div>
+    <div className="flex flex-wrap justify-center items-center gap-3 sm:gap-4 py-2">
+      {partners.map(p => (
+        <button key={p.id} onClick={() => open(p)} disabled={!p.url} title={p.name}
+          className="group flex-shrink-0 rounded-2xl bg-white flex items-center justify-center transition-all duration-200 hover:-translate-y-0.5 disabled:cursor-default"
+          style={{ width: 148, height: 80, padding: 14, boxShadow: '0 4px 16px rgba(0,0,0,0.10)' }}>
+          {p.logo_url
+            ? <img src={p.logo_url} alt={p.name} className="max-h-full max-w-full object-contain transition-transform duration-200 group-hover:scale-105" />
+            : <span className="text-lg font-black tracking-tight" style={{ color: RED }}>{p.name}</span>}
+        </button>
+      ))}
     </div>
   )
 }
@@ -49,11 +43,6 @@ export function PartnersTab() {
 
   return (
     <div className="space-y-4 max-w-4xl mx-auto">
-      <div className="flex items-center gap-2">
-        <Handshake className="w-5 h-5 text-primary" />
-        <h2 className="text-lg font-black text-foreground">Nossos parceiros</h2>
-      </div>
-
       {partners.length === 0 ? (
         <div className="rounded-2xl p-8 text-center text-sm text-muted-foreground" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           Em breve, condições especiais dos nossos parceiros.
