@@ -32,15 +32,21 @@ function nextMonday() {
   return addDays(d, 7 - day)
 }
 
+type Filter = 'paid_waiting' | 'pending' | 'paid' | 'active' | 'all'
+
 export default function MatriculasPage() {
-  const [filter, setFilter] = useState<'pending' | 'active' | 'all'>('pending')
+  const [filter, setFilter] = useState<Filter>('paid_waiting')
   const [rows, setRows] = useState<EnrollmentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [sel, setSel] = useState<EnrollmentRow | null>(null)
 
   async function load() {
     setLoading(true)
-    const data = await getEnrollments(filter === 'all' ? undefined : filter)
+    // Filtros de status usam a query; os de pagamento buscam tudo e filtram no cliente.
+    const serverStatus = filter === 'pending' ? 'pending' : filter === 'active' ? 'active' : undefined
+    let data = await getEnrollments(serverStatus)
+    if (filter === 'paid') data = data.filter(r => r.payment_status === 'approved')
+    else if (filter === 'paid_waiting') data = data.filter(r => r.payment_status === 'approved' && r.status !== 'active')
     setRows(data)
     setSel(s => (s ? data.find(r => r.id === s.id) ?? null : null))
     setLoading(false)
@@ -53,10 +59,10 @@ export default function MatriculasPage() {
         <ClipboardList className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-black text-foreground">Matrículas & Anamneses</h1>
       </div>
-      <p className="text-sm text-muted-foreground mb-5">Novos alunos que preencheram a anamnese. Revise e aplique o plano com um clique.</p>
+      <p className="text-sm text-muted-foreground mb-5">Novos alunos que preencheram a anamnese. <strong className="text-foreground">Aguardando plano</strong> são os que já pagaram e ainda não receberam o treino — sua fila de ação.</p>
 
-      <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit mb-5">
-        {([['pending', 'Pendentes'], ['active', 'Ativas'], ['all', 'Todas']] as const).map(([v, t]) => (
+      <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit mb-5 flex-wrap">
+        {([['paid_waiting', 'Aguardando plano'], ['pending', 'Pendentes'], ['paid', 'Pagos'], ['active', 'Ativas'], ['all', 'Todas']] as const).map(([v, t]) => (
           <button key={v} onClick={() => setFilter(v)}
             className="px-4 py-1.5 rounded-lg text-xs font-bold transition-colors"
             style={filter === v ? { background: RED, color: '#fff' } : { color: 'var(--muted-foreground)' }}>{t}</button>
@@ -67,7 +73,11 @@ export default function MatriculasPage() {
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
       ) : rows.length === 0 ? (
         <div className="rounded-2xl p-10 text-center text-muted-foreground" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-          Nenhuma matrícula {filter === 'pending' ? 'pendente' : filter === 'active' ? 'ativa' : ''} no momento.
+          {filter === 'paid_waiting' ? 'Ninguém aguardando plano — todos os alunos que pagaram já receberam o treino. ✅'
+            : filter === 'paid' ? 'Nenhum pagamento confirmado ainda.'
+            : filter === 'pending' ? 'Nenhuma matrícula pendente no momento.'
+            : filter === 'active' ? 'Nenhuma matrícula ativa no momento.'
+            : 'Nenhuma matrícula no momento.'}
         </div>
       ) : (
         <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)] gap-4">
