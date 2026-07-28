@@ -1,5 +1,6 @@
 import { createClient } from './client'
 import { todayLocalISO } from '@/lib/dates'
+import type { ProgramWeek, ProgramRouting } from '@/lib/program-templates'
 
 export type AthleteRow = {
   id: string
@@ -1286,6 +1287,57 @@ export async function getAthleteMetrics(athleteId: string): Promise<AthleteMetri
 export async function deleteAthleteMetric(id: string): Promise<boolean> {
   const sb = createClient()
   const { error } = await sb.from('athlete_metrics').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+// ─── Programas de treino (compositor, migração 031) ─────────────────────────
+
+export type TrainingProgramRow = {
+  id: string
+  name: string
+  description: string | null
+  sport: string
+  goal: string | null
+  level: string | null
+  weeks: ProgramWeek[]
+  routing: ProgramRouting | null
+  package_key: string | null
+  active: boolean
+}
+
+export type TrainingProgramInput = Omit<TrainingProgramRow, 'id'> & { id?: string }
+
+export async function getTrainingPrograms(): Promise<TrainingProgramRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('training_programs')
+    .select('id, name, description, sport, goal, level, weeks, routing, package_key, active')
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as TrainingProgramRow[]
+}
+
+export async function saveTrainingProgram(p: TrainingProgramInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const payload = {
+    name: p.name, description: p.description, sport: p.sport, goal: p.goal, level: p.level,
+    weeks: p.weeks, routing: p.routing, package_key: p.package_key, active: p.active,
+    updated_at: new Date().toISOString(),
+  }
+  if (p.id) {
+    const { error } = await sb.from('training_programs').update(payload).eq('id', p.id)
+    if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+    return { ok: true, id: p.id }
+  }
+  const { data, error } = await sb.from('training_programs').insert({ ...payload, created_by: user?.id ?? null }).select('id').single()
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true, id: data.id }
+}
+
+export async function deleteTrainingProgram(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('training_programs').delete().eq('id', id)
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
