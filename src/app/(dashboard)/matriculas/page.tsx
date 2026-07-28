@@ -176,6 +176,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
       rows = expandProgram(selectedProgram.weeks, startDate, pref, enr.long_run_day).map(x => ({
         athlete_id: enr.athlete_id!, date: x.date, sport: x.sport, title: x.title,
         description: x.description, planned_duration_min: x.planned_duration_min, planned_tss: x.planned_tss,
+        structure: x.structure,
       }))
     } else if (fallbackPlan) {
       const planDays = [...new Set(fallbackPlan.week.map(w => w.day))].sort((a, b) => a - b)
