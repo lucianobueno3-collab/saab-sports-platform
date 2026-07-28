@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import {
@@ -10,7 +10,7 @@ import {
 } from '@/lib/supabase/queries'
 import { PLAN_LIBRARY, generatePlan } from '@/lib/training-plans'
 import { recommendProgram, expandProgram } from '@/lib/program-templates'
-import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye } from 'lucide-react'
+import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye, Plus, Pencil, Trash2 } from 'lucide-react'
 
 const RED = '#e8001c'
 const WEEKDAYS = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -351,7 +351,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           longRunDay={enr.long_run_day}
           busy={busy === 'apply'}
           onCancel={() => setPreview(null)}
-          onConfirm={() => commit(preview)}
+          onConfirm={rows => commit(rows)}
         />
       )}
     </div>
@@ -369,32 +369,60 @@ const SPORT_META: Record<string, { label: string; color: string }> = {
 const sportMeta = (s: string) => SPORT_META[s] ?? { label: s, color: '#64748b' }
 function wdMon(dateStr: string) { return (new Date(dateStr + 'T12:00:00').getDay() + 6) % 7 } // 0=Seg … 6=Dom
 function fmtDM(dateStr: string) { const d = new Date(dateStr + 'T12:00:00'); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}` }
+// Data de um dia da semana (0=Seg…6=Dom) dentro da janela de 7 dias da semana do programa.
+function dateForWeekday(startStr: string, weekIdx: number, targetWd: number): string {
+  const base = new Date(startStr + 'T12:00:00'); base.setDate(base.getDate() + weekIdx * 7)
+  const off = (targetWd - ((base.getDay() + 6) % 7) + 7) % 7
+  base.setDate(base.getDate() + off)
+  return base.toLocaleDateString('en-CA')
+}
+const SPORT_OPTS = ['running', 'strength', 'cycling', 'swimming'] as const
+
+type PreviewItem = PlannedWorkoutInput & { _uid: number }
 
 function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, onCancel, onConfirm }: {
   rows: PlannedWorkoutInput[]; start: string; programName: string; athleteName: string
-  longRunDay: number | null; busy: boolean; onCancel: () => void; onConfirm: () => void
+  longRunDay: number | null; busy: boolean; onCancel: () => void; onConfirm: (rows: PlannedWorkoutInput[]) => void
 }) {
   const startMs = new Date(start + 'T12:00:00').getTime()
-  const weekOf = (d: string) => Math.floor((new Date(d + 'T12:00:00').getTime() - startMs) / (7 * 86400000))
+  const weekOf = (d: string) => Math.max(0, Math.floor((new Date(d + 'T12:00:00').getTime() - startMs) / (7 * 86400000)))
 
-  // Agrupa por semana do programa (blocos de 7 dias a partir do início).
+  const [items, setItems] = useState<PreviewItem[]>(() => rows.map((r, i) => ({ ...r, _uid: i })))
+  const [editing, setEditing] = useState<number | null>(null)
+  const uidRef = useRef(rows.length)
+
+  const patch = (uid: number, p: Partial<PlannedWorkoutInput>) => setItems(list => list.map(it => it._uid === uid ? { ...it, ...p } : it))
+  const remove = (uid: number) => setItems(list => list.filter(it => it._uid !== uid))
+  const addToWeek = (w: number) => {
+    const uid = uidRef.current++
+    // procura um dia livre da semana; senão, cai na segunda
+    const used = new Set(items.filter(it => weekOf(it.date) === w).map(it => wdMon(it.date)))
+    const day = [0, 1, 2, 3, 4, 5, 6].find(d => !used.has(d)) ?? 0
+    setItems(list => [...list, { _uid: uid, athlete_id: rows[0]?.athlete_id ?? '', date: dateForWeekday(start, w, day), sport: 'running', title: 'Novo treino', description: null, planned_duration_min: 30, planned_tss: null }])
+    setEditing(uid)
+  }
+
+  // Agrupa por semana do programa (recalcula a cada edição).
   const weeks = useMemo(() => {
-    const map = new Map<number, PlannedWorkoutInput[]>()
-    for (const r of rows) {
-      const w = Math.max(0, weekOf(r.date))
+    const map = new Map<number, PreviewItem[]>()
+    for (const it of items) {
+      const w = weekOf(it.date)
       if (!map.has(w)) map.set(w, [])
-      map.get(w)!.push(r)
+      map.get(w)!.push(it)
     }
     return [...map.entries()].sort((a, b) => a[0] - b[0])
       .map(([w, list]) => [w, list.slice().sort((a, b) => a.date.localeCompare(b.date))] as const)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, start])
+  }, [items, start])
 
   // Padrão semanal (da 1ª semana): dias com corrida x força e checagem de dias seguidos.
   const firstWeek = weeks[0]?.[1] ?? []
   const runDays = [...new Set(firstWeek.filter(r => r.sport !== 'strength').map(r => wdMon(r.date)))].sort((a, b) => a - b)
   const strengthDays = [...new Set(firstWeek.filter(r => r.sport === 'strength').map(r => wdMon(r.date)))].sort((a, b) => a - b)
   const consecutiveRuns = runDays.some((d, i) => runDays.slice(i + 1).some(e => e - d === 1 || (d === 0 && e === 6)))
+
+  const inCls = 'rounded-lg px-2 py-1.5 text-xs bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const commitRows = () => onConfirm(items.slice().sort((a, b) => a.date.localeCompare(b.date)).map(({ _uid, ...r }) => r)) // eslint-disable-line @typescript-eslint/no-unused-vars
 
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
@@ -403,7 +431,7 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
         <div className="flex items-start justify-between gap-3 px-5 py-4 border-b border-border">
           <div>
             <h2 className="text-base font-black text-foreground flex items-center gap-2"><Eye className="w-4 h-4 text-primary" /> Revisar o plano de {athleteName}</h2>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{programName} · {weeks.length} semanas · {rows.length} treinos · início {fmtDM(start)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{programName} · {weeks.length} semanas · {items.length} treinos · início {fmtDM(start)}</p>
           </div>
           <button onClick={onCancel} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
@@ -417,26 +445,58 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
           </div>
           {consecutiveRuns && (
             <p className="text-[11px] font-semibold rounded-lg px-2.5 py-1.5" style={{ background: '#f59e0b18', color: '#b45309' }}>
-              ⚠️ Há corridas em dias seguidos. Para iniciante, o ideal é intercalar com descanso — ajuste os dias preferidos na anamnese se quiser mudar.
+              ⚠️ Há corridas em dias seguidos. Para iniciante, o ideal é intercalar com descanso — ajuste o dia no treino abaixo se quiser.
             </p>
           )}
+          <p className="text-[10px] text-muted-foreground">Toque no lápis para mudar dia, modalidade, título ou duração de cada treino.</p>
         </div>
 
         {/* Semanas */}
         <div className="overflow-y-auto px-5 py-3 space-y-3">
           {weeks.map(([w, list]) => (
             <div key={w}>
-              <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground mb-1.5">Semana {w + 1}</p>
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-[11px] font-black uppercase tracking-wider text-muted-foreground">Semana {w + 1}</p>
+                <button onClick={() => addToWeek(w)} className="flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"><Plus className="w-3 h-3" /> treino</button>
+              </div>
               <div className="space-y-1.5">
-                {list.map((r, i) => {
-                  const m = sportMeta(r.sport)
+                {list.map(it => {
+                  const m = sportMeta(it.sport)
+                  const isEd = editing === it._uid
                   return (
-                    <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-                      <span className="text-[11px] font-black w-10 shrink-0 text-center rounded" style={{ color: m.color }}>{WEEKDAYS[wdMon(r.date)]}</span>
-                      <span className="text-[10px] text-muted-foreground w-10 shrink-0">{fmtDM(r.date)}</span>
-                      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: m.color }} />
-                      <span className="text-sm font-semibold text-foreground truncate flex-1">{r.title}</span>
-                      {r.planned_duration_min ? <span className="text-[11px] text-muted-foreground shrink-0">{r.planned_duration_min}min</span> : null}
+                    <div key={it._uid} className="rounded-lg" style={{ background: 'var(--panel)', border: `1px solid ${isEd ? RED : 'var(--panel-border)'}` }}>
+                      <div className="flex items-center gap-3 px-3 py-2">
+                        <span className="text-[11px] font-black w-9 shrink-0 text-center" style={{ color: m.color }}>{WEEKDAYS[wdMon(it.date)]}</span>
+                        <span className="text-[10px] text-muted-foreground w-10 shrink-0">{fmtDM(it.date)}</span>
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: m.color }} />
+                        <span className="text-sm font-semibold text-foreground truncate flex-1">{it.title}</span>
+                        {it.planned_duration_min ? <span className="text-[11px] text-muted-foreground shrink-0">{it.planned_duration_min}min</span> : null}
+                        <button onClick={() => setEditing(isEd ? null : it._uid)} className="p-1 rounded text-muted-foreground hover:text-foreground" aria-label="Editar"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => remove(it._uid)} className="p-1 rounded text-red-400 hover:bg-red-400/10" aria-label="Excluir"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      {isEd && (
+                        <div className="grid grid-cols-2 gap-2 px-3 pb-3 pt-1 border-t border-border">
+                          <label className="text-[10px] font-semibold text-muted-foreground">Dia
+                            <select value={wdMon(it.date)} onChange={e => patch(it._uid, { date: dateForWeekday(start, w, Number(e.target.value)) })} className={`${inCls} w-full mt-0.5`}>
+                              {WEEKDAYS.map((d, idx) => <option key={idx} value={idx}>{d}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[10px] font-semibold text-muted-foreground">Modalidade
+                            <select value={it.sport} onChange={e => patch(it._uid, { sport: e.target.value })} className={`${inCls} w-full mt-0.5`}>
+                              {SPORT_OPTS.map(s => <option key={s} value={s}>{sportMeta(s).label}</option>)}
+                            </select>
+                          </label>
+                          <label className="text-[10px] font-semibold text-muted-foreground col-span-2">Título
+                            <input value={it.title} onChange={e => patch(it._uid, { title: e.target.value })} className={`${inCls} w-full mt-0.5`} />
+                          </label>
+                          <label className="text-[10px] font-semibold text-muted-foreground">Duração (min)
+                            <input type="number" min="0" value={it.planned_duration_min ?? ''} onChange={e => patch(it._uid, { planned_duration_min: e.target.value ? parseInt(e.target.value) : null })} className={`${inCls} w-full mt-0.5`} />
+                          </label>
+                          <label className="text-[10px] font-semibold text-muted-foreground">TSS
+                            <input type="number" min="0" value={it.planned_tss ?? ''} onChange={e => patch(it._uid, { planned_tss: e.target.value ? parseInt(e.target.value) : null })} className={`${inCls} w-full mt-0.5`} />
+                          </label>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -449,12 +509,12 @@ function PlanPreview({ rows, start, programName, athleteName, longRunDay, busy, 
         <div className="flex items-center gap-2 px-5 py-4 border-t border-border">
           <button onClick={onCancel} disabled={busy}
             className="flex-1 py-2.5 rounded-lg text-sm font-bold text-muted-foreground border border-border hover:bg-secondary disabled:opacity-50">
-            Voltar e ajustar
+            Cancelar
           </button>
-          <button onClick={onConfirm} disabled={busy}
+          <button onClick={commitRows} disabled={busy || items.length === 0}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-black text-white disabled:opacity-60" style={{ background: RED }}>
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-            {busy ? 'Gravando…' : 'Confirmar e gravar'}
+            {busy ? 'Gravando…' : `Confirmar e gravar (${items.length})`}
           </button>
         </div>
       </div>
