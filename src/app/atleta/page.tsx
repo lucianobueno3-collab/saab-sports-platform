@@ -274,7 +274,7 @@ export default function AtletaPage() {
       {tab === 'saude' && athleteId && <SaudeTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
       {tab === 'nutricao' && athleteId && <NutricaoTab athleteId={athleteId} />}
       {tab === 'metricas' && athleteId && <MetricasTab athleteId={athleteId} />}
-      {tab === 'parceiros' && <PartnersTab canManage={canCoach} />}
+      {tab === 'parceiros' && <PartnersTab />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
       {tab === 'evolucao' && athleteId && (
         <EvolutionShowcase athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />

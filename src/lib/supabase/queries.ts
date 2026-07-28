@@ -1380,3 +1380,14 @@ export async function deletePartner(id: string): Promise<boolean> {
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
+
+/** Sobe a imagem do logo de um parceiro (bucket avatars, pasta do admin). */
+export async function uploadPartnerLogo(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+  const path = `${userId}/partner-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/png' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
