@@ -59,9 +59,9 @@ const WEEKDAYS = [
 ]
 
 const RED = '#e8001c'
-// Link de checkout do Hotmart (definido em NEXT_PUBLIC_HOTMART_URL no Netlify).
-// Se vazio, o funil segue sem pagamento (vai direto ao portal).
-const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? '').trim()
+// Link de checkout do Hotmart. Pode ser sobrescrito por NEXT_PUBLIC_HOTMART_URL
+// no Netlify; senão usa o padrão abaixo. Se vazio, o funil segue sem pagamento.
+const HOTMART_URL = (process.env.NEXT_PUBLIC_HOTMART_URL ?? 'https://go.hotmart.com/O106914424J').trim()
 
 export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus primeiros 5 km' }: { packageKey?: string; packageTitle?: string }) {
   const [d, setD] = useState<Data>(EMPTY)
@@ -144,7 +144,11 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
   if (done) {
     // Fluxo com pagamento (Hotmart): a matrícula só é confirmada após pagar.
     if (HOTMART_URL) {
-      const link = HOTMART_URL + (HOTMART_URL.includes('?') ? '&' : '?') + 'email=' + encodeURIComponent(d.email.trim().toLowerCase())
+      // Só pré-preenche o e-mail no checkout completo (pay.hotmart.com); em
+      // links curtos (go.hotmart.com) usamos a URL como está, para não quebrar o redirect.
+      const link = /pay\.hotmart\.com/.test(HOTMART_URL)
+        ? HOTMART_URL + (HOTMART_URL.includes('?') ? '&' : '?') + 'email=' + encodeURIComponent(d.email.trim().toLowerCase())
+        : HOTMART_URL
       return (
         <div className="text-center py-12 px-6">
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5" style={{ background: RED + '22' }}>
