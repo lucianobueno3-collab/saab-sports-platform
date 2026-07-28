@@ -16,7 +16,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, Library, BookmarkPlus, Pencil, Copy,
+  Sparkles, Library, BookmarkPlus, Pencil, Copy, ChevronDown,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -822,6 +822,10 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
   const [structured, setStructured] = useState<boolean>(!!edit?.structure && edit.structure.length > 0)
   const [structure, setStructure] = useState<WorkoutStructure>(edit?.structure ?? [])
   const [mounted, setMounted] = useState(false)
+  // "Mais opções" já aberto ao editar um treino que use TSS, descrição ou estrutura
+  const [advanced, setAdvanced] = useState<boolean>(
+    !!(edit && ((edit.structure && edit.structure.length > 0) || edit.planned_tss || (edit.description && edit.description.trim())))
+  )
   useEffect(() => { setMounted(true) }, [])
 
   const est = structured ? estimateStructure(structure) : null
@@ -832,10 +836,13 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
     const w = library.find(l => l.id === id); if (!w) return
     setSport(w.sport); setTitle(w.title); setDesc(w.description ?? '')
     setDur(w.duration_min?.toString() ?? ''); setTss(w.tss?.toString() ?? '')
+    if (w.description || w.tss) setAdvanced(true)
   }
 
   async function save(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true)
+    e.preventDefault()
+    if (!title.trim() || saving) return
+    setSaving(true)
     const useStruct = structured && structure.length > 0
     const finalDur = useStruct ? est!.min : (dur ? parseInt(dur) : null)
     const finalTss = useStruct ? est!.tss : (tss ? parseInt(tss) : null)
@@ -857,12 +864,13 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
 
   const cls = 'w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary'
   const dateLabel = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  const DUR_CHIPS = [30, 45, 60, 75, 90]
 
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
           <div>
             <h2 className="text-sm font-bold text-foreground">{edit ? 'Editar treino' : 'Novo treino'}</h2>
             <p className="text-[11px] text-muted-foreground capitalize">{dateLabel}</p>
@@ -870,71 +878,87 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
         <form onSubmit={save} className="p-6 space-y-4">
-          {/* 1º) Modalidade — filtra os treinos da biblioteca abaixo */}
-          <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">Modalidade *</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {SPORTS.map(s => (
-                <button type="button" key={s.key} onClick={() => setSport(s.key)}
-                  className="flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-bold transition-colors"
-                  style={sport === s.key ? { background: s.color + '22', border: `1.5px solid ${s.color}`, color: s.color } : { background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
-                  <s.icon className="w-4 h-4" />{s.label}
+          {/* Atalho: preencher tudo a partir de um treino salvo (1 toque) */}
+          {!edit && libForSport.length > 0 && (
+            <select key={sport} defaultValue="" onChange={e => { if (e.target.value) applyFromLibrary(e.target.value) }} className={cls}>
+              <option value="">⚡ Usar treino salvo ({SPORTS.find(s => s.key === sport)?.label ?? sport})…</option>
+              {libForSport.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
+            </select>
+          )}
+
+          {/* Modalidade — grade compacta */}
+          <div className="grid grid-cols-4 gap-1.5">
+            {SPORTS.map(s => (
+              <button type="button" key={s.key} onClick={() => setSport(s.key)}
+                className="flex flex-col items-center gap-1 py-2 rounded-lg text-[10px] font-bold transition-colors"
+                style={sport === s.key ? { background: s.color + '22', border: `1.5px solid ${s.color}`, color: s.color } : { background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
+                <s.icon className="w-4 h-4" />{s.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Título */}
+          <input autoFocus required value={title} onChange={e => setTitle(e.target.value)} placeholder="Título do treino — ex: Intervalado 4x1km Z4" className={cls} />
+
+          {/* Duração rápida por chips (some quando estruturado calcula sozinho) */}
+          {!(structured && structure.length > 0) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {DUR_CHIPS.map(m => (
+                <button type="button" key={m} onClick={() => setDur(String(m))}
+                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  style={dur === String(m)
+                    ? { background: 'var(--primary)', color: '#fff' }
+                    : { background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--muted-foreground)' }}>
+                  {m}min
                 </button>
               ))}
+              <input type="number" min="0" value={DUR_CHIPS.includes(Number(dur)) ? '' : dur}
+                onChange={e => setDur(e.target.value)} placeholder="outro"
+                className="w-[70px] px-2 py-1.5 bg-background border border-border rounded-lg text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" />
+              <span className="text-[11px] text-muted-foreground">min</span>
             </div>
-          </div>
-          {/* 2º) Treinos disponíveis para a modalidade escolhida */}
-          {!edit && (
-            libForSport.length > 0 ? (
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5 flex items-center gap-1"><Library className="w-3.5 h-3.5 text-primary" /> Treinos disponíveis ({SPORTS.find(s => s.key === sport)?.label ?? sport})</label>
-                <select key={sport} defaultValue="" onChange={e => { if (e.target.value) applyFromLibrary(e.target.value) }} className={cls}>
-                  <option value="">Escolher um treino salvo…</option>
-                  {libForSport.map(l => <option key={l.id} value={l.id}>{l.title}</option>)}
-                </select>
-              </div>
-            ) : (
-              <p className="text-[11px] text-muted-foreground px-1">Nenhum treino salvo nesta modalidade — preencha manualmente abaixo.</p>
-            )
           )}
+
+          {/* Mais opções — TSS, estrutura passo a passo, descrição e biblioteca */}
           <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">Título *</label>
-            <input required value={title} onChange={e => setTitle(e.target.value)} placeholder="ex: Intervalado 4x1km Z4" className={cls} />
-          </div>
-          {/* Toggle: simples x estruturado */}
-          <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-            <label className="text-xs font-semibold text-foreground">Treino estruturado (passo a passo)</label>
-            <button type="button" onClick={() => setStructured(v => !v)} aria-label="Alternar estruturado"
-              className="relative w-10 h-5 rounded-full transition-colors" style={{ background: structured ? '#7c3aed' : 'var(--border)' }}>
-              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: structured ? '22px' : '2px' }} />
+            <button type="button" onClick={() => setAdvanced(v => !v)}
+              className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors">
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${advanced ? 'rotate-180' : ''}`} /> Mais opções
             </button>
-          </div>
+            {advanced && (
+              <div className="space-y-4 mt-3">
+                {/* Toggle: simples x estruturado */}
+                <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                  <label className="text-xs font-semibold text-foreground">Treino estruturado (passo a passo)</label>
+                  <button type="button" onClick={() => setStructured(v => !v)} aria-label="Alternar estruturado"
+                    className="relative w-10 h-5 rounded-full transition-colors" style={{ background: structured ? '#7c3aed' : 'var(--border)' }}>
+                    <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all" style={{ left: structured ? '22px' : '2px' }} />
+                  </button>
+                </div>
 
-          {structured ? (
-            <StructuredBuilder value={structure} onChange={setStructure} />
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label>
-                <input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder="60" className={cls} />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-foreground mb-1.5">TSS alvo</label>
-                <input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="70" className={cls} />
-              </div>
-            </div>
-          )}
-          <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">{structured ? 'Observações (opcional)' : 'Descrição / estrutura'}</label>
-            <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={structured ? 2 : 3} placeholder={structured ? 'notas adicionais…' : 'ex: 15min aquec Z2 · 4x1km Z4 (rec 2min) · 10min solto Z1'} className={cls + ' resize-none'} />
-          </div>
+                {structured ? (
+                  <StructuredBuilder value={structure} onChange={setStructure} />
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium text-foreground mb-1.5">TSS alvo</label>
+                    <input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="70" className={cls} />
+                  </div>
+                )}
 
-          {!edit && (
-            <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
-              <input type="checkbox" checked={saveToLib} onChange={e => setSaveToLib(e.target.checked)} className="accent-primary w-4 h-4" />
-              <BookmarkPlus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar este treino na biblioteca
-            </label>
-          )}
+                <div>
+                  <label className="block text-xs font-medium text-foreground mb-1.5">{structured ? 'Observações (opcional)' : 'Descrição / estrutura'}</label>
+                  <textarea value={desc} onChange={e => setDesc(e.target.value)} rows={structured ? 2 : 3} placeholder={structured ? 'notas adicionais…' : 'ex: 15min aquec Z2 · 4x1km Z4 (rec 2min) · 10min solto Z1'} className={cls + ' resize-none'} />
+                </div>
+
+                {!edit && (
+                  <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                    <input type="checkbox" checked={saveToLib} onChange={e => setSaveToLib(e.target.checked)} className="accent-primary w-4 h-4" />
+                    <BookmarkPlus className="w-3.5 h-3.5 text-muted-foreground" /> Salvar este treino na biblioteca
+                  </label>
+                )}
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-2 pt-1">
             {onDelete && (
