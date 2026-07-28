@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { publicEnroll, type PublicEnrollInput } from '@/lib/supabase/queries'
-import { ChevronLeft, ChevronRight, Check, Loader2, Footprints } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Loader2, Footprints, AlertTriangle } from 'lucide-react'
 
 // ─── Funil "Meus primeiros 5 km": cadastro + anamnese (FÓRMULA RIO INICIAL) ──
 // Formulário em etapas, com ramificação por "está correndo atualmente?".
@@ -26,7 +26,22 @@ const EMPTY: Data = {
   full_name: '', email: '', phone: '', password: '',
   age: '', height_cm: '', weight_kg: '',
   currently_running: null, running_level: null, activity_level: null,
-  days_running: null, weekly_distance: null, goal: null, preferred_days: [], long_run_day: null, website: '',
+  // objetivo fixo: este funil é dedicado aos primeiros 5 km
+  days_running: null, weekly_distance: null, goal: '5km', preferred_days: [], long_run_day: null, website: '',
+}
+
+// Dias corridos consecutivos (calendário), incluindo a virada Domingo→Segunda.
+// Retorna os pares em texto para avisar iniciantes a descansar entre corridas.
+function consecutivePairs(days: number[]): string[] {
+  const sorted = [...days].sort((a, b) => a - b)
+  const pairs: string[] = []
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length; j++) {
+      const a = sorted[i], b = sorted[j]
+      if (b - a === 1 || (a === 0 && b === 6)) pairs.push(`${WEEKDAYS[a].t} e ${WEEKDAYS[b].t}`)
+    }
+  }
+  return pairs
 }
 
 const RUN_LEVELS = [
@@ -87,7 +102,7 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
     const s: string[] = ['contato', 'running_now']
     if (d.currently_running === true) s.push('running_level', 'days_running', 'weekly_distance')
     else if (d.currently_running === false) s.push('activity_level')
-    s.push('goal', 'preferred_days')
+    s.push('preferred_days')
     if (d.preferred_days.length > 1) s.push('long_run_day')
     s.push('review')
     return s
@@ -183,6 +198,10 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
           <p className="text-muted-foreground mt-2 max-w-md mx-auto">
             Sua anamnese foi recebida. Para confirmar sua matrícula no <strong>{packageTitle}</strong>, finalize o pagamento com segurança pelo Hotmart. Assim que confirmar, seu treino é liberado.
           </p>
+          <div className="mt-4 inline-flex flex-col items-center rounded-2xl px-5 py-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            <span className="text-2xl font-black text-foreground">R$ 59,70<span className="text-sm font-bold text-muted-foreground"> / trimestre</span></span>
+            <span className="text-xs font-semibold" style={{ color: RED }}>pagamento único · equivale a R$ 19,90/mês (3 meses)</span>
+          </div>
           <a href={link} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-2 mt-6 px-8 py-4 rounded-2xl text-base font-black text-white shadow-lg" style={{ background: RED }}>
             <Footprints className="w-5 h-5" /> Pagar e confirmar matrícula
@@ -288,14 +307,8 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
           </Screen>
         )}
 
-        {key === 'goal' && (
-          <Screen title="Qual seu principal objetivo inicial na corrida?">
-            <ChoiceList options={GOALS.map(g => ({ v: g.v, t: g.t }))} selected={d.goal} onSelect={v => choose({ goal: v })} />
-          </Screen>
-        )}
-
         {key === 'preferred_days' && (
-          <Screen title="Quais dias da semana você prefere correr?" subtitle="Pode escolher mais de um.">
+          <Screen title="Quais dias da semana você prefere correr?" subtitle="Escolha um ou mais dias. O ideal para quem está começando é deixar um dia de descanso entre as corridas — evite dias seguidos.">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {WEEKDAYS.map(o => {
                 const on = d.preferred_days.includes(o.v)
@@ -309,6 +322,15 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
                 )
               })}
             </div>
+            {consecutivePairs(d.preferred_days).length > 0 && (
+              <div className="mt-4 flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ background: '#f59e0b18', border: '1px solid #f59e0b55' }}>
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" style={{ color: '#f59e0b' }} />
+                <div>
+                  <p className="text-sm font-bold text-foreground">Você escolheu dias seguidos ({consecutivePairs(d.preferred_days).join(', ')})</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Para começar com segurança, o recomendado é alternar as corridas com um dia de descanso. Você pode seguir assim — o treinador pode ajustar depois.</p>
+                </div>
+              </div>
+            )}
           </Screen>
         )}
 

@@ -11,7 +11,7 @@ import {
 const RED = '#e8001c'
 // espaço fino inquebrável evita "5\nkm" / "3\nmeses" no Safari iOS
 const NB = '\u00A0'
-const PRICE = { amount: `R$${NB}19,90`, period: '/mês', duration: `3${NB}meses`, total: `R$${NB}59,70 no total` }
+const PRICE = { amount: `R$${NB}19,90`, period: '/mês', duration: `3${NB}meses`, total: `R$${NB}59,70`, note: 'pagamento único trimestral' }
 
 const INCLUDES = [
   { icon: CalendarDays, t: 'Plano de 12 semanas', d: 'Método corrida/caminhada progressivo, do zero até correr 5 km contínuos.' },
@@ -81,11 +81,14 @@ export default function Primeiros5kLanding() {
             ))}
           </div>
 
-          <div className="mt-7 inline-flex items-baseline flex-wrap justify-center gap-x-1.5 gap-y-0.5 rounded-2xl px-5 py-2.5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-            <span className="text-3xl font-black text-foreground whitespace-nowrap">{PRICE.amount}</span>
-            <span className="text-sm font-bold text-muted-foreground">{PRICE.period}</span>
-            <span className="mx-2 text-muted-foreground/40 hidden sm:inline">·</span>
-            <span className="text-sm font-bold whitespace-nowrap" style={{ color: RED }}>{PRICE.duration}</span>
+          <div className="mt-7 inline-flex flex-col items-center rounded-2xl px-6 py-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            <div className="inline-flex items-baseline gap-1">
+              <span className="text-3xl font-black text-foreground whitespace-nowrap">{PRICE.amount}</span>
+              <span className="text-sm font-bold text-muted-foreground">{PRICE.period}</span>
+            </div>
+            <span className="text-xs font-bold whitespace-nowrap mt-0.5" style={{ color: RED }}>
+              {PRICE.total} no total · {PRICE.note}
+            </span>
           </div>
 
           <div>
@@ -168,11 +171,12 @@ export default function Primeiros5kLanding() {
               <span key={x} className="inline-flex items-center gap-1.5 whitespace-nowrap"><Check className="w-4 h-4 shrink-0" /> {x}</span>
             ))}
           </div>
-          <div className="mt-5 inline-flex items-baseline flex-wrap justify-center gap-x-1.5 gap-y-0.5">
-            <span className="text-3xl font-black text-white whitespace-nowrap">{PRICE.amount}</span>
-            <span className="text-sm font-bold text-white/80">{PRICE.period}</span>
-            <span className="mx-1 text-white/50 hidden sm:inline">·</span>
-            <span className="text-sm font-bold text-white/90 whitespace-nowrap">{PRICE.duration} ({PRICE.total})</span>
+          <div className="mt-5 flex flex-col items-center gap-0.5">
+            <div className="inline-flex items-baseline gap-1">
+              <span className="text-3xl font-black text-white whitespace-nowrap">{PRICE.amount}</span>
+              <span className="text-sm font-bold text-white/80">{PRICE.period}</span>
+            </div>
+            <span className="text-xs font-bold text-white/90 whitespace-nowrap">{PRICE.total} no total · {PRICE.note}</span>
           </div>
           <div>
             <Cta label="Começar minha jornada" variant="light" className="mt-5 px-7 py-3.5 text-sm" />
@@ -191,7 +195,7 @@ export default function Primeiros5kLanding() {
         <div className="flex items-center gap-3 max-w-md mx-auto">
           <div className="leading-tight">
             <p className="text-sm font-black text-foreground whitespace-nowrap">{PRICE.amount}<span className="text-xs font-bold text-muted-foreground">{PRICE.period}</span></p>
-            <p className="text-[11px] font-bold whitespace-nowrap" style={{ color: RED }}>{PRICE.duration}</p>
+            <p className="text-[11px] font-bold whitespace-nowrap" style={{ color: RED }}>{PRICE.total}/{PRICE.duration}</p>
           </div>
           <Cta label="Quero começar" className="flex-1 px-5 py-3 text-sm" />
         </div>
