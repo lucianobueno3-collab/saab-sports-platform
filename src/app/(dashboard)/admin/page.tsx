@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Topbar } from '@/components/layout/topbar'
+import { PartnersManager } from '@/components/admin/partners-manager'
 import { useAuth } from '@/context/auth-context'
 import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, getStaffAthleteMap, createStaffAthleteProfile, deleteStaff, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
@@ -525,6 +526,10 @@ export default function AdminPage() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="mt-6">
+          <PartnersManager />
         </div>
 
       </div>
