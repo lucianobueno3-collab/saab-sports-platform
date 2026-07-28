@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
-  getEnrollments, updateEnrollment, markEnrollmentPlanApplied,
+  getEnrollments, updateEnrollment, markEnrollmentPlanApplied, notifyEnrollmentApproved,
   bulkCreatePlannedWorkouts, getTrainingPrograms,
   type EnrollmentRow, type PlannedWorkoutInput, type TrainingProgramRow,
 } from '@/lib/supabase/queries'
@@ -168,7 +168,14 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
     if (!res.ok) { setMsg(res.error ?? 'Falha ao aplicar.'); setBusy(null); return }
     if (notes.trim() !== (enr.coach_notes ?? '')) await updateEnrollment(enr.id, { coach_notes: notes.trim() })
     await markEnrollmentPlanApplied(enr.id)
-    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário. Acesso do aluno liberado. ✅`)
+    // Avisa o aluno por e-mail (não bloqueia a aprovação se o e-mail falhar/estiver desligado)
+    const wasPending = enr.status !== 'active'
+    let mail = ''
+    if (wasPending && enr.athlete_id) {
+      const n = await notifyEnrollmentApproved(enr.athlete_id)
+      mail = n.sent ? ' E-mail de boas-vindas enviado. 📧' : (n.skipped === 'email_nao_configurado' ? '' : '')
+    }
+    setBusy(null); setMsg(`Aplicado: ${res.count} treinos no calendário. Acesso do aluno liberado. ✅${mail}`)
     onChanged()
   }
 
