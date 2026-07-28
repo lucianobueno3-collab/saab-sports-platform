@@ -98,35 +98,48 @@ function ymd(d: Date) { return d.toLocaleDateString('en-CA') }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
 
 /**
- * Expande um programa em treinos datados, com DIAS FLUTUANTES:
- * - As sessões principais (corrida etc.) vão para os dias preferidos do aluno.
- * - As sessões de força vão para os dias que sobram na semana, espaçadas.
- * `startDate` deve ser uma segunda-feira. `preferredDays`: 0=seg … 6=dom.
+ * Expande um programa em treinos datados, com DIAS FLUTUANTES escolhidos pelo aluno:
+ * - O treino LONGO (maior corrida da semana) vai para o dia escolhido para o longão.
+ * - As demais corridas ocupam os outros dias preferidos.
+ * - A força vai para os dias que sobram na semana.
+ * `startDate` deve ser uma segunda-feira. Dias: 0=seg … 6=dom. `longRunDay` opcional.
  */
 export function expandProgram(
   weeks: ProgramWeek[],
   startDate: Date,
   preferredDays: number[],
+  longRunDay?: number | null,
 ): ExpandedWorkout[] {
   const rows: ExpandedWorkout[] = []
   const pref = [...new Set(preferredDays)].filter(d => d >= 0 && d <= 6).sort((a, b) => a - b)
   weeks.forEach((wk, w) => {
     const principal = wk.workouts.filter(x => x.sport !== 'strength')
     const strength = wk.workouts.filter(x => x.sport === 'strength')
-    // Dias de corrida: os preferidos (se não houver, usa os dias originais do template)
-    const runDays = pref.length ? pref.slice(0, Math.max(principal.length, pref.length)) : principal.map(x => x.day)
     const used = new Set<number>()
-    principal.forEach((x, i) => {
-      const day = runDays[i] ?? runDays[runDays.length - 1] ?? x.day
-      used.add(day)
-      push(x, w, day)
-    })
-    // Força: nos dias que sobram, priorizando espaçar (dia seguinte a uma corrida evita-se; simples: pega livres em ordem)
+
+    if (pref.length) {
+      // Dia do longão: o escolhido (se estiver entre os preferidos) senão o último preferido.
+      const longDay = (longRunDay != null && pref.includes(longRunDay)) ? longRunDay : pref[pref.length - 1]
+      // Sessão mais longa (o "longão"): maior duração entre as corridas.
+      let longIdx = 0
+      principal.forEach((x, i) => { if ((x.duration_min ?? 0) > (principal[longIdx].duration_min ?? 0)) longIdx = i })
+      // Demais dias preferidos, na ordem, para as corridas curtas.
+      const otherDays = pref.filter(d => d !== longDay)
+      let oi = 0
+      principal.forEach((x, i) => {
+        const day = i === longIdx ? longDay : (otherDays[oi++] ?? longDay)
+        used.add(day); push(x, w, day)
+      })
+    } else {
+      // Sem preferência informada: usa os dias originais do template.
+      principal.forEach(x => { used.add(x.day); push(x, w, x.day) })
+    }
+
+    // Força: nos dias que sobram na semana.
     const free = [0, 1, 2, 3, 4, 5, 6].filter(d => !used.has(d))
     strength.forEach((x, j) => {
       const day = free[j] ?? free[free.length - 1] ?? x.day
-      used.add(day)
-      push(x, w, day)
+      used.add(day); push(x, w, day)
     })
   })
   return rows.sort((a, b) => (a.date < b.date ? -1 : 1))

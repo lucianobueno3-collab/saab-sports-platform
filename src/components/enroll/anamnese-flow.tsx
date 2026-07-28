@@ -18,6 +18,7 @@ type Data = {
   weekly_distance: string | null
   goal: string | null
   preferred_days: number[]
+  long_run_day: number | null
   website: string // honeypot
 }
 
@@ -25,7 +26,7 @@ const EMPTY: Data = {
   full_name: '', email: '', phone: '', password: '',
   age: '', height_cm: '', weight_kg: '',
   currently_running: null, running_level: null, activity_level: null,
-  days_running: null, weekly_distance: null, goal: null, preferred_days: [], website: '',
+  days_running: null, weekly_distance: null, goal: null, preferred_days: [], long_run_day: null, website: '',
 }
 
 const RUN_LEVELS = [
@@ -73,9 +74,11 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
     const s: string[] = ['contato', 'running_now']
     if (d.currently_running === true) s.push('running_level', 'days_running', 'weekly_distance')
     else if (d.currently_running === false) s.push('activity_level')
-    s.push('goal', 'preferred_days', 'review')
+    s.push('goal', 'preferred_days')
+    if (d.preferred_days.length > 1) s.push('long_run_day')
+    s.push('review')
     return s
-  }, [d.currently_running])
+  }, [d.currently_running, d.preferred_days.length])
 
   const key = screens[Math.min(step, screens.length - 1)]
   const progress = Math.round(((step + 1) / screens.length) * 100)
@@ -93,6 +96,7 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
       case 'weekly_distance': return !!d.weekly_distance
       case 'goal': return !!d.goal
       case 'preferred_days': return d.preferred_days.length > 0
+      case 'long_run_day': return d.long_run_day != null
       default: return true
     }
   }
@@ -118,7 +122,7 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
       currently_running: d.currently_running,
       running_level: d.running_level, activity_level: d.activity_level,
       days_running: d.days_running, weekly_distance: d.weekly_distance,
-      goal: d.goal, preferred_days: d.preferred_days, website: d.website,
+      goal: d.goal, preferred_days: d.preferred_days, long_run_day: d.long_run_day, website: d.website,
     }
     const res = await publicEnroll(input)
     if (!res.ok) { setError(res.error ?? 'Não foi possível concluir a matrícula.'); setSubmitting(false); return }
@@ -232,13 +236,23 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
                 const on = d.preferred_days.includes(o.v)
                 return (
                   <button key={o.v} type="button"
-                    onClick={() => set({ preferred_days: on ? d.preferred_days.filter(x => x !== o.v) : [...d.preferred_days, o.v].sort((a, b) => a - b) })}
+                    onClick={() => set({ preferred_days: on ? d.preferred_days.filter(x => x !== o.v) : [...d.preferred_days, o.v].sort((a, b) => a - b), long_run_day: on && d.long_run_day === o.v ? null : d.long_run_day })}
                     className="rounded-xl px-3 py-3 text-sm font-bold transition-colors border"
                     style={on ? { background: RED, color: '#fff', borderColor: RED } : { background: 'var(--card)', borderColor: 'var(--border)', color: 'var(--foreground)' }}>
                     {o.t}
                   </button>
                 )
               })}
+            </div>
+          </Screen>
+        )}
+
+        {key === 'long_run_day' && (
+          <Screen title="Qual o melhor dia para o treino longo (longão)?" subtitle="É o treino mais longo da semana. Os outros dias se ajustam em volta dele.">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {WEEKDAYS.filter(o => d.preferred_days.includes(o.v)).map(o => (
+                <BigChoice key={o.v} active={d.long_run_day === o.v} onClick={() => choose({ long_run_day: o.v })}>{o.t}</BigChoice>
+              ))}
             </div>
           </Screen>
         )}
@@ -259,6 +273,7 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
                 : <Row k="Nível de atividade" v={ACT_LEVELS.find(x => x.v === d.activity_level)?.t ?? '—'} />}
               <Row k="Objetivo" v={GOALS.find(x => x.v === d.goal)?.t ?? '—'} />
               <Row k="Dias preferidos" v={d.preferred_days.map(i => WEEKDAYS[i].t).join(', ') || '—'} />
+              <Row k="Dia do longão" v={d.long_run_day != null ? WEEKDAYS[d.long_run_day].t : '—'} />
             </div>
             <p className="text-[11px] text-muted-foreground mt-3">Pacote: <strong className="text-foreground">{packageTitle}</strong></p>
           </Screen>
