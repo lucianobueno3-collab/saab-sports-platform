@@ -12,7 +12,7 @@ import { StructureBar } from '@/components/athlete/structured-builder'
 import { SaudeTab } from '@/components/athlete/saude-tab'
 import { NutricaoTab } from '@/components/athlete/nutricao-tab'
 import { MetricasTab } from '@/components/athlete/metricas-tab'
-import { PartnersTab } from '@/components/athlete/partners-tab'
+import { PartnersTab, PartnersStrip } from '@/components/athlete/partners-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
@@ -198,7 +198,10 @@ export default function AtletaPage() {
       </div>
 
       {tab === 'calendario' && athleteId && (
-        <CalendarioTab athleteId={athleteId} defaultSport={a.primary_sport} readOnly />
+        <>
+          <CalendarioTab athleteId={athleteId} defaultSport={a.primary_sport} readOnly />
+          <div className="mt-5"><PartnersStrip /></div>
+        </>
       )}
 
       {tab === 'inicio' && (
@@ -268,6 +271,7 @@ export default function AtletaPage() {
         </div>
       )}
       </div>
+      <PartnersStrip />
       </div>
       )}
 

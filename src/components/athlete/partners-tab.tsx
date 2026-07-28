@@ -6,6 +6,35 @@ import { Loader2, ExternalLink, Handshake } from 'lucide-react'
 
 const RED = '#e8001c'
 
+/** Faixa compacta de parceiros (propaganda) para o Hoje e abaixo do Calendário.
+ *  Some se não houver parceiros. */
+export function PartnersStrip() {
+  const [partners, setPartners] = useState<PartnerRow[]>([])
+  useEffect(() => { getPartners(true).then(setPartners).catch(() => {}) }, [])
+  if (partners.length === 0) return null
+  const open = (p: PartnerRow) => { if (p.url) window.open(p.url, '_blank', 'noopener') }
+  return (
+    <div className="rounded-2xl p-3" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-1.5 mb-2 px-1">
+        <Handshake className="w-3.5 h-3.5 text-primary" />
+        <span className="text-[11px] font-black text-muted-foreground uppercase tracking-wider">Parceiros</span>
+      </div>
+      <div className="flex gap-2.5 overflow-x-auto pb-1">
+        {partners.map(p => (
+          <button key={p.id} onClick={() => open(p)} disabled={!p.url}
+            className="flex-shrink-0 rounded-xl overflow-hidden disabled:cursor-default transition-transform hover:scale-[1.03]"
+            style={{ width: 132, border: '1px solid var(--border)' }} title={p.name}>
+            {p.logo_url
+              ? <span className="block w-full h-16 flex items-center justify-center p-2" style={{ background: '#fff' }}><img src={p.logo_url} alt={p.name} className="max-h-12 w-auto object-contain" /></span>
+              : <span className="block w-full h-16 flex items-center justify-center text-sm font-black" style={{ background: RED + '14', color: RED }}>{p.name}</span>}
+            <span className="block text-[10px] font-semibold text-foreground truncate px-2 py-1 text-center">{p.name}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 /** Vitrine de parceiros no portal do aluno (somente leitura). O cadastro é
  *  feito pelo admin. As imagens aparecem como propaganda, com link para o site. */
 export function PartnersTab() {
