@@ -660,8 +660,8 @@ function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; 
   ].filter(Boolean) as { label: string; value: string; hi?: boolean }[])
   if (!mounted) return null
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto safe-bottom" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-border" style={{ borderTop: `3px solid ${info.color}` }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -740,8 +740,8 @@ function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
   const dateLabel = new Date(workout.date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
   if (!mounted) return null
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto safe-bottom" onClick={e => e.stopPropagation()}>
         <div className="p-5 border-b border-border" style={{ borderTop: `3px solid ${info.color}` }}>
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -868,8 +868,8 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
 
   if (!mounted) return null
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-md shadow-2xl max-h-[92vh] overflow-y-auto safe-bottom">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
           <div>
             <h2 className="text-sm font-bold text-foreground">{edit ? 'Editar treino' : 'Novo treino'}</h2>
@@ -1012,8 +1012,8 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
 
   if (!mounted) return null
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] overflow-y-auto safe-bottom">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card z-10">
           <div className="flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /><h2 className="text-sm font-bold text-foreground">Aplicar plano de treino</h2></div>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
