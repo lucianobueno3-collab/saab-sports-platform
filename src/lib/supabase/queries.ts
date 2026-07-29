@@ -1435,3 +1435,72 @@ export async function uploadPartnerLogo(userId: string, file: File): Promise<{ o
   const { data } = sb.storage.from('avatars').getPublicUrl(path)
   return { ok: true, url: data.publicUrl }
 }
+
+// ─── Exames de sangue (migração 036) ────────────────────────────────────────
+
+export type BloodExamValue = { marker_key: string; value: number | null; unit: string | null }
+export type BloodExamRow = {
+  id: string; athlete_id: string; exam_date: string
+  lab: string | null; notes: string | null; created_at: string
+  values: BloodExamValue[]
+}
+export type BloodExamInput = {
+  athlete_id: string; exam_date: string; lab?: string | null; notes?: string | null
+  values: BloodExamValue[]
+}
+
+/** Lista os exames de sangue do atleta (mais recentes primeiro), com seus valores. */
+export async function getBloodExams(athleteId: string): Promise<BloodExamRow[]> {
+  const sb = createClient()
+  const { data: exams, error } = await sb.from('blood_exams')
+    .select('id, athlete_id, exam_date, lab, notes, created_at')
+    .eq('athlete_id', athleteId).order('exam_date', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  const ids = (exams ?? []).map(e => e.id)
+  let vals: { exam_id: string; marker_key: string; value: number | null; unit: string | null }[] = []
+  if (ids.length) {
+    const { data: vd } = await sb.from('blood_exam_values').select('exam_id, marker_key, value, unit').in('exam_id', ids)
+    vals = vd ?? []
+  }
+  return (exams ?? []).map(e => ({
+    ...e,
+    values: vals.filter(v => v.exam_id === e.id).map(v => ({ marker_key: v.marker_key, value: v.value, unit: v.unit })),
+  })) as BloodExamRow[]
+}
+
+/** Cria um exame de sangue com seus valores (ignora marcadores sem valor). */
+export async function saveBloodExam(input: BloodExamInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const { data: exam, error } = await sb.from('blood_exams')
+    .insert({ athlete_id: input.athlete_id, exam_date: input.exam_date, lab: input.lab ?? null, notes: input.notes ?? null, created_by: user?.id ?? null })
+    .select('id').single()
+  if (error || !exam) { console.error('[queries]', error?.message); return { ok: false, error: error?.message } }
+  const rows = input.values.filter(v => v.value != null && !Number.isNaN(v.value))
+    .map(v => ({ exam_id: exam.id, marker_key: v.marker_key, value: v.value, unit: v.unit ?? null }))
+  if (rows.length) {
+    const { error: vErr } = await sb.from('blood_exam_values').insert(rows)
+    if (vErr) { console.error('[queries]', vErr.message); return { ok: false, error: vErr.message } }
+  }
+  return { ok: true, id: exam.id }
+}
+
+/** Substitui os valores de um exame existente (edição). */
+export async function updateBloodExamValues(examId: string, values: BloodExamValue[]): Promise<boolean> {
+  const sb = createClient()
+  await sb.from('blood_exam_values').delete().eq('exam_id', examId)
+  const rows = values.filter(v => v.value != null && !Number.isNaN(v.value))
+    .map(v => ({ exam_id: examId, marker_key: v.marker_key, value: v.value, unit: v.unit ?? null }))
+  if (rows.length) {
+    const { error } = await sb.from('blood_exam_values').insert(rows)
+    if (error) { console.error('[queries]', error.message); return false }
+  }
+  return true
+}
+
+export async function deleteBloodExam(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('blood_exams').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
