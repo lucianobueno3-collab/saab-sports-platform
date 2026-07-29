@@ -3,11 +3,11 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  getBloodExams, saveBloodExam, updateBloodExamValues, deleteBloodExam,
+  getBloodExams, saveBloodExam, updateBloodExamValues, deleteBloodExam, readPdfViaServer,
   type BloodExamRow, type BloodExamValue,
 } from '@/lib/supabase/queries'
 import { BLOOD_CATEGORIES, BLOOD_MARKERS, flagValue, refLabel, type Sex } from '@/lib/blood-markers'
-import { extractPdfText, hasExtractableText, extractDateFromText, withTimeout } from '@/lib/parsers/pdf-parser'
+import { hasExtractableText, extractDateFromText } from '@/lib/parsers/pdf-parser'
 import { parseBloodPdfText } from '@/lib/blood-parser'
 import { Plus, Trash2, Pencil, X, Loader2, ChevronDown, FlaskConical, Check, Upload } from 'lucide-react'
 
@@ -163,7 +163,13 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
   async function importPdf(file: File) {
     setImporting(true); setImportMsg(null)
     try {
-      const text = await withTimeout(extractPdfText(file), 60000, 'Tempo esgotado ao ler o PDF.')
+      // Extração no SERVIDOR (robusta em qualquer navegador/mobile).
+      const res = await readPdfViaServer(file)
+      if (!res.ok || res.text == null) {
+        setImportMsg(res.error ?? 'Não foi possível ler o PDF.')
+        return
+      }
+      const text = res.text
       if (!hasExtractableText(text)) {
         setImportMsg('Este PDF parece ser uma imagem escaneada (sem texto). Digite os valores manualmente.')
         return

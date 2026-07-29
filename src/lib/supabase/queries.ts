@@ -1504,3 +1504,38 @@ export async function deleteBloodExam(id: string): Promise<boolean> {
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
+
+// ─── Leitura de PDF no servidor (robusto em qualquer navegador/mobile) ───────
+// Envia os bytes do PDF (base64) para a Function e recebe o texto extraído.
+export async function readPdfViaServer(file: File): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  // arrayBuffer → base64 (em blocos, para não estourar a pilha)
+  let b64 = ''
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    let bin = ''
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)))
+    b64 = btoa(bin)
+  } catch { return { ok: false, error: 'Falha ao ler o arquivo.' } }
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90_000)
+  try {
+    const res = await fetch('/api/read-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ pdf_base64: b64 }),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` }
+    return { ok: true, text: data.text ?? '' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao ler o PDF (90s).' : 'Falha de rede ao ler o PDF.' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
