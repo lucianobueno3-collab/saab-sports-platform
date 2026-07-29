@@ -12,7 +12,7 @@
 # para o worker interno (carregado por caminho relativo) resolver na Function.
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["pdfjs-dist"]
+  external_node_modules = ["pdfjs-dist", "unpdf"]
 
 [[headers]]
   for = "/api/*"

@@ -1,11 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 import ws from 'ws'
+import { extractText, getDocumentProxy } from 'unpdf'
 
-// Polyfills defensivos no ambiente Node da Function (contexto único, sem worker):
 if (!globalThis.WebSocket) globalThis.WebSocket = ws
-if (typeof Promise.withResolvers !== 'function') {
-  Promise.withResolvers = function () { let a, b; const p = new Promise((x, y) => { a = x; b = y }); return { promise: p, resolve: a, reject: b } }
-}
 
 const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -51,16 +48,10 @@ export default async (req) => {
     const { data: file, error: dlErr } = await admin.storage.from('athlete-docs').download(storagePath)
     if (dlErr || !file) return json({ error: 'Não foi possível baixar o PDF' }, 404)
     const buf = new Uint8Array(await file.arrayBuffer())
-
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
-    const doc = await pdfjs.getDocument({ data: buf, isEvalSupported: false, disableFontFace: true, useSystemFonts: false }).promise
-    const pages = []
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i)
-      const content = await page.getTextContent()
-      pages.push(content.items.map(it => ('str' in it ? it.str : '')).join(' '))
-    }
-    return json({ text: pages.join('\n') })
+    // unpdf: pdfjs pronto para serverless (não precisa de DOMMatrix/canvas).
+    const pdf = await getDocumentProxy(buf)
+    const { text } = await extractText(pdf, { mergePages: true })
+    return json({ text })
   } catch (e) {
     return json({ error: 'Erro ao ler o PDF: ' + (e?.message ?? String(e)) }, 500)
   }
