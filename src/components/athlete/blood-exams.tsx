@@ -7,7 +7,9 @@ import {
   type BloodExamRow, type BloodExamValue,
 } from '@/lib/supabase/queries'
 import { BLOOD_CATEGORIES, BLOOD_MARKERS, flagValue, refLabel, type Sex } from '@/lib/blood-markers'
-import { Plus, Trash2, Pencil, X, Loader2, ChevronDown, FlaskConical, Check } from 'lucide-react'
+import { extractPdfText, hasExtractableText, extractDateFromText, withTimeout } from '@/lib/parsers/pdf-parser'
+import { parseBloodPdfText } from '@/lib/blood-parser'
+import { Plus, Trash2, Pencil, X, Loader2, ChevronDown, FlaskConical, Check, Upload } from 'lucide-react'
 
 const RED = '#e8001c'
 const FLAG_COLOR = { low: '#0088ff', high: '#ef4444', ok: 'var(--foreground)' } as const
@@ -152,10 +154,43 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
   const [open, setOpen] = useState<Set<string>>(() => new Set(edit ? BLOOD_CATEGORIES.map(c => c.key) : [BLOOD_CATEGORIES[0].key]))
   const [saving, setSaving] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importMsg, setImportMsg] = useState<string | null>(null)
+  const [imported, setImported] = useState<Set<string>>(new Set())
   useEffect(() => { setMounted(true) }, [])
 
+  // OCR/leitura do PDF de sangue → pré-preenche os campos para conferência.
+  async function importPdf(file: File) {
+    setImporting(true); setImportMsg(null)
+    try {
+      const text = await withTimeout(extractPdfText(file), 60000, 'Tempo esgotado ao ler o PDF.')
+      if (!hasExtractableText(text)) {
+        setImportMsg('Este PDF parece ser uma imagem escaneada (sem texto). Digite os valores manualmente.')
+        return
+      }
+      const found = parseBloodPdfText(text)
+      if (found.length === 0) {
+        setImportMsg('Não reconheci nenhum marcador neste PDF. Confira se é um exame de sangue ou digite manualmente.')
+        return
+      }
+      setVals(prev => { const o = { ...prev }; for (const f of found) o[f.key] = String(f.value); return o })
+      setImported(new Set(found.map(f => f.key)))
+      setOpen(new Set(BLOOD_CATEGORIES.filter(c => c.markers.some(m => found.find(f => f.key === m.key))).map(c => c.key)))
+      const d = extractDateFromText(text)
+      if (d && !edit) setDate(d)
+      setImportMsg(`${found.length} valores encontrados — confira e ajuste antes de salvar.`)
+    } catch (e) {
+      setImportMsg(e instanceof Error ? e.message : 'Falha ao ler o PDF.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   const toggle = (k: string) => setOpen(s => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })
-  const setV = (k: string, s: string) => setVals(o => ({ ...o, [k]: s.replace(',', '.') }))
+  const setV = (k: string, s: string) => {
+    setVals(o => ({ ...o, [k]: s.replace(',', '.') }))
+    setImported(im => { if (!im.has(k)) return im; const n = new Set(im); n.delete(k); return n })
+  }
   const filledCount = (catKey: string) => BLOOD_CATEGORIES.find(c => c.key === catKey)!.markers.filter(m => vals[m.key]?.trim()).length
 
   async function save() {
@@ -183,6 +218,20 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
         </div>
 
         <div className="overflow-y-auto px-5 py-4 space-y-4">
+          {/* Importar PDF do laudo (lê a camada de texto e pré-preenche os campos) */}
+          <div className="rounded-xl p-3" style={{ background: 'var(--panel)', border: '1px dashed var(--panel-border)' }}>
+            <label className={`flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold cursor-pointer ${importing ? 'opacity-60' : ''}`}
+              style={{ background: 'var(--background)', border: '1px solid var(--border)', color: 'var(--foreground)' }}>
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4 text-primary" />}
+              {importing ? 'Lendo o PDF…' : 'Importar PDF do exame'}
+              <input type="file" accept="application/pdf" className="hidden" disabled={importing}
+                onChange={e => { const f = e.target.files?.[0]; if (f) importPdf(f); e.target.value = '' }} />
+            </label>
+            {importMsg
+              ? <p className="text-[11px] mt-2 text-center" style={{ color: imported.size ? '#00d084' : '#ef4444' }}>{importMsg}</p>
+              : <p className="text-[11px] text-muted-foreground mt-2 text-center">Leia o laudo em PDF e confira os valores — os campos preenchidos ficam destacados.</p>}
+          </div>
+
           {!edit && (
             <div className="grid grid-cols-2 gap-3">
               <label className="text-xs font-semibold text-muted-foreground">Data do exame
@@ -212,7 +261,8 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
                           <p className="text-[10px] text-muted-foreground">{m.unit || '—'} · ref {refLabel(m, sex)}</p>
                         </div>
                         <input inputMode="decimal" value={vals[m.key] ?? ''} onChange={e => setV(m.key, e.target.value)}
-                          placeholder="—" className="w-[84px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+                          placeholder="—" className="w-[84px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40"
+                          style={imported.has(m.key) ? { borderColor: RED, boxShadow: `0 0 0 1px ${RED}` } : { borderColor: 'var(--border)' }} />
                       </label>
                     ))}
                   </div>
