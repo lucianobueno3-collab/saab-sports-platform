@@ -10,8 +10,7 @@ import {
 import { setViewMode } from '@/lib/view-mode'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
-import { SaudeTab } from '@/components/athlete/saude-tab'
-import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
 import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { PartnersTab, PartnersStrip } from '@/components/athlete/partners-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
@@ -20,7 +19,7 @@ import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Utensils, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -134,7 +133,6 @@ export default function AtletaPage() {
     { key: 'evolucao', label: 'Evolução', icon: Target },
   ]
   const moreTabs: TabDef[] = [
-    { key: 'nutricao', label: 'Nutrição', icon: Utensils },
     { key: 'metricas', label: 'Métricas', icon: Ruler },
     { key: 'provas', label: 'Provas', icon: Trophy },
     { key: 'parceiros', label: 'Parceiros', icon: Handshake },
@@ -290,8 +288,7 @@ export default function AtletaPage() {
       </div>
       )}
 
-      {tab === 'saude' && athleteId && <SaudeTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
-      {tab === 'nutricao' && athleteId && <NutricaoTab athleteId={athleteId} />}
+      {tab === 'saude' && athleteId && <SaudeNutricaoTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
       {tab === 'metricas' && athleteId && <MetricasTab athleteId={athleteId} />}
       {tab === 'parceiros' && <PartnersTab />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}

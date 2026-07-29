@@ -9,7 +9,7 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2, Ruler } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2, Ruler } from 'lucide-react'
 import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
@@ -20,8 +20,7 @@ import {
   type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow, type CheckinRow,
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
-import { SaudeTab } from '@/components/athlete/saude-tab'
-import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
 import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
@@ -367,7 +366,6 @@ function AthleteDetailContent() {
             { key: 'calendario', label: 'Calendário', icon: CalendarDays },
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
             { key: 'forca', label: 'Força', icon: Dumbbell },
-            { key: 'nutricao', label: 'Nutrição', icon: Utensils },
             { key: 'metricas', label: 'Métricas', icon: Ruler },
             { key: 'provas', label: 'Provas', icon: Trophy },
             { key: 'evolucao', label: 'Evolução', icon: Target },
@@ -639,9 +637,8 @@ function AthleteDetailContent() {
         )}
 
         {activeTab === 'calendario' && <CalendarioTab athleteId={id} defaultSport={athlete.primary_sport} />}
-        {activeTab === 'saude' && <SaudeTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
+        {activeTab === 'saude' && <SaudeNutricaoTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
         {activeTab === 'forca' && <ForcaTab athleteId={id} weightKg={athlete.weight_kg} />}
-        {activeTab === 'nutricao' && <NutricaoTab athleteId={id} />}
         {activeTab === 'metricas' && <MetricasTab athleteId={id} />}
         {activeTab === 'provas' && <ProvasTab athleteId={id} />}
         {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
