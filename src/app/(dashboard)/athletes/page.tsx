@@ -5,7 +5,8 @@ import { Topbar } from '@/components/layout/topbar'
 import { StatusBadge } from '@/components/dashboard/status-badge'
 import { Plus, Filter, Loader2, KeyRound } from 'lucide-react'
 import Link from 'next/link'
-import { getAthletes, getEnrollments, type AthleteRow } from '@/lib/supabase/queries'
+import { getAthletes, getEnrollments, getCurrentClearances, type AthleteRow, type MedicalClearanceRow } from '@/lib/supabase/queries'
+import { ClearanceBadge } from '@/components/athlete/medical-clearance'
 import { AddAthleteModal } from '@/components/athletes/add-athlete-modal'
 import { CreateAccessModal } from '@/components/access/create-access-modal'
 
@@ -46,6 +47,7 @@ export default function AthletesPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [showAccess, setShowAccess] = useState(false)
   const [enrolling, setEnrolling] = useState<Set<string>>(new Set())
+  const [clearances, setClearances] = useState<Record<string, MedicalClearanceRow>>({})
 
   async function load() {
     setLoading(true)
@@ -56,6 +58,8 @@ export default function AthletesPage() {
       getEnrollments('pending')
         .then(rows => setEnrolling(new Set(rows.map(r => r.athlete_id).filter((x): x is string => !!x))))
         .catch(() => {})
+      // Parecer médico vigente de cada aluno (selo de liberação).
+      getCurrentClearances(data.map(a => a.id)).then(setClearances).catch(() => {})
     } finally {
       setLoading(false)
     }
@@ -130,7 +134,10 @@ export default function AthletesPage() {
                       <p className="text-xs text-muted-foreground truncate">{sportLabel(a.primary_sport)} · {lastActivityLabel(a.last_activity_at)}</p>
                     </div>
                     <div className="shrink-0 flex flex-col items-end gap-1">
-                      <EnrollStatusBadge active={a.active} enrolling={enrolling.has(a.id)} />
+                      <div className="flex items-center gap-1">
+                        {clearances[a.id] && <ClearanceBadge clearance={clearances[a.id]} />}
+                        <EnrollStatusBadge active={a.active} enrolling={enrolling.has(a.id)} />
+                      </div>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                         <span>CTL <b className="text-[#0088ff]">{a.ctl?.toFixed(0) ?? '—'}</b></span>
                         <span>ATL <b className="text-primary">{a.atl?.toFixed(0) ?? '—'}</b></span>
@@ -168,7 +175,11 @@ export default function AthletesPage() {
                             {initials(a.full_name)}
                           </div>
                           <div>
-                            <p className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2">{a.full_name} <EnrollStatusBadge active={a.active} enrolling={enrolling.has(a.id)} /></p>
+                            <p className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
+                              {a.full_name}
+                              <EnrollStatusBadge active={a.active} enrolling={enrolling.has(a.id)} />
+                              {clearances[a.id] && <ClearanceBadge clearance={clearances[a.id]} />}
+                            </p>
                             <p className="text-xs text-muted-foreground">{a.email ?? '—'}</p>
                           </div>
                         </Link>

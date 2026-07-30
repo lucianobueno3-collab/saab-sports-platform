@@ -28,6 +28,9 @@ const navItems = [
   { href: '/settings', label: 'Configurações', icon: Settings },
 ]
 
+// Médico: navegação clínica (sem matrículas, treinos, importação nem configurações).
+const DOCTOR_HREFS = ['/dashboard', '/athletes', '/alerts', '/recovery']
+
 export function Sidebar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
@@ -36,7 +39,9 @@ export function Sidebar() {
   const [role, setRole] = useState<string | null>(null)
   const [dual, setDual] = useState(false)
   const isAdmin = role === 'admin'
-  const roleLabel = role === 'admin' ? 'Admin' : 'Treinador'
+  const isDoctor = role === 'doctor'
+  const roleLabel = role === 'admin' ? 'Admin' : role === 'doctor' ? 'Médico' : 'Treinador'
+  const visibleNav = isDoctor ? navItems.filter(i => DOCTOR_HREFS.includes(i.href)) : navItems
 
   function switchToAthlete() {
     setViewMode('athlete')
@@ -85,7 +90,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => {
+        {visibleNav.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (

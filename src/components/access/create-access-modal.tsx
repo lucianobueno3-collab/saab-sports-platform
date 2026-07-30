@@ -21,7 +21,7 @@ export function CreateAccessModal({ variant, canCreateStaff, existingOnly = fals
   onClose: () => void
   onSaved: () => void
 }) {
-  const [role, setRole] = useState<'athlete' | 'coach' | 'admin'>(variant === 'staff' ? 'coach' : 'athlete')
+  const [role, setRole] = useState<'athlete' | 'coach' | 'admin' | 'doctor'>(variant === 'staff' ? 'coach' : 'athlete')
   // atleta: 'new' cria do zero, 'existing' vincula a um já cadastrado
   const [athleteMode, setAthleteMode] = useState<'new' | 'existing'>('existing')
   const [existing, setExisting] = useState<{ id: string; full_name: string; email: string | null }[]>([])
@@ -106,13 +106,18 @@ export function CreateAccessModal({ variant, canCreateStaff, existingOnly = fals
             {variant === 'staff' && canCreateStaff && (
               <div>
                 <label className="block text-xs font-medium text-foreground mb-1.5">Tipo de acesso</label>
-                <div className="flex gap-1 p-1 rounded-xl bg-background border border-border">
-                  {([['coach', 'Treinador'], ['admin', 'Admin'], ['athlete', 'Atleta']] as const).map(([r, label]) => (
+                <div className="flex gap-1 p-1 rounded-xl bg-background border border-border flex-wrap">
+                  {([['coach', 'Treinador'], ['doctor', 'Médico'], ['admin', 'Admin'], ['athlete', 'Atleta']] as const).map(([r, label]) => (
                     <button type="button" key={r} onClick={() => setRole(r)}
                       className="flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors"
                       style={role === r ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>{label}</button>
                   ))}
                 </div>
+                {role === 'doctor' && (
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    O médico acessa a área clínica dos atletas (exames, lesões, avaliações) e emite a liberação. Vê o treino apenas em leitura; não acessa matrículas nem pagamentos.
+                  </p>
+                )}
               </div>
             )}
 

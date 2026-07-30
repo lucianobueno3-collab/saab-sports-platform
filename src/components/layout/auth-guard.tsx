@@ -15,9 +15,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
     if (!user) { window.location.href = '/login'; return }
     if (mustChangePassword(user)) { setCheckingRole(false); return }
     // atleta puro não acessa o painel do treinador — redireciona para a área dele.
-    // Conta dupla (treinador que também é atleta) permanece no painel.
-    getMyAccess().then(({ isCoach, athleteId }) => {
-      if (athleteId && !isCoach) window.location.href = '/atleta'
+    // Conta dupla (treinador/médico que também é atleta) permanece no painel.
+    getMyAccess().then(({ isCoach, athleteId, role }) => {
+      if (athleteId && !isCoach && role !== 'doctor') window.location.href = '/atleta'
       else setCheckingRole(false)
     }).catch(() => setCheckingRole(false))
   }, [user, loading])

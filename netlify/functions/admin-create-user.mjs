@@ -44,14 +44,14 @@ export default async (req) => {
     const password = String(body.password ?? '')
     const full_name = String(body.full_name ?? '').trim()
 
-    if (!['athlete', 'coach', 'admin'].includes(role)) return json({ error: 'Papel inválido' }, 400)
+    if (!['athlete', 'coach', 'admin', 'doctor'].includes(role)) return json({ error: 'Papel inválido' }, 400)
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return json({ error: 'E-mail inválido' }, 400)
     if (password.length < 6) return json({ error: 'A senha temporária precisa de ao menos 6 caracteres' }, 400)
     if (!full_name && role !== 'athlete') return json({ error: 'Nome obrigatório' }, 400)
 
     // Treinador só cadastra atleta; treinador/admin exigem quem chama ser admin
-    if ((role === 'coach' || role === 'admin') && myRole !== 'admin') {
-      return json({ error: 'Apenas administradores podem cadastrar treinadores' }, 403)
+    if ((role === 'coach' || role === 'admin' || role === 'doctor') && myRole !== 'admin') {
+      return json({ error: 'Apenas administradores podem cadastrar treinadores e médicos' }, 403)
     }
 
     const admin = createClient(URL, SERVICE, { auth: { autoRefreshToken: false, persistSession: false } })

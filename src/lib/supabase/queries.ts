@@ -850,7 +850,7 @@ export async function claimAthleteProfile(token: string): Promise<{ ok: boolean;
 // ─── Cadastro central de acesso (migração 017 + Netlify Function) ───────────
 
 export type AdminCreateUserInput = {
-  role: 'athlete' | 'coach' | 'admin'
+  role: 'athlete' | 'coach' | 'admin' | 'doctor'
   email: string
   password: string
   full_name: string
@@ -1538,4 +1538,89 @@ export async function readPdfViaServer(file: File): Promise<{ ok: boolean; text?
   } finally {
     clearTimeout(timer)
   }
+}
+
+// ─── Liberação médica (migração 037) ────────────────────────────────────────
+
+export type ClearanceStatus = 'apto' | 'apto_restricao' | 'inapto'
+export type MedicalClearanceRow = {
+  id: string
+  athlete_id: string
+  doctor_id: string | null
+  doctor_name: string | null
+  doctor_crm: string | null
+  status: ClearanceStatus
+  assessed_at: string
+  valid_until: string | null
+  restrictions: string | null
+  notes: string | null
+  created_at: string
+}
+export type MedicalClearanceInput = {
+  athlete_id: string
+  status: ClearanceStatus
+  assessed_at: string
+  valid_until?: string | null
+  restrictions?: string | null
+  notes?: string | null
+  doctor_crm?: string | null
+}
+
+/** Histórico de pareceres do atleta (mais recente primeiro). */
+export async function getMedicalClearances(athleteId: string): Promise<MedicalClearanceRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_clearances')
+    .select('*').eq('athlete_id', athleteId).order('assessed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as MedicalClearanceRow[]
+}
+
+/** Parecer vigente (o mais recente) de vários atletas de uma vez. */
+export async function getCurrentClearances(athleteIds: string[]): Promise<Record<string, MedicalClearanceRow>> {
+  if (athleteIds.length === 0) return {}
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_clearances')
+    .select('*').in('athlete_id', athleteIds).order('assessed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return {} }
+  const out: Record<string, MedicalClearanceRow> = {}
+  for (const r of (data ?? []) as MedicalClearanceRow[]) if (!out[r.athlete_id]) out[r.athlete_id] = r
+  return out
+}
+
+/** Emite um novo parecer (médico/admin). Carimba nome do avaliador. */
+export async function saveMedicalClearance(input: MedicalClearanceInput): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const doctorName = (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? null
+  const { error } = await sb.from('medical_clearances').insert({
+    athlete_id: input.athlete_id,
+    doctor_id: user?.id ?? null,
+    doctor_name: doctorName,
+    doctor_crm: input.doctor_crm ?? null,
+    status: input.status,
+    assessed_at: input.assessed_at,
+    valid_until: input.valid_until ?? null,
+    restrictions: input.restrictions ?? null,
+    notes: input.notes ?? null,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteMedicalClearance(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('medical_clearances').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Situação efetiva do parecer: considera vencimento. */
+export function clearanceState(c: MedicalClearanceRow | null | undefined):
+  { key: 'apto' | 'apto_restricao' | 'inapto' | 'vencido' | 'sem_avaliacao'; label: string; color: string } {
+  if (!c) return { key: 'sem_avaliacao', label: 'Sem avaliação', color: '#94a3b8' }
+  const today = new Date().toLocaleDateString('en-CA')
+  if (c.valid_until && c.valid_until < today) return { key: 'vencido', label: 'Liberação vencida', color: '#f59e0b' }
+  if (c.status === 'apto') return { key: 'apto', label: 'Apto', color: '#00d084' }
+  if (c.status === 'apto_restricao') return { key: 'apto_restricao', label: 'Apto com restrição', color: '#f59e0b' }
+  return { key: 'inapto', label: 'Inapto', color: '#ef4444' }
 }
