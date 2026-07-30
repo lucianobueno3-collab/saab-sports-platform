@@ -1725,3 +1725,59 @@ export async function generateAiReport(input: AiReportInput): Promise<{ ok: bool
     clearTimeout(timer)
   }
 }
+
+// ─── Visão geral de treinos do aluno (portal) ───────────────────────────────
+
+export type TrainingOverview = {
+  all: PlannedWorkoutRow[]        // todo o plano (para progresso)
+  today: PlannedWorkoutRow[]      // treinos de hoje
+  next: PlannedWorkoutRow[]       // próximos (a partir de amanhã)
+  week: { date: string; planned: PlannedWorkoutRow[] }[]  // seg→dom da semana atual
+  progress: { total: number; done: number; weekIndex: number; weeks: number } | null
+  adherence: { planned: number; done: number; pct: number } | null  // últimos 28 dias
+}
+
+/** Carrega o plano do aluno e calcula progresso, semana atual e constância. */
+export async function getTrainingOverview(athleteId: string): Promise<TrainingOverview> {
+  const sb = createClient()
+  const { data, error } = await sb.from('planned_workouts')
+    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+    .eq('athlete_id', athleteId).order('date').limit(400)
+  if (error) console.error('[queries]', error.message)
+  const all = (data ?? []) as PlannedWorkoutRow[]
+
+  const todayISO = new Date().toLocaleDateString('en-CA')
+  const today = all.filter(w => w.date === todayISO)
+  const next = all.filter(w => w.date > todayISO).slice(0, 8)
+
+  // Semana corrente (segunda → domingo)
+  const now = new Date(); now.setHours(12, 0, 0, 0)
+  const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i)
+    const iso = d.toLocaleDateString('en-CA')
+    return { date: iso, planned: all.filter(w => w.date === iso) }
+  })
+
+  // Progresso no plano inteiro
+  let progress: TrainingOverview['progress'] = null
+  if (all.length > 0) {
+    const first = new Date(all[0].date + 'T12:00:00')
+    const last = new Date(all[all.length - 1].date + 'T12:00:00')
+    const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86400000) + 1)
+    const weeks = Math.max(1, Math.ceil(spanDays / 7))
+    const elapsed = Math.round((now.getTime() - first.getTime()) / 86400000)
+    const weekIndex = Math.min(weeks, Math.max(1, Math.floor(elapsed / 7) + 1))
+    progress = { total: all.length, done: all.filter(w => w.completed).length, weekIndex, weeks }
+  }
+
+  // Constância: treinos já vencidos nos últimos 28 dias
+  const from = new Date(now); from.setDate(now.getDate() - 28)
+  const fromISO = from.toLocaleDateString('en-CA')
+  const past = all.filter(w => w.date >= fromISO && w.date <= todayISO)
+  const adherence = past.length
+    ? { planned: past.length, done: past.filter(w => w.completed).length, pct: Math.round((past.filter(w => w.completed).length / past.length) * 100) }
+    : null
+
+  return { all, today, next, week, progress, adherence }
+}

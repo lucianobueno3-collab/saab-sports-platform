@@ -16,6 +16,7 @@ import { PartnersTab, PartnersStrip } from '@/components/athlete/partners-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
+import { TreinosOverview } from '@/components/athlete/treinos-overview'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
@@ -226,6 +227,9 @@ export default function AtletaPage() {
           <p className="text-sm text-white/90 mt-1">Recebemos seu cadastro. Seu treinador está montando o seu plano — em breve seus treinos aparecem aqui no Calendário. Enquanto isso, complete seus dados em <strong>Meus dados</strong>.</p>
         </div>
       )}
+      {/* Treinos: hoje em destaque, semana, progresso e próximos */}
+      {athleteId && <TreinosOverview athleteId={athleteId} onChanged={reload} />}
+
       {/* Forma atual */}
       <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
         <div>
