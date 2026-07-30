@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { SaudeTab } from './saude-tab'
 import { NutricaoTab } from './nutricao-tab'
 import { BloodExams } from './blood-exams'
+import { MedicalClearance } from './medical-clearance'
 import { Heart, Utensils, FlaskConical } from 'lucide-react'
 
 const RED = '#e8001c'
@@ -23,7 +24,12 @@ export function SaudeNutricaoTab({ athleteId, sex }: { athleteId: string; sex: '
           </button>
         ))}
       </div>
-      {sub === 'saude' && <SaudeTab athleteId={athleteId} sex={sex} />}
+      {sub === 'saude' && (
+        <div className="space-y-4">
+          <MedicalClearance athleteId={athleteId} />
+          <SaudeTab athleteId={athleteId} sex={sex} />
+        </div>
+      )}
       {sub === 'nutricao' && <NutricaoTab athleteId={athleteId} />}
       {sub === 'exames' && <BloodExams athleteId={athleteId} sex={sex} />}
     </div>

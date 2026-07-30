@@ -35,6 +35,7 @@ export function BottomNav() {
   const [criticalCount, setCriticalCount] = useState(0)
   const [pendingEnrolls, setPendingEnrolls] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [isDoctor, setIsDoctor] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
 
   const refreshCriticalCount = () => {
@@ -58,13 +59,18 @@ export function BottomNav() {
 
   useEffect(() => {
     refreshCriticalCount()
-    getMyAccess().then(({ role }) => setIsAdmin(role === 'admin')).catch(() => {})
+    getMyAccess().then(({ role }) => { setIsAdmin(role === 'admin'); setIsDoctor(role === 'doctor') }).catch(() => {})
     getEnrollments('pending').then(rows => setPendingEnrolls(rows.length)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
 
-  const visibleMore = moreItems.filter(i => !i.adminOnly || isAdmin)
+  // Médico: navegação clínica (sem matrículas, treinos, importação, config, admin).
+  const DOCTOR_HREFS = ['/dashboard', '/athletes', '/alerts', '/recovery']
+  const visiblePrimary = isDoctor ? primary.filter(i => DOCTOR_HREFS.includes(i.href)) : primary
+  const visibleMore = isDoctor
+    ? moreItems.filter(i => DOCTOR_HREFS.includes(i.href))
+    : moreItems.filter(i => !i.adminOnly || isAdmin)
   const moreActive = visibleMore.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
   const badge = (item: Item) => item.alertBadge ? criticalCount : item.enrollBadge ? pendingEnrolls : 0
 
@@ -90,7 +96,7 @@ export function BottomNav() {
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 md:hidden bg-sidebar border-t border-border safe-bottom">
         <div className="flex items-center justify-around px-1 py-2">
-          {primary.map(item => cell(item))}
+          {visiblePrimary.map(item => cell(item))}
           {/* Mais */}
           <button onClick={() => setMoreOpen(true)}
             className={cn('flex flex-col items-center gap-0.5 px-2 py-2 rounded-xl transition-colors min-w-[52px]', moreActive ? 'text-primary' : 'text-muted-foreground')}>
