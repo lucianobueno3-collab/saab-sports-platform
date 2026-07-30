@@ -1688,3 +1688,40 @@ export async function deleteClinicalNote(id: string): Promise<boolean> {
   if (error) { console.error('[queries]', error.message); return false }
   return true
 }
+
+// ─── Análise do relatório semanal com IA (Gemini, via Netlify Function) ──────
+
+export type AiReportInput = {
+  firstName?: string; sport?: string
+  ctl?: number | null; atl?: number | null; tsb?: number | null; tsbTrend?: string | null
+  hrv?: number | null; hrvAvg?: number | null
+  sleep?: number | null; sleepAvg?: number | null
+  bodyBattery?: number | null; stress?: number | null; restingHr?: number | null
+  readiness?: string | null
+  workoutsDone?: number | null; workoutsPlanned?: number | null; weekHours?: number | null
+}
+export type AiReport = { titulo: string; resumo: string; destaques: string[]; recomendacao: string }
+
+/** Gera a leitura da semana (texto) a partir dos números do atleta. */
+export async function generateAiReport(input: AiReportInput): Promise<{ ok: boolean; report?: AiReport; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 45_000)
+  try {
+    const res = await fetch('/api/ai-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(input),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, report: data as AiReport }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao gerar a análise.' : 'Falha de rede ao gerar a análise.' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
