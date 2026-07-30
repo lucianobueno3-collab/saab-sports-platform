@@ -1624,3 +1624,67 @@ export function clearanceState(c: MedicalClearanceRow | null | undefined):
   if (c.status === 'apto_restricao') return { key: 'apto_restricao', label: 'Apto com restrição', color: '#f59e0b' }
   return { key: 'inapto', label: 'Inapto', color: '#ef4444' }
 }
+
+// ─── Prontuário clínico — evolução SOAP (migração 038) ──────────────────────
+
+export type ClinicalNoteRow = {
+  id: string
+  athlete_id: string
+  author_id: string | null
+  author_name: string | null
+  author_role: string | null
+  note_date: string
+  chief_complaint: string | null
+  findings: string | null
+  assessment: string | null
+  plan: string | null
+  follow_up_at: string | null
+  private: boolean
+  created_at: string
+}
+export type ClinicalNoteInput = {
+  athlete_id: string
+  note_date: string
+  chief_complaint?: string | null
+  findings?: string | null
+  assessment?: string | null
+  plan?: string | null
+  follow_up_at?: string | null
+  private?: boolean
+}
+
+export async function getClinicalNotes(athleteId: string): Promise<ClinicalNoteRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('clinical_notes')
+    .select('*').eq('athlete_id', athleteId).order('note_date', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as ClinicalNoteRow[]
+}
+
+export async function saveClinicalNote(input: ClinicalNoteInput): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  const { error } = await sb.from('clinical_notes').insert({
+    athlete_id: input.athlete_id,
+    author_id: user?.id ?? null,
+    author_name: (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? null,
+    author_role: role,
+    note_date: input.note_date,
+    chief_complaint: input.chief_complaint ?? null,
+    findings: input.findings ?? null,
+    assessment: input.assessment ?? null,
+    plan: input.plan ?? null,
+    follow_up_at: input.follow_up_at ?? null,
+    private: input.private ?? false,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteClinicalNote(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('clinical_notes').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}

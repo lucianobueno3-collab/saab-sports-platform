@@ -20,6 +20,27 @@ function fmt(value: number | null, decimals?: number) {
 }
 function fmtDate(d: string) { return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
 
+/** Mini-gráfico de tendência do marcador entre os exames (precisa de 2+ valores). */
+function Sparkline({ values }: { values: (number | null)[] }) {
+  const pts = values.map((v, i) => ({ v, i })).filter((p): p is { v: number; i: number } => p.v != null)
+  if (pts.length < 2) return <span className="w-[54px] shrink-0" />
+  const ys = pts.map(p => p.v)
+  const min = Math.min(...ys), max = Math.max(...ys)
+  const span = max - min || 1
+  const W = 54, H = 18
+  const x = (i: number) => (values.length === 1 ? 0 : (i / (values.length - 1)) * (W - 2) + 1)
+  const y = (v: number) => H - 2 - ((v - min) / span) * (H - 4)
+  const d = pts.map((p, k) => `${k === 0 ? 'M' : 'L'}${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')
+  const first = ys[0], last = ys[ys.length - 1]
+  const color = last === first ? '#94a3b8' : last > first ? '#f59e0b' : '#0088ff'
+  return (
+    <svg width={W} height={H} className="shrink-0" aria-hidden="true">
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={x(pts[pts.length - 1].i)} cy={y(last)} r="2" fill={color} />
+    </svg>
+  )
+}
+
 export function BloodExams({ athleteId, sex }: { athleteId: string; sex: Sex }) {
   const [exams, setExams] = useState<BloodExamRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -103,8 +124,14 @@ export function BloodExams({ athleteId, sex }: { athleteId: string; sex: Sex }) 
                     {c.markers.map(m => (
                       <tr key={m.key} className="border-b border-border/50">
                         <td className="px-3 py-2 sticky left-0 bg-card z-10">
-                          <p className="font-semibold text-foreground leading-tight">{m.label}</p>
-                          <p className="text-[10px] text-muted-foreground">{m.unit || '—'} · ref {refLabel(m, sex)}</p>
+                          <div className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-foreground leading-tight">{m.label}</p>
+                              <p className="text-[10px] text-muted-foreground">{m.unit || '—'} · ref {refLabel(m, sex)}</p>
+                            </div>
+                            {/* tendência ao longo dos exames (antigo → recente) */}
+                            <Sparkline values={[...exams].reverse().map(e => valOf(e, m.key))} />
+                          </div>
                         </td>
                         {exams.map(e => {
                           const v = valOf(e, m.key)
