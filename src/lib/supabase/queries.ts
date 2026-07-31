@@ -166,6 +166,9 @@ export type PlannedWorkoutRow = {
   planned_tss: number | null
   completed: boolean
   structure: import('@/lib/workout-structure').WorkoutStructure | null
+  skipped?: boolean
+  skip_reason?: string | null
+  moved_from?: string | null
   activity_id?: string | null
 }
 
@@ -1749,11 +1752,19 @@ export type TrainingOverview = {
 /** Carrega o plano do aluno e calcula progresso, semana atual e constância. */
 export async function getTrainingOverview(athleteId: string): Promise<TrainingOverview> {
   const sb = createClient()
-  const { data, error } = await sb.from('planned_workouts')
-    .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+  const COLS = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure'
+  const first = await sb.from('planned_workouts')
+    .select(COLS + ', skipped, skip_reason, moved_from')
     .eq('athlete_id', athleteId).order('date').limit(400)
-  if (error) console.error('[queries]', error.message)
-  const all = (data ?? []) as PlannedWorkoutRow[]
+  let rows = first.data as unknown as PlannedWorkoutRow[] | null
+  if (first.error) {
+    // banco sem a migração 040: repete sem as colunas novas
+    console.error('[queries]', first.error.message)
+    const retry = await sb.from('planned_workouts').select(COLS).eq('athlete_id', athleteId).order('date').limit(400)
+    if (retry.error) console.error('[queries]', retry.error.message)
+    rows = retry.data as unknown as PlannedWorkoutRow[] | null
+  }
+  const all = rows ?? []
 
   const todayISO = new Date().toLocaleDateString('en-CA')
   const today = all.filter(w => w.date === todayISO)
@@ -1936,4 +1947,81 @@ export async function getMeetupSuggestions(athleteId: string): Promise<MeetupSug
     }
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 4)
+}
+
+// ─── Experiência do aluno: "não deu hoje" + recado no treino (migração 040) ─
+
+/** Remarca o treino para outro dia (sem deixar rastro de "falhou"). */
+export async function rescheduleWorkout(id: string, fromDate: string, toDate: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ date: toDate, moved_from: fromDate, skipped: false, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Marca o treino como pulado assumidamente (não é falha, é decisão). */
+export async function skipWorkout(id: string, reason: string | null): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ skipped: true, skip_reason: reason, completed: false, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Desfaz o "pulei" (o aluno mudou de ideia). */
+export async function unskipWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ skipped: false, skip_reason: null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export type WorkoutComment = {
+  id: string; workout_id: string; athlete_id: string | null
+  author_id: string | null; author_name: string | null; author_role: string | null
+  body: string; created_at: string
+}
+
+export async function getWorkoutComments(workoutId: string): Promise<WorkoutComment[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_comments')
+    .select('*').eq('workout_id', workoutId).order('created_at')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as WorkoutComment[]
+}
+
+export async function addWorkoutComment(workoutId: string, athleteId: string | null, body: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  const { error } = await sb.from('workout_comments').insert({
+    workout_id: workoutId, athlete_id: athleteId,
+    author_id: user?.id ?? null,
+    author_name: (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? user?.email?.split('@')[0] ?? null,
+    author_role: role, body: body.trim(),
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+/** Atividades e treinos do aluno para calcular conquistas e a narrativa. */
+export async function getAchievementData(athleteId: string): Promise<{
+  activities: { started_at: string; duration_seconds: number; distance_meters: number | null }[]
+  planned: { date: string; completed: boolean; skipped?: boolean }[]
+}> {
+  const sb = createClient()
+  const [actRes, planRes] = await Promise.all([
+    sb.from('activities').select('started_at, duration_seconds, distance_meters')
+      .eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(400),
+    sb.from('planned_workouts').select('date, completed').eq('athlete_id', athleteId).limit(400),
+  ])
+  return {
+    activities: (actRes.data ?? []) as { started_at: string; duration_seconds: number; distance_meters: number | null }[],
+    planned: (planRes.data ?? []) as { date: string; completed: boolean }[],
+  }
 }
