@@ -4,15 +4,25 @@ export const dynamic = 'force-static'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Saab Sports Platform',
-    short_name: 'Saab Sports',
-    description: 'Sistema de Gestão de Performance Atlética',
+    id: '/',
+    name: 'SAAB Sports',
+    // Nome curto é o que cabe embaixo do ícone no celular — não passar de ~12 caracteres.
+    short_name: 'SAAB',
+    description: 'Seus treinos, sua evolução e sua equipe, num lugar só.',
     lang: 'pt-BR',
+    dir: 'ltr',
     start_url: '/',
+    scope: '/',
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#0a0a0f',
     theme_color: '#0a0a0f',
+    categories: ['health', 'fitness', 'sports'],
+    // Atalhos ao segurar o ícone na tela de início
+    shortcuts: [
+      { name: 'Meus treinos', short_name: 'Treinos', url: '/atleta' },
+      { name: 'Painel do treinador', short_name: 'Painel', url: '/dashboard' },
+    ],
     icons: [
       {
         src: '/icon-192.png',

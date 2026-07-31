@@ -9,6 +9,7 @@ import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import Link from 'next/link'
 import { getDashboardSummary } from '@/lib/supabase/queries'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
+import { InstallAppCard } from '@/components/pwa/install-app'
 
 type AthleteSummary = {
   id: string
@@ -56,6 +57,9 @@ export default function DashboardPage() {
       />
 
       <div className="p-6 space-y-6">
+        {/* Convite para deixar o app na tela de início (some quando já instalado) */}
+        <InstallAppCard storageKey="saab:install-dismissed-coach" />
+
         {/* KPI Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard label="Alunos Ativos" value={loading ? '—' : athletes.length} sub="total cadastrado" icon={Users} color="blue" />

@@ -19,6 +19,7 @@ import { TreinosOverview } from '@/components/athlete/treinos-overview'
 import { MeetupsTab } from '@/components/athlete/meetups-tab'
 import { AchievementsCard } from '@/components/athlete/achievements-card'
 import { StravaCard } from '@/components/athlete/strava-card'
+import { InstallAppCard } from '@/components/pwa/install-app'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
@@ -229,6 +230,9 @@ export default function AtletaPage() {
           <p className="text-sm text-white/90 mt-1">Recebemos seu cadastro. Seu treinador está montando o seu plano — em breve seus treinos aparecem aqui no Calendário. Enquanto isso, complete seus dados em <strong>Meus dados</strong>.</p>
         </div>
       )}
+      {/* Convite para deixar o app na tela de início (some quando já instalado) */}
+      <InstallAppCard />
+
       {/* Treinos: hoje em destaque, semana, progresso e próximos */}
       {athleteId && <TreinosOverview athleteId={athleteId} onChanged={reload} />}
 
