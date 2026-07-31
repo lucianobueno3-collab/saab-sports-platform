@@ -5,6 +5,15 @@ import { buildWorkoutTCX, downloadFile, slugify, stepTargetLabel, type Threshold
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { Watch, Download } from 'lucide-react'
 
+// Como cada zona SE SENTE — a tradução que falta na maioria dos apps.
+const ZONE_FEEL: Record<number, string> = {
+  1: 'bem leve, quase caminhando',
+  2: 'dá pra conversar correndo',
+  3: 'frases curtas, já incomoda',
+  4: 'forte, só palavras soltas',
+  5: 'máximo, sem conversa',
+}
+
 function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: Thresholds; index?: number }) {
   const z = ZONES[step.zone]
   return (
@@ -13,6 +22,7 @@ function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: 
       <div className="flex-1 min-w-0">
         <p className="text-xs font-bold text-foreground">{index != null ? `${index}. ` : ''}{KIND_LABEL[step.kind]}</p>
         <p className="text-[11px] text-muted-foreground">{step.min} min · {stepTargetLabel(step.zone, sport, th)}</p>
+        <p className="text-[10px] text-muted-foreground/80 italic">{ZONE_FEEL[step.zone]}</p>
       </div>
     </div>
   )

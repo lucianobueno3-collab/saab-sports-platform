@@ -27,6 +27,7 @@ export type AthleteRow = {
   sleep_hours: number | null
   status: string | null
   avatar_url?: string | null
+  threshold_pace_sec_km?: number | null
   last_activity_at: string | null
   last_activity_sport: string | null
   last_activity_tss: number | null
@@ -126,13 +127,13 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, extraRes] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token, avatar_url').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token, avatar_url, threshold_pace_sec_km').eq('id', id).single(),
   ])
   let extra = extraRes.data
   if (extraRes.error) {
     // banco sem a migração 012 (portal_token não existe): repete sem a coluna
     console.error('[queries]', extraRes.error.message)
-    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, avatar_url').eq('id', id).single()
+    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, avatar_url, threshold_pace_sec_km').eq('id', id).single()
     extra = retry.data ? { ...retry.data, portal_token: null } : null
   }
   if (!summary) return null
