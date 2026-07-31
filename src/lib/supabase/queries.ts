@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
 import { todayLocalISO } from '@/lib/dates'
 import type { ProgramWeek, ProgramRouting } from '@/lib/program-templates'
 
@@ -175,21 +176,29 @@ export type PlannedWorkoutRow = {
 
 /** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
 export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
-  const sb = createClient()
   const cols = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, activity_id'
-  const { data, error } = await sb.from('planned_workouts')
-    .select(cols)
-    .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
-  if (error) {
-    // banco sem a migração 027 (activity_id): repete sem a coluna
-    console.error('[queries]', error.message)
-    const retry = await sb.from('planned_workouts')
-      .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+  try {
+    const sb = createClient()
+    const { data, error } = await sb.from('planned_workouts')
+      .select(cols)
       .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
-    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
-    return (retry.data ?? []) as PlannedWorkoutRow[]
+    if (error) {
+      // banco sem a migração 027 (activity_id): repete sem a coluna
+      console.error('[queries]', error.message)
+      const retry = await sb.from('planned_workouts')
+        .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+        .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
+      if (retry.error) throw new Error(retry.error.message)
+      return (retry.data ?? []) as PlannedWorkoutRow[]
+    }
+    return (data ?? []) as PlannedWorkoutRow[]
+  } catch (e) {
+    // Sem internet: recorta a cópia local do plano, guardada por getTrainingOverview.
+    console.error('[queries] calendário offline:', e)
+    const copia = readSnapshot<PlannedWorkoutRow[]>(offlineKey.planned(athleteId))
+    if (!copia) return []
+    return copia.data.filter(w => w.date >= from && w.date <= to)
   }
-  return (data ?? []) as PlannedWorkoutRow[]
 }
 
 /** Cruza treinos planejados com as atividades importadas (mesmo dia + modalidade). */
@@ -803,21 +812,39 @@ export async function getCoachProfile(): Promise<{ full_name: string | null; pho
 }
 
 export async function getMyRole(): Promise<string | null> {
-  const sb = createClient()
-  // Use security definer RPC to bypass RLS self-reference issue
-  const { data, error } = await sb.rpc('get_my_role')
-  if (error || data === null) return null
-  return data as string
+  const chave = 'saab:off:role'
+  try {
+    const sb = createClient()
+    // Use security definer RPC to bypass RLS self-reference issue
+    const { data, error } = await sb.rpc('get_my_role')
+    if (error) throw new Error(error.message)
+    if (data === null) return null
+    saveSnapshot(chave, data as string)
+    return data as string
+  } catch (e) {
+    console.error('[queries] papel offline:', e)
+    return readSnapshot<string>(chave)?.data ?? null
+  }
 }
 
 // ─── Login do atleta (migração 016) ─────────────────────────────────────────
 
 /** id do atleta vinculado à conta logada; null se a conta for de treinador */
 export async function getMyAthleteId(): Promise<string | null> {
-  const sb = createClient()
-  const { data, error } = await sb.rpc('my_athlete_id')
-  if (error) { console.error('[queries]', error.message); return null }
-  return (data as string | null) ?? null
+  // Guardamos o vínculo: sem ele o portal nem abre offline, porque a página
+  // manda o usuário para o painel quando não descobre de qual atleta se trata.
+  const chave = 'saab:off:athlete-id'
+  try {
+    const sb = createClient()
+    const { data, error } = await sb.rpc('my_athlete_id')
+    if (error) throw new Error(error.message)
+    const id = (data as string | null) ?? null
+    if (id) saveSnapshot(chave, id)
+    return id
+  } catch (e) {
+    console.error('[queries] vínculo offline:', e)
+    return readSnapshot<string>(chave)?.data ?? null
+  }
 }
 
 /**
@@ -934,6 +961,21 @@ export async function getAthletesWithoutAccess(): Promise<{ id: string; full_nam
 
 /** Dados que o atleta logado vê de si mesmo (via RLS de autoacesso) */
 export async function getAthleteSelf(athleteId: string) {
+  const chave = offlineKey.self(athleteId)
+  try {
+    const dados = await fetchAthleteSelf(athleteId)
+    saveSnapshot(chave, dados)
+    return { ...dados, offlineAt: null as string | null }
+  } catch (e) {
+    // Sem internet: devolve a última cópia, avisando de quando ela é.
+    console.error('[queries] portal offline:', e)
+    const copia = readSnapshot<Awaited<ReturnType<typeof fetchAthleteSelf>>>(chave)
+    if (!copia) throw e
+    return { ...copia.data, offlineAt: copia.at }
+  }
+}
+
+async function fetchAthleteSelf(athleteId: string) {
   const sb = createClient()
   const since = new Date(); since.setDate(since.getDate() - 30)
   const todayISO = new Date().toLocaleDateString('en-CA')
@@ -1748,22 +1790,37 @@ export type TrainingOverview = {
   week: { date: string; planned: PlannedWorkoutRow[] }[]  // seg→dom da semana atual
   progress: { total: number; done: number; weekIndex: number; weeks: number } | null
   adherence: { planned: number; done: number; pct: number } | null  // últimos 28 dias
+  offlineAt: string | null        // preenchido quando veio da cópia local, sem internet
 }
 
 /** Carrega o plano do aluno e calcula progresso, semana atual e constância. */
 export async function getTrainingOverview(athleteId: string): Promise<TrainingOverview> {
-  const sb = createClient()
   const COLS = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure'
-  const first = await sb.from('planned_workouts')
-    .select(COLS + ', skipped, skip_reason, moved_from')
-    .eq('athlete_id', athleteId).order('date').limit(400)
-  let rows = first.data as unknown as PlannedWorkoutRow[] | null
-  if (first.error) {
-    // banco sem a migração 040: repete sem as colunas novas
-    console.error('[queries]', first.error.message)
-    const retry = await sb.from('planned_workouts').select(COLS).eq('athlete_id', athleteId).order('date').limit(400)
-    if (retry.error) console.error('[queries]', retry.error.message)
-    rows = retry.data as unknown as PlannedWorkoutRow[] | null
+  const chave = offlineKey.planned(athleteId)
+
+  // Busca o plano. Sem internet, usa a cópia guardada na última visita.
+  let rows: PlannedWorkoutRow[] | null = null
+  let offlineAt: string | null = null
+  try {
+    const sb = createClient()
+    const first = await sb.from('planned_workouts')
+      .select(COLS + ', skipped, skip_reason, moved_from')
+      .eq('athlete_id', athleteId).order('date').limit(400)
+    rows = first.data as unknown as PlannedWorkoutRow[] | null
+    if (first.error) {
+      // banco sem a migração 040: repete sem as colunas novas
+      console.error('[queries]', first.error.message)
+      const retry = await sb.from('planned_workouts').select(COLS).eq('athlete_id', athleteId).order('date').limit(400)
+      if (retry.error) throw new Error(retry.error.message)
+      rows = retry.data as unknown as PlannedWorkoutRow[] | null
+    }
+    if (rows) saveSnapshot(chave, rows)
+  } catch (e) {
+    console.error('[queries] plano offline:', e)
+    const copia = readSnapshot<PlannedWorkoutRow[]>(chave)
+    if (!copia) throw e
+    rows = copia.data
+    offlineAt = copia.at
   }
   const all = rows ?? []
 
@@ -1800,7 +1857,7 @@ export async function getTrainingOverview(athleteId: string): Promise<TrainingOv
     ? { planned: past.length, done: past.filter(w => w.completed).length, pct: Math.round((past.filter(w => w.completed).length / past.length) * 100) }
     : null
 
-  return { all, today, next, week, progress, adherence }
+  return { all, today, next, week, progress, adherence, offlineAt }
 }
 
 // ─── Treinar junto — encontros de treino (migração 039) ─────────────────────

@@ -78,12 +78,17 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     const toISO = new Date(addDays(rangeStart, rangeDays)).toISOString()
     // cruza planejado x realizado antes de carregar (idempotente)
     await matchPlannedActivities(athleteId, from, to).catch(() => {})
-    const [p, a, lib] = await Promise.all([
-      getPlannedWorkouts(athleteId, from, to),
-      getActivitiesRange(athleteId, fromISO, toISO),
-      readOnly ? Promise.resolve([]) : getWorkoutLibrary(),
-    ])
-    setPlanned(p); setDone(a); setLibrary(lib); setLoading(false)
+    try {
+      // Offline, só o plano tem cópia local; atividades e biblioteca ficam vazias.
+      const [p, a, lib] = await Promise.all([
+        getPlannedWorkouts(athleteId, from, to),
+        getActivitiesRange(athleteId, fromISO, toISO).catch(() => []),
+        readOnly ? Promise.resolve([]) : getWorkoutLibrary().catch(() => []),
+      ])
+      setPlanned(p); setDone(a); setLibrary(lib)
+    } finally {
+      setLoading(false)
+    }
   }, [athleteId, rangeStart, rangeDays, readOnly])
 
   useEffect(() => { load() }, [load])

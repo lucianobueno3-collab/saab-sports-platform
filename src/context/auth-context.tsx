@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { clearSnapshots } from '@/lib/offline-cache'
 
 type AuthContextType = {
   user: User | null
@@ -41,6 +42,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signOut = async () => {
+    // O aparelho pode ser emprestado: nada do aluno anterior pode ficar guardado.
+    clearSnapshots()
     await sb.auth.signOut()
     window.location.href = '/login'
   }
