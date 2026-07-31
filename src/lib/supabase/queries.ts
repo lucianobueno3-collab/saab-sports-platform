@@ -2105,3 +2105,55 @@ export async function getAthleteUnreadCount(athleteId: string): Promise<number> 
   if (error) { console.error('[queries]', error.message); return 0 }
   return count ?? 0
 }
+
+// ─── Integração com o Strava (migração 043) ─────────────────────────────────
+
+export type StravaStatus = { connected: boolean; lastSyncAt: string | null; connectedAt: string | null }
+
+/** Status da conexão do atleta (sem nunca tocar em token). */
+export async function getStravaStatus(athleteId: string): Promise<StravaStatus> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('strava_athlete_id, strava_connected_at, strava_last_sync_at').eq('id', athleteId).maybeSingle()
+  if (error || !data) return { connected: false, lastSyncAt: null, connectedAt: null }
+  const a = data as { strava_athlete_id: number | null; strava_connected_at: string | null; strava_last_sync_at: string | null }
+  return { connected: !!a.strava_athlete_id, lastSyncAt: a.strava_last_sync_at, connectedAt: a.strava_connected_at }
+}
+
+/** Devolve a URL de autorização do Strava para redirecionar o aluno. */
+export async function startStravaConnect(): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/strava-connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, url: data.url }
+  } catch { return { ok: false, error: 'Falha de rede.' } }
+}
+
+/** Puxa as atividades novas do Strava para o app. */
+export async function syncStrava(athleteId?: string): Promise<{ ok: boolean; imported?: number; found?: number; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 60_000)
+  try {
+    const res = await fetch('/api/strava-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(athleteId ? { athlete_id: athleteId } : {}),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, imported: data.imported, found: data.found }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao sincronizar.' : 'Falha de rede.' }
+  } finally { clearTimeout(timer) }
+}

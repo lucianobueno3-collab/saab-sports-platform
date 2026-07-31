@@ -18,6 +18,7 @@ import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { TreinosOverview } from '@/components/athlete/treinos-overview'
 import { MeetupsTab } from '@/components/athlete/meetups-tab'
 import { AchievementsCard } from '@/components/athlete/achievements-card'
+import { StravaCard } from '@/components/athlete/strava-card'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
@@ -230,6 +231,9 @@ export default function AtletaPage() {
       )}
       {/* Treinos: hoje em destaque, semana, progresso e próximos */}
       {athleteId && <TreinosOverview athleteId={athleteId} onChanged={reload} />}
+
+      {/* Strava: conecta uma vez e as atividades entram sozinhas */}
+      {athleteId && <StravaCard athleteId={athleteId} onSynced={reload} />}
 
       {/* Conquistas e narrativa de evolução */}
       {athleteId && <AchievementsCard athleteId={athleteId} />}
