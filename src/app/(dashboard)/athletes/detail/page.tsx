@@ -76,7 +76,7 @@ function AthleteDetailContent() {
   const [hrv, setHrv] = useState<DailyMetricRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
-  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
+  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '', threshold_pace: '' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -115,6 +115,9 @@ function AthleteDetailContent() {
         initial_ctl: a.initial_ctl?.toString() ?? '',
         initial_atl: a.initial_atl?.toString() ?? '',
         initial_date: a.initial_date ?? '',
+        threshold_pace: a.threshold_pace_sec_km
+          ? `${Math.floor(a.threshold_pace_sec_km / 60)}:${String(a.threshold_pace_sec_km % 60).padStart(2, '0')}`
+          : '',
       })
       setPmc(p)
       setActivities(acts)
@@ -161,6 +164,10 @@ function AthleteDetailContent() {
       lthr_bpm: editValues.lthr_bpm ? parseInt(editValues.lthr_bpm) : null,
       lthr_bike_bpm: editValues.lthr_bike_bpm ? parseInt(editValues.lthr_bike_bpm) : null,
       lthr_run_bpm: editValues.lthr_run_bpm ? parseInt(editValues.lthr_run_bpm) : null,
+      threshold_pace_sec_km: (() => {
+        const m = editValues.threshold_pace.trim().match(/^(\d{1,2}):(\d{2})$/)
+        return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null
+      })(),
       lthr_swim_bpm: editValues.lthr_swim_bpm ? parseInt(editValues.lthr_swim_bpm) : null,
       vo2max_ml_kg_min: editValues.vo2max_ml_kg_min ? parseFloat(editValues.vo2max_ml_kg_min) : null,
       weight_kg: editValues.weight_kg ? parseFloat(editValues.weight_kg) : null,
@@ -713,6 +720,16 @@ function AthleteDetailContent() {
                       </div>
                     ))}
                   </div>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Ritmo de limiar — corrida <span className="font-normal">(min:seg por km)</span>
+                  </label>
+                  <input value={editValues.threshold_pace} onChange={e => setEditValues(v => ({ ...v, threshold_pace: e.target.value }))}
+                    placeholder="ex: 5:30" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Com este ritmo, o aluno passa a ver cada zona em min/km (ex.: &quot;Z2 = 7:00–7:40/km&quot;) em vez de só batimentos.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">VO2max (ml/kg/min)</label>

@@ -49,9 +49,9 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
     ;(async () => {
       try {
         const { data } = await createClient().from('athletes')
-          .select('lthr_run_bpm, lthr_bpm').eq('id', athleteId).maybeSingle()
-        const a = data as { lthr_run_bpm?: number | null; lthr_bpm?: number | null } | null
-        if (a) setTh({ lthr: a.lthr_run_bpm ?? a.lthr_bpm ?? null })
+          .select('lthr_run_bpm, lthr_bpm, threshold_pace_sec_km').eq('id', athleteId).maybeSingle()
+        const a = data as { lthr_run_bpm?: number | null; lthr_bpm?: number | null; threshold_pace_sec_km?: number | null } | null
+        if (a) setTh({ lthr: a.lthr_run_bpm ?? a.lthr_bpm ?? null, thresholdPaceSecKm: a.threshold_pace_sec_km ?? null })
       } catch { /* sem limiares: mostra só a zona */ }
     })()
     /* eslint-disable-next-line */
