@@ -8,13 +8,14 @@ import {
   type TrainingOverview, type PlannedWorkoutRow, type WorkoutComment,
 } from '@/lib/supabase/queries'
 import { createClient } from '@/lib/supabase/client'
+import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import type { Thresholds } from '@/lib/workout-export'
 import {
   Footprints, Bike, Waves, Dumbbell, Activity as ActIcon,
   CheckCircle2, Circle, Loader2, Flame, Target, Trophy, Moon, ChevronRight,
-  CalendarClock, X, MessageCircle, Send, SkipForward,
+  CalendarClock, X, MessageCircle, Send, SkipForward, CloudOff,
 } from 'lucide-react'
 
 const RED = '#e8001c'
@@ -51,12 +52,20 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
     // limiares do atleta: permitem mostrar "Z2 = 7:00–7:40/km" em vez de só "Z2".
     // O builder do Supabase é thenable mas não expõe .catch() — daí o try/catch.
     ;(async () => {
+      const chave = offlineKey.thresholds(athleteId)
       try {
         const { data } = await createClient().from('athletes')
           .select('lthr_run_bpm, lthr_bpm, threshold_pace_sec_km').eq('id', athleteId).maybeSingle()
         const a = data as { lthr_run_bpm?: number | null; lthr_bpm?: number | null; threshold_pace_sec_km?: number | null } | null
-        if (a) setTh({ lthr: a.lthr_run_bpm ?? a.lthr_bpm ?? null, thresholdPaceSecKm: a.threshold_pace_sec_km ?? null })
-      } catch { /* sem limiares: mostra só a zona */ }
+        if (a) {
+          const t: Thresholds = { lthr: a.lthr_run_bpm ?? a.lthr_bpm ?? null, thresholdPaceSecKm: a.threshold_pace_sec_km ?? null }
+          setTh(t); saveSnapshot(chave, t)
+        }
+      } catch {
+        // Sem internet: usa os limiares da última visita, para o ritmo por zona continuar aparecendo.
+        const copia = readSnapshot<Thresholds>(chave)
+        if (copia) setTh(copia.data)
+      }
     })()
     /* eslint-disable-next-line */
   }, [athleteId])
@@ -77,6 +86,19 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
 
   return (
     <div className="space-y-4">
+      {/* Modo offline: dados da última vez que houve conexão */}
+      {ov.offlineAt && (
+        <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: '#f59e0b14', border: '1px solid #f59e0b44' }}>
+          <CloudOff className="w-5 h-5 shrink-0" style={{ color: '#f59e0b' }} />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-foreground">Você está sem internet</p>
+            <p className="text-[11px] text-muted-foreground">
+              Mostrando os treinos salvos {snapshotAge(ov.offlineAt)}. Marcar como feito volta quando a conexão voltar.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Resposta nova do treinador */}
       {unread > 0 && (
         <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: RED + '14', border: `1px solid ${RED}44` }}>

@@ -8,6 +8,7 @@ import {
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
+import { clearSnapshots } from '@/lib/offline-cache'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
@@ -80,11 +81,19 @@ export default function AtletaPage() {
         const enr = await getMyEnrollmentStatus().catch(() => null)
         setEnrollStatus(enr?.status ?? null)
       }
-      const { data: prof } = await sb.from('athletes')
-        .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min, avatar_url, full_name')
-        .eq('id', id).single()
-      if (prof) setProfile(prof as AthleteProfile)
-      setData(await getAthleteSelf(id))
+      // Offline isto falha; o portal segue com o nome que vem do resumo.
+      try {
+        const { data: prof } = await sb.from('athletes')
+          .select('weight_kg, height_cm, gender, ftp_watts, ftp_run_watts, lthr_bpm, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, vo2max_ml_kg_min, avatar_url, full_name')
+          .eq('id', id).single()
+        if (prof) setProfile(prof as AthleteProfile)
+      } catch { /* sem conexão: sem os dados do perfil */ }
+      try {
+        const dados = await getAthleteSelf(id)
+        setData(dados)
+        // Sem internet, abre direto em "Hoje": é a aba que funciona com a cópia local.
+        if (dados.offlineAt) setTab('inicio')
+      } catch { /* sem conexão e sem cópia local: cai na tela de conta não vinculada */ }
       setLoading(false)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -95,6 +104,8 @@ export default function AtletaPage() {
   }
 
   async function logout() {
+    // O aparelho pode ser emprestado: nada do aluno pode ficar guardado offline.
+    clearSnapshots()
     await sb.auth.signOut()
     window.location.href = '/login'
   }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import { AuthProvider } from '@/context/auth-context'
+import { ServiceWorkerRegister } from '@/components/pwa/sw-register'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
@@ -36,6 +37,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           {children}
         </AuthProvider>
+        {/* Permite abrir o app e ver o treino do dia sem internet */}
+        <ServiceWorkerRegister />
       </body>
     </html>
   )
