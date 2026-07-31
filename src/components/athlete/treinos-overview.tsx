@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
   getTrainingOverview, updatePlannedWorkout, rescheduleWorkout, skipWorkout, unskipWorkout,
-  getWorkoutComments, addWorkoutComment,
+  getWorkoutComments, addWorkoutComment, markThreadRead, getAthleteUnreadCount,
   type TrainingOverview, type PlannedWorkoutRow, type WorkoutComment,
 } from '@/lib/supabase/queries'
 import { createClient } from '@/lib/supabase/client'
@@ -40,8 +40,12 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
   const [th, setTh] = useState<Thresholds>({})
   const [notDone, setNotDone] = useState<PlannedWorkoutRow | null>(null)
   const [chat, setChat] = useState<PlannedWorkoutRow | null>(null)
+  const [unread, setUnread] = useState(0)
 
-  async function load() { setOv(await getTrainingOverview(athleteId)); setLoading(false) }
+  async function load() {
+    setOv(await getTrainingOverview(athleteId)); setLoading(false)
+    getAthleteUnreadCount(athleteId).then(setUnread).catch(() => {})
+  }
   useEffect(() => {
     load()
     // limiares do atleta: permitem mostrar "Z2 = 7:00–7:40/km" em vez de só "Z2".
@@ -73,6 +77,16 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
 
   return (
     <div className="space-y-4">
+      {/* Resposta nova do treinador */}
+      {unread > 0 && (
+        <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: RED + '14', border: `1px solid ${RED}44` }}>
+          <MessageCircle className="w-5 h-5 shrink-0" style={{ color: RED }} />
+          <p className="text-sm font-bold text-foreground">
+            Seu treinador respondeu {unread > 1 ? `${unread} recados` : 'seu recado'} — abra o treino para ver.
+          </p>
+        </div>
+      )}
+
       {/* ── Treino de hoje em destaque ──────────────────────────────────── */}
       {hero ? (
         <HeroCard w={hero} th={th} busy={busy === hero.id} extra={ov.today.length - 1}
@@ -147,7 +161,7 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
         <NotDoneModal w={notDone} onClose={() => setNotDone(null)}
           onDone={() => { setNotDone(null); load() }} />
       )}
-      {chat && <ChatModal w={chat} athleteId={athleteId} onClose={() => setChat(null)} />}
+      {chat && <ChatModal w={chat} athleteId={athleteId} onClose={() => { setChat(null); load() }} />}
 
       {/* ── Próximos treinos ────────────────────────────────────────────── */}
       {ov.next.length > 0 && (
@@ -378,7 +392,11 @@ function ChatModal({ w, athleteId, onClose }: { w: PlannedWorkoutRow; athleteId:
   const [mounted, setMounted] = useState(false)
 
   async function load() { setItems(await getWorkoutComments(w.id)); setLoading(false) }
-  useEffect(() => { setMounted(true); load() /* eslint-disable-next-line */ }, [w.id])
+  useEffect(() => {
+    setMounted(true); load()
+    markThreadRead(w.id, 'athlete').catch(() => {})
+    /* eslint-disable-next-line */
+  }, [w.id])
 
   async function send() {
     if (!text.trim()) return
