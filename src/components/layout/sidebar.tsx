@@ -8,9 +8,9 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2, MessageCircle
 } from 'lucide-react'
-import { getAthletesForAlerts, getMyAccess, getEnrollments } from '@/lib/supabase/queries'
+import { getAthletesForAlerts, getMyAccess, getEnrollments, getCoachInbox } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
 import { VersionTag } from '@/components/ui/version-tag'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
@@ -21,6 +21,7 @@ const navItems = [
   { href: '/athletes', label: 'Alunos', icon: Users },
   { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
+  { href: '/recados', label: 'Recados', icon: MessageCircle, msgBadge: true },
   { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
@@ -37,6 +38,7 @@ export function Sidebar() {
   const { user, signOut } = useAuth()
   const [criticalCount, setCriticalCount] = useState(0)
   const [pendingEnrolls, setPendingEnrolls] = useState(0)
+  const [unreadMsgs, setUnreadMsgs] = useState(0)
   const [role, setRole] = useState<string | null>(null)
   const [dual, setDual] = useState(false)
   const isAdmin = role === 'admin'
@@ -77,6 +79,7 @@ export function Sidebar() {
     refreshCriticalCount()
     getMyAccess().then(({ role, dual }) => { setRole(role); setDual(dual) }).catch(() => {})
     getEnrollments('pending').then(rows => setPendingEnrolls(rows.length)).catch(() => {})
+    getCoachInbox().then(t => setUnreadMsgs(t.reduce((n, x) => n + x.unread, 0))).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
@@ -110,6 +113,11 @@ export function Sidebar() {
               {item.alertBadge && criticalCount > 0 && (
                 <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
                   {criticalCount}
+                </span>
+              )}
+              {item.msgBadge && unreadMsgs > 0 && (
+                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
+                  {unreadMsgs}
                 </span>
               )}
               {item.enrollBadge && pendingEnrolls > 0 && (

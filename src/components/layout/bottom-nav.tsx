@@ -7,13 +7,13 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, ClipboardList, Dumbbell, BellDot, Upload, TrendingUp,
-  Heart, Settings, Shield, MoreHorizontal, X, Users2,
+  Heart, Settings, Shield, MoreHorizontal, X, Users2, MessageCircle,
 } from 'lucide-react'
-import { getAthletesForAlerts, getEnrollments, getMyAccess } from '@/lib/supabase/queries'
+import { getAthletesForAlerts, getEnrollments, getMyAccess, getCoachInbox } from '@/lib/supabase/queries'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
 import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
-type Item = { href: string; label: string; icon: typeof LayoutDashboard; alertBadge?: boolean; enrollBadge?: boolean; adminOnly?: boolean }
+type Item = { href: string; label: string; icon: typeof LayoutDashboard; alertBadge?: boolean; enrollBadge?: boolean; msgBadge?: boolean; adminOnly?: boolean }
 
 const primary: Item[] = [
   { href: '/dashboard', label: 'Início', icon: LayoutDashboard },
@@ -22,6 +22,7 @@ const primary: Item[] = [
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
 ]
 const moreItems: Item[] = [
+  { href: '/recados', label: 'Recados', icon: MessageCircle, msgBadge: true },
   { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
@@ -37,6 +38,7 @@ export function BottomNav() {
   const [pendingEnrolls, setPendingEnrolls] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isDoctor, setIsDoctor] = useState(false)
+  const [unreadMsgs, setUnreadMsgs] = useState(0)
   const [moreOpen, setMoreOpen] = useState(false)
 
   const refreshCriticalCount = () => {
@@ -62,6 +64,7 @@ export function BottomNav() {
     refreshCriticalCount()
     getMyAccess().then(({ role }) => { setIsAdmin(role === 'admin'); setIsDoctor(role === 'doctor') }).catch(() => {})
     getEnrollments('pending').then(rows => setPendingEnrolls(rows.length)).catch(() => {})
+    getCoachInbox().then(t => setUnreadMsgs(t.reduce((n, i) => n + i.unread, 0))).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useAutoRefresh(refreshCriticalCount)
@@ -73,7 +76,7 @@ export function BottomNav() {
     ? moreItems.filter(i => DOCTOR_HREFS.includes(i.href))
     : moreItems.filter(i => !i.adminOnly || isAdmin)
   const moreActive = visibleMore.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
-  const badge = (item: Item) => item.alertBadge ? criticalCount : item.enrollBadge ? pendingEnrolls : 0
+  const badge = (item: Item) => item.alertBadge ? criticalCount : item.enrollBadge ? pendingEnrolls : item.msgBadge ? unreadMsgs : 0
 
   const cell = (item: Item, onClick?: () => void) => {
     const Icon = item.icon

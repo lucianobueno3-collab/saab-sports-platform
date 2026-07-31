@@ -1986,6 +1986,7 @@ export type WorkoutComment = {
   id: string; workout_id: string; athlete_id: string | null
   author_id: string | null; author_name: string | null; author_role: string | null
   body: string; created_at: string
+  read_by_staff?: boolean; read_by_athlete?: boolean
 }
 
 export async function getWorkoutComments(workoutId: string): Promise<WorkoutComment[]> {
@@ -2000,11 +2001,14 @@ export async function addWorkoutComment(workoutId: string, athleteId: string | n
   const sb = createClient()
   const { data: { user } } = await sb.auth.getUser()
   const role = await getMyRole().catch(() => null)
+  const staff = role === 'coach' || role === 'admin' || role === 'doctor'
   const { error } = await sb.from('workout_comments').insert({
     workout_id: workoutId, athlete_id: athleteId,
     author_id: user?.id ?? null,
     author_name: (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? user?.email?.split('@')[0] ?? null,
     author_role: role, body: body.trim(),
+    // quem escreve já leu a própria mensagem
+    read_by_staff: staff, read_by_athlete: !staff,
   })
   if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
   return { ok: true }
@@ -2025,4 +2029,79 @@ export async function getAchievementData(athleteId: string): Promise<{
     activities: (actRes.data ?? []) as { started_at: string; duration_seconds: number; distance_meters: number | null }[],
     planned: (planRes.data ?? []) as { date: string; completed: boolean }[],
   }
+}
+
+// ─── Caixa de entrada de recados (treinador) ────────────────────────────────
+
+export type InboxThread = {
+  workout_id: string
+  athlete_id: string | null
+  athlete_name: string
+  workout_title: string
+  workout_date: string
+  last_body: string
+  last_at: string
+  last_from_athlete: boolean
+  unread: number
+}
+
+/** Conversas de todos os alunos, mais recentes primeiro, com não lidas. */
+export async function getCoachInbox(): Promise<InboxThread[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_comments')
+    .select('*').order('created_at', { ascending: false }).limit(500)
+  if (error) { console.error('[queries]', error.message); return [] }
+  const rows = (data ?? []) as WorkoutComment[]
+  if (rows.length === 0) return []
+
+  const workoutIds = [...new Set(rows.map(r => r.workout_id))]
+  const athleteIds = [...new Set(rows.map(r => r.athlete_id).filter((x): x is string => !!x))]
+  const [wRes, aRes] = await Promise.all([
+    sb.from('planned_workouts').select('id, title, date').in('id', workoutIds),
+    athleteIds.length ? sb.from('athletes').select('id, full_name').in('id', athleteIds) : Promise.resolve({ data: [] }),
+  ])
+  const wMap = new Map(((wRes.data ?? []) as { id: string; title: string; date: string }[]).map(w => [w.id, w]))
+  const aMap = new Map(((aRes.data ?? []) as { id: string; full_name: string }[]).map(a => [a.id, a.full_name]))
+
+  const threads = new Map<string, InboxThread>()
+  for (const r of rows) {           // já vem do mais novo para o mais antigo
+    const w = wMap.get(r.workout_id)
+    const isAthlete = r.author_role === 'athlete' || r.author_role == null
+    const cur = threads.get(r.workout_id)
+    if (!cur) {
+      threads.set(r.workout_id, {
+        workout_id: r.workout_id,
+        athlete_id: r.athlete_id,
+        athlete_name: (r.athlete_id ? aMap.get(r.athlete_id) : null) ?? 'Aluno',
+        workout_title: w?.title ?? 'Treino',
+        workout_date: w?.date ?? '',
+        last_body: r.body,
+        last_at: r.created_at,
+        last_from_athlete: isAthlete,
+        unread: !r.read_by_staff && isAthlete ? 1 : 0,
+      })
+    } else if (!r.read_by_staff && isAthlete) {
+      cur.unread++
+    }
+  }
+  return [...threads.values()].sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+}
+
+/** Marca como lidas as mensagens de uma conversa (lado staff ou aluno). */
+export async function markThreadRead(workoutId: string, side: 'staff' | 'athlete'): Promise<void> {
+  const sb = createClient()
+  const patch = side === 'staff' ? { read_by_staff: true } : { read_by_athlete: true }
+  const col = side === 'staff' ? 'read_by_staff' : 'read_by_athlete'
+  const { error } = await sb.from('workout_comments').update(patch).eq('workout_id', workoutId).eq(col, false)
+  if (error) console.error('[queries]', error.message)
+}
+
+/** Quantas respostas do treinador o aluno ainda não leu. */
+export async function getAthleteUnreadCount(athleteId: string): Promise<number> {
+  const sb = createClient()
+  const { count, error } = await sb.from('workout_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('athlete_id', athleteId).eq('read_by_athlete', false)
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return count ?? 0
 }
