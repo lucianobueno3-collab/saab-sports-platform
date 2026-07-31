@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2
 } from 'lucide-react'
 import { getAthletesForAlerts, getMyAccess, getEnrollments } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
@@ -21,6 +21,7 @@ const navItems = [
   { href: '/athletes', label: 'Alunos', icon: Users },
   { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
+  { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },

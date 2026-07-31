@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard, Users, ClipboardList, Dumbbell, BellDot, Upload, TrendingUp,
-  Heart, Settings, Shield, MoreHorizontal, X,
+  Heart, Settings, Shield, MoreHorizontal, X, Users2,
 } from 'lucide-react'
 import { getAthletesForAlerts, getEnrollments, getMyAccess } from '@/lib/supabase/queries'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
@@ -22,6 +22,7 @@ const primary: Item[] = [
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
 ]
 const moreItems: Item[] = [
+  { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },
