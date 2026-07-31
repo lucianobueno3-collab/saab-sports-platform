@@ -26,6 +26,7 @@ export type AthleteRow = {
   recovery_score: number | null
   sleep_hours: number | null
   status: string | null
+  avatar_url?: string | null
   last_activity_at: string | null
   last_activity_sport: string | null
   last_activity_tss: number | null
@@ -110,20 +111,28 @@ export async function getAthletes(): Promise<AthleteRow[]> {
     .select('*')
     .order('full_name')
   if (error) throw error
-  return data ?? []
+  const rows = (data ?? []) as AthleteRow[]
+  // A foto vive em `athletes` — a view de resumo pode não expor a coluna,
+  // então buscamos à parte e juntamos (falha silenciosa: cai nas iniciais).
+  const { data: pics } = await sb.from('athletes').select('id, avatar_url')
+  if (pics) {
+    const byId = new Map((pics as { id: string; avatar_url: string | null }[]).map(p => [p.id, p.avatar_url]))
+    for (const r of rows) r.avatar_url = byId.get(r.id) ?? null
+  }
+  return rows
 }
 
 export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, extraRes] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token, avatar_url').eq('id', id).single(),
   ])
   let extra = extraRes.data
   if (extraRes.error) {
     // banco sem a migração 012 (portal_token não existe): repete sem a coluna
     console.error('[queries]', extraRes.error.message)
-    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender').eq('id', id).single()
+    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, avatar_url').eq('id', id).single()
     extra = retry.data ? { ...retry.data, portal_token: null } : null
   }
   if (!summary) return null

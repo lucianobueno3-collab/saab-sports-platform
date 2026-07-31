@@ -14,6 +14,17 @@ function initials(name: string) {
   return name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()
 }
 
+// Foto do aluno, com as iniciais como reserva quando não há avatar.
+function Avatar({ url, name, size = 36 }: { url?: string | null; name: string; size?: number }) {
+  const cls = 'rounded-full flex items-center justify-center shrink-0 overflow-hidden font-bold text-primary'
+  const style = { width: size, height: size, background: 'var(--primary)' + '22', border: '1px solid var(--primary)' + '4d', fontSize: size * 0.34 }
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt={name} className={cls} style={{ ...style, objectFit: 'cover' }} />
+  }
+  return <div className={cls} style={style}>{initials(name)}</div>
+}
+
 // Status de vínculo do aluno: Em matrícula (anamnese pendente) · Ativo · Inativo.
 function EnrollStatusBadge({ active, enrolling }: { active: boolean; enrolling: boolean }) {
   const s = enrolling
@@ -126,9 +137,7 @@ export default function AthletesPage() {
                 const tsb = a.tsb ?? 0
                 return (
                   <Link key={a.id} href={`/athletes/detail?id=${a.id}`} className="flex items-center gap-3 p-4 hover:bg-secondary/30 transition-colors">
-                    <div className="w-9 h-9 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary shrink-0">
-                      {initials(a.full_name)}
-                    </div>
+                    <Avatar url={a.avatar_url} name={a.full_name} size={36} />
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-foreground truncate">{a.full_name}</p>
                       <p className="text-xs text-muted-foreground truncate">{sportLabel(a.primary_sport)} · {lastActivityLabel(a.last_activity_at)}</p>
@@ -171,9 +180,7 @@ export default function AthletesPage() {
                     <tr key={a.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                       <td className="px-5 py-3.5">
                         <Link href={`/athletes/detail?id=${a.id}`} className="flex items-center gap-3 group">
-                          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                            {initials(a.full_name)}
-                          </div>
+                          <Avatar url={a.avatar_url} name={a.full_name} size={32} />
                           <div>
                             <p className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
                               {a.full_name}
