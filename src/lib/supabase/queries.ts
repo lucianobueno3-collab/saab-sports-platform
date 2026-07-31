@@ -1781,3 +1781,150 @@ export async function getTrainingOverview(athleteId: string): Promise<TrainingOv
 
   return { all, today, next, week, progress, adherence }
 }
+
+// ─── Treinar junto — encontros de treino (migração 039) ─────────────────────
+
+export type MeetupRow = {
+  id: string
+  created_by: string | null
+  creator_name: string | null
+  creator_role: string | null
+  athlete_id: string | null
+  title: string
+  sport: string
+  workout_type: string | null
+  meetup_date: string
+  meetup_time: string
+  location_name: string
+  location_notes: string | null
+  location_url: string | null
+  location_photo_url: string | null
+  pace_min_sec: number | null
+  pace_max_sec: number | null
+  distance_km: number | null
+  max_people: number | null
+  no_one_left_behind: boolean
+  notes: string | null
+  status: 'open' | 'cancelled'
+  created_at: string
+}
+export type MeetupParticipant = {
+  id: string; meetup_id: string; athlete_id: string | null
+  user_id: string | null; display_name: string | null; status: 'going' | 'maybe'
+}
+export type MeetupInput = Omit<MeetupRow, 'id' | 'created_by' | 'creator_name' | 'creator_role' | 'created_at' | 'status'>
+  & { status?: 'open' | 'cancelled' }
+
+/** Encontros a partir de hoje, com quem já confirmou. */
+export async function getMeetups(): Promise<{ meetups: MeetupRow[]; participants: MeetupParticipant[]; myUserId: string | null }> {
+  const sb = createClient()
+  const today = new Date().toLocaleDateString('en-CA')
+  const { data: { user } } = await sb.auth.getUser()
+  const { data, error } = await sb.from('training_meetups')
+    .select('*').gte('meetup_date', today).order('meetup_date').order('meetup_time').limit(60)
+  if (error) { console.error('[queries]', error.message); return { meetups: [], participants: [], myUserId: user?.id ?? null } }
+  const meetups = (data ?? []) as MeetupRow[]
+  let participants: MeetupParticipant[] = []
+  if (meetups.length) {
+    const { data: p } = await sb.from('meetup_participants').select('*').in('meetup_id', meetups.map(m => m.id))
+    participants = (p ?? []) as MeetupParticipant[]
+  }
+  return { meetups, participants, myUserId: user?.id ?? null }
+}
+
+export async function saveMeetup(input: MeetupInput, id?: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  if (id) {
+    const { error } = await sb.from('training_meetups').update(input).eq('id', id)
+    if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+    return { ok: true }
+  }
+  const { error } = await sb.from('training_meetups').insert({
+    ...input,
+    created_by: user?.id ?? null,
+    creator_name: (user?.user_metadata?.full_name as string | undefined) ?? user?.email?.split('@')[0] ?? null,
+    creator_role: role,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteMeetup(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('training_meetups').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Confirma ou cancela a presença do usuário logado num encontro. */
+export async function toggleMeetupPresence(meetupId: string, going: boolean, athleteId: string | null, displayName: string | null): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return false
+  if (!going) {
+    const { error } = await sb.from('meetup_participants').delete().eq('meetup_id', meetupId).eq('user_id', user.id)
+    if (error) { console.error('[queries]', error.message); return false }
+    return true
+  }
+  const { error } = await sb.from('meetup_participants')
+    .upsert({ meetup_id: meetupId, user_id: user.id, athlete_id: athleteId, display_name: displayName, status: 'going' }, { onConflict: 'meetup_id,user_id' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Foto do ponto de encontro (reaproveita o bucket de avatares). */
+export async function uploadMeetupPhoto(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${userId}/meetup-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
+/** Match automático: colegas com treino parecido no mesmo dia.
+ *  Base do "3 pessoas têm um treino parecido com o seu no sábado". */
+export type MeetupSuggestion = { date: string; sport: string; title: string; count: number; names: string[]; durationMin: number | null }
+
+export async function getMeetupSuggestions(athleteId: string): Promise<MeetupSuggestion[]> {
+  const sb = createClient()
+  const today = new Date().toLocaleDateString('en-CA')
+  const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+  // Treinos meus e dos colegas na janela — compara por dia + modalidade + duração próxima.
+  const { data, error } = await sb.from('planned_workouts')
+    .select('athlete_id, date, sport, title, planned_duration_min')
+    .gte('date', today).lte('date', in14.toLocaleDateString('en-CA')).limit(600)
+  if (error) { console.error('[queries]', error.message); return [] }
+  const rows = (data ?? []) as { athlete_id: string; date: string; sport: string; title: string; planned_duration_min: number | null }[]
+  const mine = rows.filter(r => r.athlete_id === athleteId && r.sport !== 'strength')
+  if (mine.length === 0) return []
+
+  const others = rows.filter(r => r.athlete_id !== athleteId && r.sport !== 'strength')
+  const ids = [...new Set(others.map(r => r.athlete_id))]
+  const names = new Map<string, string>()
+  if (ids.length) {
+    const { data: ath } = await sb.from('athletes').select('id, full_name').in('id', ids)
+    for (const a of (ath ?? []) as { id: string; full_name: string }[]) names.set(a.id, a.full_name.split(' ')[0])
+  }
+
+  const out: MeetupSuggestion[] = []
+  for (const m of mine) {
+    const dur = m.planned_duration_min ?? 0
+    const matches = others.filter(o =>
+      o.date === m.date && o.sport === m.sport &&
+      // duração parecida: até 40% de diferença (ou ambos sem duração)
+      (!dur || !o.planned_duration_min || Math.abs(o.planned_duration_min - dur) / dur <= 0.4))
+    const uniq = [...new Set(matches.map(o => o.athlete_id))]
+    if (uniq.length > 0) {
+      out.push({
+        date: m.date, sport: m.sport, title: m.title, count: uniq.length,
+        names: uniq.map(id => names.get(id) ?? 'colega').slice(0, 4),
+        durationMin: m.planned_duration_min,
+      })
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 4)
+}

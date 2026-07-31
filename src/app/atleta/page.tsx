@@ -16,10 +16,11 @@ import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { TreinosOverview } from '@/components/athlete/treinos-overview'
+import { MeetupsTab } from '@/components/athlete/meetups-tab'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -42,7 +43,7 @@ type AthleteProfile = {
   vo2max_ml_kg_min: number | null
   avatar_url: string | null; full_name: string | null
 }
-type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'metricas' | 'provas' | 'parceiros' | 'evolucao' | 'dados'
+type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'metricas' | 'provas' | 'parceiros' | 'evolucao' | 'dados' | 'juntos'
 
 export default function AtletaPage() {
   const sb = createClient()
@@ -129,6 +130,7 @@ export default function AtletaPage() {
   const primaryTabs: TabDef[] = [
     { key: 'calendario', label: 'Calendário', icon: CalendarDays },
     { key: 'inicio', label: 'Hoje', icon: Activity },
+    { key: 'juntos', label: 'Juntos', icon: Users },
     { key: 'saude', label: 'Saúde', icon: Heart },
     { key: 'evolucao', label: 'Evolução', icon: Target },
   ]
@@ -291,6 +293,7 @@ export default function AtletaPage() {
       )}
 
       {tab === 'saude' && athleteId && <SaudeNutricaoTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
+      {tab === 'juntos' && <MeetupsTab athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />}
       {tab === 'parceiros' && <PartnersTab />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
       {tab === 'evolucao' && athleteId && (
