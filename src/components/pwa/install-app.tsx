@@ -6,7 +6,7 @@ import {
   detectPlatform, isInAppBrowser, isIosSafari, isStandalone,
   type InstallPromptEvent, type Platform,
 } from '@/lib/pwa-install'
-import { Smartphone, Share, PlusSquare, MoreVertical, Download, X, CheckCircle2, ExternalLink } from 'lucide-react'
+import { Smartphone, Share, PlusSquare, MoreVertical, Download, X, CheckCircle2, ExternalLink, ChevronDown } from 'lucide-react'
 
 const RED = '#e8001c'
 
@@ -158,6 +158,86 @@ export function InstallGuideModal({ situation, onClose }: { situation: Situation
         <div className="overflow-y-auto px-5 py-5">
           <InstallSteps situation={situation} />
         </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+/**
+ * Convite que aparece sozinho, sem o aluno procurar nada.
+ *
+ * No Android o Chrome deixa instalar de verdade: um toque abre a caixa do
+ * próprio sistema. No iPhone isso não existe — a Apple não expõe nenhuma API
+ * de instalação, então o máximo possível é mostrar o caminho na hora certa,
+ * apontando para o botão Compartilhar. Aparece uma vez por aparelho.
+ */
+export function InstallCoach({ storageKey = 'saab:install-coach-visto' }: { storageKey?: string }) {
+  const { ready, situation, install } = useInstall()
+  const [show, setShow] = useState(false)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => setMounted(true), [])
+
+  useEffect(() => {
+    if (!ready || (situation !== 'ios' && situation !== 'um-toque')) return
+    try { if (localStorage.getItem(storageKey) === '1') return } catch { /* modo privado */ }
+    // Um respiro antes de aparecer, para não atropelar o carregamento da tela.
+    const t = setTimeout(() => setShow(true), 2500)
+    return () => clearTimeout(t)
+  }, [ready, situation, storageKey])
+
+  function close() {
+    setShow(false)
+    try { localStorage.setItem(storageKey, '1') } catch { /* modo privado */ }
+  }
+
+  if (!mounted || !show) return null
+  const umToque = situation === 'um-toque'
+
+  return createPortal(
+    <div className="fixed inset-0 z-[95] flex flex-col justify-end bg-black/70 backdrop-blur-[2px]" onClick={close}>
+      <div className="px-4 pb-2 safe-bottom" onClick={e => e.stopPropagation()}>
+        <div className="bg-card border border-border rounded-2xl shadow-2xl p-5 max-w-md mx-auto">
+          <div className="flex items-start justify-between gap-3">
+            <p className="text-base font-black text-foreground">Deixe a SAAB na sua tela de início</p>
+            <button onClick={close} aria-label="Agora não" className="shrink-0 text-muted-foreground hover:text-foreground"><X className="w-5 h-5" /></button>
+          </div>
+
+          {umToque ? (
+            <>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
+                Abre direto do celular, sem procurar o link toda vez.
+              </p>
+              <button
+                onClick={async () => { await install(); close() }}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-lg text-base font-black text-white"
+                style={{ background: RED }}>
+                <Download className="w-5 h-5" /> Instalar
+              </button>
+              <button onClick={close} className="w-full mt-2 py-2 text-xs font-bold text-muted-foreground hover:text-foreground">
+                Agora não
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
+                No iPhone são três toques — a Apple não permite instalar automaticamente.
+              </p>
+              <InstallSteps situation="ios" />
+              <button onClick={close} className="w-full mt-4 py-2.5 rounded-lg text-sm font-black text-white" style={{ background: RED }}>
+                Entendi
+              </button>
+            </>
+          )}
+        </div>
+
+        {/* No iPhone, seta apontando para a barra do Safari, onde fica o Compartilhar */}
+        {!umToque && (
+          <div className="flex justify-center mt-1">
+            <ChevronDown className="w-7 h-7 text-white/80 animate-bounce" />
+          </div>
+        )}
       </div>
     </div>,
     document.body,
