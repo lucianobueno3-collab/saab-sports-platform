@@ -11,7 +11,6 @@ import { setViewMode } from '@/lib/view-mode'
 import { StrengthPlayer } from '@/components/athlete/strength-player'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
-import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { PartnersTab, PartnersStrip } from '@/components/athlete/partners-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
@@ -134,7 +133,6 @@ export default function AtletaPage() {
     { key: 'evolucao', label: 'Evolução', icon: Target },
   ]
   const moreTabs: TabDef[] = [
-    { key: 'metricas', label: 'Métricas', icon: Ruler },
     { key: 'provas', label: 'Provas', icon: Trophy },
     { key: 'parceiros', label: 'Parceiros', icon: Handshake },
     { key: 'dados', label: 'Meus dados', icon: UserRound },
@@ -293,7 +291,6 @@ export default function AtletaPage() {
       )}
 
       {tab === 'saude' && athleteId && <SaudeNutricaoTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
-      {tab === 'metricas' && athleteId && <MetricasTab athleteId={athleteId} />}
       {tab === 'parceiros' && <PartnersTab />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
       {tab === 'evolucao' && athleteId && (
