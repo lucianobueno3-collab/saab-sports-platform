@@ -15,9 +15,11 @@ export type InstallPromptEvent = Event & {
 
 export type Platform = 'ios' | 'android' | 'desktop'
 
-/** Navegador embutido de outro app (Instagram, Facebook, TikTok, LinkedIn). */
+/** Navegador embutido de outro app (WhatsApp, Instagram, Facebook, TikTok). */
 export function isInAppBrowser(ua = navigator.userAgent) {
-  return /FBAN|FBAV|Instagram|Line\/|TikTok|LinkedInApp|GSA\//i.test(ua)
+  // No Android, qualquer WebView dentro de outro app se anuncia com "; wv)".
+  if (/;\s*wv\)/i.test(ua)) return true
+  return /FBAN|FBAV|Instagram|WhatsApp|Line\/|TikTok|LinkedInApp|GSA\//i.test(ua)
 }
 
 export function detectPlatform(ua = navigator.userAgent): Platform {
@@ -31,6 +33,16 @@ export function detectPlatform(ua = navigator.userAgent): Platform {
 /** No iPhone só o Safari instala — Chrome e Firefox do iOS não têm a opção. */
 export function isIosSafari(ua = navigator.userAgent) {
   return detectPlatform(ua) === 'ios' && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua)
+}
+
+/**
+ * Link que tira o usuário do navegador interno (WhatsApp, Instagram) e abre
+ * no Chrome. Só existe no Android: o esquema `intent://` é do próprio sistema.
+ * No iPhone não há equivalente — lá o jeito é copiar o endereço e colar no Safari.
+ */
+export function androidChromeIntent(url: string) {
+  const semEsquema = url.replace(/^https?:\/\//, '')
+  return `intent://${semEsquema}#Intent;scheme=https;package=com.android.chrome;end`
 }
 
 /** Já está rodando como app instalado (fora da aba do navegador). */
