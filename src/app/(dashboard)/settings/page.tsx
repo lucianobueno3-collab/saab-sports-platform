@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { Topbar } from '@/components/layout/topbar'
+import { ShareInstallCard } from '@/components/pwa/share-install'
 import { Settings, Loader2, MessageCircle, CheckCircle2, Camera, KeyRound } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/context/auth-context'
@@ -201,6 +202,9 @@ export default function SettingsPage() {
             </button>
           </form>
         </div>
+
+        {/* Kit para o treinador mandar o app aos alunos */}
+        <ShareInstallCard />
 
       </div>
     </div>

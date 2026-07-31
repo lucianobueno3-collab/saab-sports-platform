@@ -3,10 +3,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  detectPlatform, isInAppBrowser, isIosSafari, isStandalone,
+  androidChromeIntent, detectPlatform, isInAppBrowser, isIosSafari, isStandalone,
   type InstallPromptEvent, type Platform,
 } from '@/lib/pwa-install'
-import { Smartphone, Share, PlusSquare, MoreVertical, Download, X, CheckCircle2, ExternalLink, ChevronDown } from 'lucide-react'
+import { Smartphone, Share, PlusSquare, MoreVertical, Download, X, CheckCircle2, ExternalLink, ChevronDown, Copy, Check } from 'lucide-react'
 
 const RED = '#e8001c'
 
@@ -76,6 +76,60 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
 }
 
 const chip = 'inline-flex items-center gap-1 align-middle rounded-md px-1.5 py-0.5 mx-0.5 bg-background border border-border font-bold text-[12px]'
+const botao = 'w-full flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-black text-white'
+
+/** Copia o endereço da página para o usuário colar no navegador de verdade. */
+function CopiarLink() {
+  const [copiado, setCopiado] = useState(false)
+
+  async function copiar() {
+    const url = window.location.href
+    try {
+      await navigator.clipboard.writeText(url)
+    } catch {
+      // Navegador interno costuma bloquear a área de transferência: usa o jeito antigo.
+      const el = document.createElement('textarea')
+      el.value = url
+      el.style.position = 'fixed'
+      el.style.opacity = '0'
+      document.body.appendChild(el)
+      el.select()
+      try { document.execCommand('copy') } catch { /* sem jeito: o texto fica visível abaixo */ }
+      document.body.removeChild(el)
+    }
+    setCopiado(true)
+    setTimeout(() => setCopiado(false), 2500)
+  }
+
+  return (
+    <div className="space-y-2">
+      <button onClick={copiar} className={botao} style={{ background: RED }}>
+        {copiado ? <><Check className="w-4 h-4" /> Endereço copiado!</> : <><Copy className="w-4 h-4" /> Copiar o endereço</>}
+      </button>
+      {copiado && (
+        <p className="text-[11px] text-muted-foreground text-center">
+          Agora abra o Safari e cole na barra de cima.
+        </p>
+      )}
+    </div>
+  )
+}
+
+/** No Android abre o Chrome de verdade num toque; no iPhone só resta copiar. */
+function SairDoNavegadorInterno() {
+  const [intent, setIntent] = useState<string | null>(null)
+  useEffect(() => {
+    if (detectPlatform() === 'android') setIntent(androidChromeIntent(window.location.href))
+  }, [])
+
+  if (!intent) return <CopiarLink />
+
+  return (
+    <a href={intent} className={botao} style={{ background: RED }}>
+      <ExternalLink className="w-4 h-4" /> Abrir no Chrome
+    </a>
+  )
+}
 
 /** Passo a passo de instalação conforme o aparelho. */
 export function InstallSteps({ situation }: { situation: Situation }) {
@@ -92,8 +146,10 @@ export function InstallSteps({ situation }: { situation: Situation }) {
     return (
       <div className="space-y-3">
         <p className="text-sm text-foreground leading-relaxed">
-          Você abriu por dentro de outro app (Instagram, Facebook ou similar) e daqui não dá para instalar.
+          Você abriu por dentro de outro app (WhatsApp, Instagram ou similar) e daqui não dá para instalar.
         </p>
+        <SairDoNavegadorInterno />
+        <p className="text-xs text-muted-foreground font-bold pt-1">Se o botão não funcionar:</p>
         <ol className="space-y-3">
           <Step n={1}>Toque nos <span className={chip}><MoreVertical className="w-3.5 h-3.5" /> três pontinhos</span> no canto da tela.</Step>
           <Step n={2}>Escolha <b>&quot;Abrir no navegador&quot;</b> (Safari no iPhone, Chrome no Android).</Step>
@@ -109,9 +165,10 @@ export function InstallSteps({ situation }: { situation: Situation }) {
         <p className="text-sm text-foreground leading-relaxed">
           No iPhone, só o <b>Safari</b> consegue instalar o app — o Chrome e o Firefox não têm essa opção.
         </p>
+        <CopiarLink />
         <ol className="space-y-3">
-          <Step n={1}>Copie o endereço desta página.</Step>
-          <Step n={2}>Abra o <b>Safari</b> e cole o endereço.</Step>
+          <Step n={1}>Copie o endereço com o botão acima.</Step>
+          <Step n={2}>Abra o <b>Safari</b> e cole na barra de endereço.</Step>
           <Step n={3}>Siga o passo a passo que vai aparecer lá.</Step>
         </ol>
       </div>
