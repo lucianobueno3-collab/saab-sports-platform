@@ -21,7 +21,6 @@ import {
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
 import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
-import { MetricasTab } from '@/components/athlete/metricas-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
 import { ForcaTab } from '@/components/athlete/forca-tab'
@@ -366,7 +365,6 @@ function AthleteDetailContent() {
             { key: 'calendario', label: 'Calendário', icon: CalendarDays },
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
             { key: 'forca', label: 'Força', icon: Dumbbell },
-            { key: 'metricas', label: 'Métricas', icon: Ruler },
             { key: 'provas', label: 'Provas', icon: Trophy },
             { key: 'evolucao', label: 'Evolução', icon: Target },
           ] as { key: typeof activeTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
@@ -639,7 +637,6 @@ function AthleteDetailContent() {
         {activeTab === 'calendario' && <CalendarioTab athleteId={id} defaultSport={athlete.primary_sport} />}
         {activeTab === 'saude' && <SaudeNutricaoTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
         {activeTab === 'forca' && <ForcaTab athleteId={id} weightKg={athlete.weight_kg} />}
-        {activeTab === 'metricas' && <MetricasTab athleteId={id} />}
         {activeTab === 'provas' && <ProvasTab athleteId={id} />}
         {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
       </div>
