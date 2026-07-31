@@ -17,6 +17,7 @@ import { EvolutionShowcase } from '@/components/athlete/evolution-showcase'
 import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { TreinosOverview } from '@/components/athlete/treinos-overview'
 import { MeetupsTab } from '@/components/athlete/meetups-tab'
+import { AchievementsCard } from '@/components/athlete/achievements-card'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
@@ -229,6 +230,9 @@ export default function AtletaPage() {
       )}
       {/* Treinos: hoje em destaque, semana, progresso e próximos */}
       {athleteId && <TreinosOverview athleteId={athleteId} onChanged={reload} />}
+
+      {/* Conquistas e narrativa de evolução */}
+      {athleteId && <AchievementsCard athleteId={athleteId} />}
 
       {/* Forma atual */}
       <div className="bg-card border border-border rounded-2xl p-5 flex items-center justify-between">
