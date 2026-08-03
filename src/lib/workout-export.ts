@@ -36,6 +36,28 @@ export function paceRange(zone: Zone, sport: string, th?: Thresholds): string | 
   return `${fmtPace(th.thresholdPaceSecKm * a)}–${fmtPace(th.thresholdPaceSecKm * b)} /km`
 }
 
+/**
+ * Ritmo a partir da % do ritmo limite prescrita pelo treinador.
+ *
+ * 100% = ritmo de limiar, e a % é de VELOCIDADE: correr a 88% do limite é
+ * mais lento, a 110% é mais rápido. Por isso o ritmo em min/km é o do limiar
+ * dividido pela fração — e a faixa aparece invertida (o menor % dá o ritmo
+ * mais lento, que é o primeiro número).
+ */
+export function pacePctRange(pct: [number, number], sport: string, th?: Thresholds): string | null {
+  if (sport !== 'running' || !th?.thresholdPaceSecKm) return null
+  const [lo, hi] = pct
+  if (lo <= 0 || hi <= 0) return null          // 0% = parado, não há ritmo
+  return `${fmtPace(th.thresholdPaceSecKm / (lo / 100))}–${fmtPace(th.thresholdPaceSecKm / (hi / 100))} /km`
+}
+
+/** Velocidade média do passo em fração do limiar, para estimar distância. */
+function fracaoDoLimiar(zone: Zone, pct?: [number, number]): number {
+  if (pct) return (pct[0] + pct[1]) / 200
+  const [a, b] = PACE_MULT[zone]
+  return 2 / (a + b)                            // multiplicador de pace → fração de velocidade
+}
+
 /** Faixa de frequência cardíaca da zona, ex.: "148–162 bpm". */
 export function hrRange(zone: Zone, th?: Thresholds): string | null {
   if (!th?.lthr) return null
@@ -47,19 +69,21 @@ export function hrRange(zone: Zone, th?: Thresholds): string | null {
  * Distância aproximada de um trecho, pelo ritmo médio da zona.
  * Serve para o aluno saber se o treino "dá 5 km ou 12 km" antes de sair.
  */
-export function estimateKm(min: number, zone: Zone, sport: string, th?: Thresholds): number | null {
+export function estimateKm(min: number, zone: Zone, sport: string, th?: Thresholds, pct?: [number, number]): number | null {
   if (sport !== 'running' || !th?.thresholdPaceSecKm || min <= 0) return null
-  const [a, b] = PACE_MULT[zone]
-  const paceMedio = th.thresholdPaceSecKm * ((a + b) / 2)   // seg por km
+  const fracao = fracaoDoLimiar(zone, pct)
+  if (fracao <= 0) return null                              // passo parado não percorre distância
+  const paceMedio = th.thresholdPaceSecKm / fracao          // seg por km
   return (min * 60) / paceMedio
 }
 
 /** Distância aproximada do treino inteiro, em km (null quando não dá para estimar). */
 export function estimateTotalKm(
-  passos: { min: number; zone: Zone }[], sport: string, th?: Thresholds,
+  passos: { min: number; zone: Zone; pacePct?: [number, number]; km?: number }[], sport: string, th?: Thresholds,
 ): number | null {
-  if (sport !== 'running' || !th?.thresholdPaceSecKm) return null
-  const total = passos.reduce((soma, p) => soma + (estimateKm(p.min, p.zone, sport, th) ?? 0), 0)
+  if (sport !== 'running') return null
+  // Passo prescrito em distância já traz o número; os demais são estimados.
+  const total = passos.reduce((soma, p) => soma + (p.km ?? estimateKm(p.min, p.zone, sport, th, p.pacePct) ?? 0), 0)
   return total > 0 ? total : null
 }
 

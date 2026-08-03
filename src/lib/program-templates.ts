@@ -1,6 +1,7 @@
 // Composições de programas de treino (compositor visual) + exemplos prontos.
 
 import { estimateStructure, structureSummary, type WorkoutStructure, type Zone } from './workout-structure'
+import { PROGRESSAO_5K, FASE_DA_SEMANA } from './progressao-5k'
 
 export type ProgramWorkout = {
   day: number            // 0=segunda … 6=domingo
@@ -86,6 +87,32 @@ export function couchTo5k8Weeks() {
     goal: '5km',
     level: 'iniciante',
     routing: { currently_running: false, levels: ['iniciante'], goals: ['5km'], min_days: 2, max_days: 3 } as ProgramRouting,
+    weeks,
+  }
+}
+
+/**
+ * PROGRESSÃO 5K INICIANTES — o programa do treinador, transcrito treino a
+ * treino em % do ritmo limite. 3 corridas por semana + as 2 sessões de força
+ * de prevenção, que caem nos dias livres.
+ */
+export function progressao5kIniciantes() {
+  const semanas = [...new Set(PROGRESSAO_5K.map(c => c.semana))].sort((a, b) => a - b)
+  const weeks: ProgramWeek[] = semanas.map(n => ({
+    label: `Semana ${n} · ${FASE_DA_SEMANA[n] ?? ''}`.trim().replace(/ ·$/, ''),
+    workouts: [
+      ...PROGRESSAO_5K.filter(c => c.semana === n).map(c => runWorkout(c.dia, c.titulo, c.structure)),
+      { day: 1, sport: 'strength', title: STRENGTH_A.title, description: STRENGTH_A.description, duration_min: STRENGTH_A.duration_min, tss: STRENGTH_A.tss, structure: null },
+      { day: 3, sport: 'strength', title: STRENGTH_B.title, description: STRENGTH_B.description, duration_min: STRENGTH_B.duration_min, tss: STRENGTH_B.tss, structure: null },
+    ],
+  }))
+  return {
+    name: 'PROGRESSÃO 5K INICIANTES',
+    description: 'Programa de 8 semanas, 3 corridas por semana, com cada trecho prescrito em % do ritmo limite (100% = ritmo de limiar). Evolui de tiros de 1 minuto até blocos de 15 minutos, e fecha com os 5 km direto. Inclui 2 sessões de força de prevenção nos dias livres. Os dias de corrida seguem a preferência da anamnese.',
+    sport: 'running',
+    goal: '5km',
+    level: 'iniciante',
+    routing: { currently_running: false, levels: ['iniciante'], goals: ['5km'], min_days: 3, max_days: 3 } as ProgramRouting,
     weeks,
   }
 }
