@@ -24,6 +24,7 @@ import { InstallAppCard, InstallCoach } from '@/components/pwa/install-app'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
+import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users } from 'lucide-react'
 
 function sportLabel(s: string) {
@@ -187,6 +188,10 @@ export default function AtletaPage() {
               <ShieldCheck className="w-4 h-4" /><span className="flex-1 text-left">Painel do treinador</span>
             </button>
           )}
+          <div className="flex items-center gap-1 px-3 py-1">
+            <span className="text-sm font-medium text-muted-foreground flex-1">Aparência</span>
+            <ThemeToggle />
+          </div>
           <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
             <LogOut className="w-4 h-4" /><span className="flex-1 text-left">Sair</span>
           </button>
@@ -200,27 +205,28 @@ export default function AtletaPage() {
       {/* Calendário usa a largura toda; as demais abas ficam num leitura confortável. */}
       <div className={`w-full space-y-5 ${tab === 'calendario' ? '' : 'max-w-6xl mx-auto'}`}>
       {/* Cabeçalho (só no celular — no desktop a identidade está na sidebar) */}
-      <div className="flex items-center justify-between lg:hidden">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2 lg:hidden">
+        <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Editar meus dados">
             {profile?.avatar_url
               ? <img src={profile.avatar_url} alt={a.full_name} className="w-full h-full object-cover" />
               : (profile?.full_name ?? a.full_name).split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
           </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-base font-black text-foreground leading-tight">{profile?.full_name ?? a.full_name}</p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-base font-black text-foreground leading-tight truncate">{profile?.full_name ?? a.full_name}</p>
               <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: '#e8001c22', color: '#e8001c' }}>Atleta</span>
             </div>
             <p className="text-xs text-muted-foreground">{sportLabel(a.primary_sport)} · Meu treino</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           {canCoach && (
             <button onClick={switchToCoach} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" title="Ir para o painel do treinador">
               <ShieldCheck className="w-4 h-4" /> <span className="hidden sm:inline">Treinador</span>
             </button>
           )}
+          <ThemeToggle />
           <button onClick={logout} className="p-2 rounded-lg hover:bg-secondary transition-colors" title="Sair"><LogOut className="w-4 h-4 text-muted-foreground" /></button>
         </div>
       </div>
