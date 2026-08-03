@@ -56,12 +56,17 @@ export function ProgramComposer() {
     })
     setBusy(false)
     if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o plano.', ok: false }); return }
+
+    // Os treinos vão junto para a biblioteca: é lá que o treinador pega um
+    // treino solto, e ter que lembrar de um segundo botão só atrapalha.
+    const novos = apenasNovos(programWorkoutsToLibrary(ex.weeks), await getWorkoutLibrary())
+    const naBiblioteca = novos.length ? await bulkCreateLibraryWorkouts(novos) : 0
+
     const list = await getTrainingPrograms()
     setPrograms(list)
     setAviso({
-      texto: existente
-        ? `"${ex.name}" atualizado no banco com ${ex.weeks.length} semanas.`
-        : `"${ex.name}" criado com ${ex.weeks.length} semanas.`,
+      texto: `"${ex.name}" ${existente ? 'atualizado' : 'criado'} com ${ex.weeks.length} semanas.`
+        + (naBiblioteca ? ` ${naBiblioteca} treino${naBiblioteca > 1 ? 's' : ''} ${naBiblioteca > 1 ? 'foram' : 'foi'} para a biblioteca.` : ' Os treinos já estavam na biblioteca.'),
       ok: true,
     })
     const alvo = list.find(p => p.id === res.id)
