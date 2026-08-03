@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { programWorkoutsToLibrary, apenasNovos } from './program-to-library'
-import { progressao5kIniciantes, couchTo5k8Weeks } from './program-templates'
+import { progressao5kIniciantes } from './program-templates'
 import type { ProgramWeek } from './program-templates'
 
 describe('levar os treinos do plano para a biblioteca', () => {
@@ -44,19 +44,19 @@ describe('levar os treinos do plano para a biblioteca', () => {
     }
   })
 
-  it('o plano do 0 aos 5 km distingue as versões que crescem', () => {
-    const saida = programWorkoutsToLibrary(couchTo5k8Weeks().weeks)
-    const comSemana = saida.filter(x => x.title.includes('(Semana'))
-    expect(comSemana.length).toBeGreaterThan(0)
-    // Nenhum título repetido na saída, senão a biblioteca fica ambígua.
+  it('sempre devolve títulos únicos, senão a biblioteca fica ambígua', () => {
+    const saida = programWorkoutsToLibrary(progressao5kIniciantes().weeks)
     expect(new Set(saida.map(x => x.title)).size).toBe(saida.length)
   })
 
-  it('sempre devolve títulos únicos', () => {
-    for (const plano of [progressao5kIniciantes(), couchTo5k8Weeks()]) {
-      const saida = programWorkoutsToLibrary(plano.weeks)
-      expect(new Set(saida.map(x => x.title)).size, plano.name).toBe(saida.length)
-    }
+  it('distingue por semana um plano cujo treino cresce mantendo o nome', () => {
+    const semanas: ProgramWeek[] = [1, 2, 3].map(n => ({
+      label: `S${n}`,
+      workouts: [{ day: 0, sport: 'running', title: 'Longo', structure: [{ type: 'step', step: { kind: 'steady', min: n * 10, zone: 2 } }] }],
+    }))
+    const saida = programWorkoutsToLibrary(semanas)
+    expect(saida.map(x => x.title)).toEqual(['Longo (Semana 1)', 'Longo (Semana 2)', 'Longo (Semana 3)'])
+    expect(new Set(saida.map(x => x.title)).size).toBe(3)
   })
 })
 

@@ -18,30 +18,17 @@ describe('planos oferecidos na hora de aplicar', () => {
     expect(nomes).toContain('PROGRESSÃO 5K INICIANTES')
   })
 
-  it('mostra os planos do treinador antes dos modelos prontos', () => {
-    const lista = opcoesDePlano([salvo()])
-    expect(lista[0].salvo).toBe(true)
-    expect(lista.filter(o => !o.salvo).length).toBeGreaterThan(0)
-  })
-
-  it('sem nenhum plano cadastrado, ainda oferece os modelos', () => {
-    const lista = opcoesDePlano([])
-    expect(lista.length).toBeGreaterThan(0)
-    expect(lista.every(o => !o.salvo)).toBe(true)
+  it('sem plano cadastrado, a lista fica vazia — nada de modelo embutido', () => {
+    // Antes caía nos modelos do código, que o treinador nunca escreveu.
+    expect(opcoesDePlano([])).toEqual([])
   })
 
   it('não mostra plano desativado', () => {
-    expect(opcoesDePlano([salvo({ active: false })]).some(o => o.salvo)).toBe(false)
-  })
-
-  it('modelo com o mesmo nome de um plano cadastrado não aparece duas vezes', () => {
-    const lista = opcoesDePlano([salvo({ name: 'Meus primeiros 5 km — 12 semanas' })])
-    expect(lista.filter(o => o.nome === 'Meus primeiros 5 km — 12 semanas')).toHaveLength(1)
-    expect(lista.find(o => o.nome === 'Meus primeiros 5 km — 12 semanas')!.salvo).toBe(true)
+    expect(opcoesDePlano([salvo({ active: false })])).toEqual([])
   })
 
   it('cada opção tem chave única, senão a seleção pega o plano errado', () => {
-    const lista = opcoesDePlano([salvo()])
+    const lista = opcoesDePlano([salvo(), salvo({ id: 'p2', name: 'Outro plano' })])
     expect(new Set(lista.map(o => o.chave)).size).toBe(lista.length)
   })
 })

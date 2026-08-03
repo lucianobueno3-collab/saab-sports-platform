@@ -3,17 +3,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Topbar } from '@/components/layout/topbar'
 import {
-  getWorkoutLibrary, createLibraryWorkout, updateLibraryWorkout, deleteLibraryWorkout, bulkCreateLibraryWorkouts,
+  getWorkoutLibrary, createLibraryWorkout, updateLibraryWorkout, deleteLibraryWorkout,
   type WorkoutLibraryRow, type LibExercise,
 } from '@/lib/supabase/queries'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
-import { buildSampleLibraryRows, SAMPLE_COUNT } from '@/lib/sample-workouts'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
-  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays, Search, ListChecks, LayoutGrid, List,
+  Activity as ActIcon, Clock, Flame, Library, Watch, CalendarDays, Search, ListChecks, LayoutGrid, List,
 } from 'lucide-react'
 import { ProgramComposer } from '@/components/treinos/program-composer'
 
@@ -32,7 +31,6 @@ export default function TreinosPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [modal, setModal] = useState<{ edit?: WorkoutLibraryRow } | null>(null)
-  const [seeding, setSeeding] = useState(false)
   const [busca, setBusca] = useState('')
   // Grade ou lista — fica guardado, senão o treinador reescolhe a cada visita.
   const [modo, setModo] = useState<'grade' | 'lista'>('grade')
@@ -47,14 +45,6 @@ export default function TreinosPage() {
 
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
   useEffect(() => { load() }, [])
-
-  async function addSamples() {
-    if (!confirm(`Adicionar ${SAMPLE_COUNT} treinos de exemplo (corrida, bike e força) à sua biblioteca?`)) return
-    setSeeding(true)
-    await bulkCreateLibraryWorkouts(buildSampleLibraryRows())
-    setSeeding(false)
-    load()
-  }
 
   const filtered = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -126,9 +116,6 @@ export default function TreinosPage() {
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
             )}
           </div>
-          <button onClick={addSamples} disabled={seeding} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
-            {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Exemplos
-          </button>
           <button onClick={() => setModal({})} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
             <Plus className="w-4 h-4" /> Novo treino
           </button>
@@ -162,13 +149,10 @@ export default function TreinosPage() {
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Library className="w-10 h-10 text-muted-foreground/40 mb-3" />
             <p className="text-sm font-semibold text-foreground">Nenhum treino na biblioteca</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-xs">Cadastre seus treinos de força, corrida e bike para reutilizar no calendário dos atletas.</p>
-            <div className="flex gap-2">
-              <button onClick={addSamples} disabled={seeding} className="px-4 py-2 border border-border text-foreground text-sm font-semibold rounded-lg flex items-center gap-2">
-                {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Adicionar exemplos de mercado
-              </button>
-              <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar do zero</button>
-            </div>
+            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-sm">
+              Cadastre um treino aqui, ou carregue um plano em <b className="text-foreground">Planos de treinamento</b> — os treinos dele vêm para cá automaticamente.
+            </p>
+            <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar treino</button>
           </div>
         ) : (
           modo === 'lista' ? (

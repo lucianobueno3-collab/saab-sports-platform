@@ -8,7 +8,6 @@ import {
   bulkCreatePlannedWorkouts, getTrainingPrograms, getWorkoutLibrary,
   type EnrollmentRow, type PlannedWorkoutInput, type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
-import { PLAN_LIBRARY, generatePlan } from '@/lib/training-plans'
 import { recommendProgram, expandProgram } from '@/lib/program-templates'
 import { ClipboardList, Loader2, Check, X, CalendarDays, ExternalLink, Sparkles, Wand2, Eye, Plus, Pencil, Trash2, Library } from 'lucide-react'
 
@@ -22,9 +21,6 @@ const LBL_GOAL: Record<string, string> = {
   '5km': 'Correr 5 km', '10km': 'Correr 10 km', '21km': 'Meia maratona (21 km)', '42km': 'Maratona (42 km)',
 }
 const PKG_TITLE: Record<string, string> = { primeiros_5k: 'Meus primeiros 5 km' }
-
-// Plano padrão de cada pacote
-const PKG_PLAN: Record<string, string> = { primeiros_5k: 'run_first5k_12' }
 
 function ymd(d: Date) { return d.toLocaleDateString('en-CA') }
 function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate() + n); return x }
@@ -160,10 +156,6 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
   }, programs), [programs, enr])
   const selectedProgram = programs.find(p => p.id === programId) ?? null
 
-  // Fallback: plano paramétrico embutido, caso ainda não haja programas criados.
-  const planKey = PKG_PLAN[enr.package_key] ?? 'run_first5k_12'
-  const fallbackPlan = useMemo(() => PLAN_LIBRARY.find(p => p.key === planKey) ?? null, [planKey])
-
   // Monta os treinos (com dias flutuantes), sem gravar — usado na pré-visualização.
   // Aceita override dos dias preferidos e do longão (ajuste na tela de revisão).
   function buildRows(prefOverride?: number[], longOverride?: number | null): PlannedWorkoutInput[] | null {
@@ -180,18 +172,12 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
         description: x.description, planned_duration_min: x.planned_duration_min, planned_tss: x.planned_tss,
         structure: x.structure,
       }))
-    } else if (fallbackPlan) {
-      const planDays = [...new Set(fallbackPlan.week.map(w => w.day))].sort((a, b) => a - b)
-      const dayMap: Record<number, number> = {}
-      planDays.forEach((pd, i) => { dayMap[pd] = pref[i] ?? pd })
-      for (const wk of generatePlan(fallbackPlan)) for (const s of wk.workouts) {
-        const day = dayMap[s.day] ?? s.day
-        rows.push({
-          athlete_id: enr.athlete_id, date: ymd(addDays(startDate, (wk.week - 1) * 7 + day)), sport: s.sport, title: s.title,
-          description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss, structure: s.structure,
-        })
-      }
-    } else { setMsg('Nenhum programa disponível para aplicar.'); return null }
+    } else {
+      // Sem plano escolhido não há o que aplicar. Antes caía num modelo
+      // embutido, e o aluno recebia um plano que o treinador nunca escreveu.
+      setMsg('Escolha um plano de treinamento para aplicar. Se ainda não tem nenhum, crie em Treinos → Planos de treinamento.')
+      return null
+    }
     return rows
   }
 
@@ -310,8 +296,8 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           </>
         ) : (
           <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="w-4 h-4 text-primary" />
-            <span className="text-sm font-black text-foreground">{fallbackPlan?.name ?? 'Plano'}</span>
+            <Sparkles className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-bold text-muted-foreground">Nenhum plano de treinamento cadastrado</span>
             <span className="text-[10px] text-muted-foreground">(crie em Treinos → Planos de treinamento)</span>
           </div>
         )}
@@ -351,7 +337,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
       {preview && (
         <PlanPreview
           rows={preview} start={start}
-          programName={selectedProgram?.name ?? fallbackPlan?.name ?? 'Plano'}
+          programName={selectedProgram?.name ?? 'Plano'}
           athleteName={enr.full_name ?? 'aluno'}
           initialPref={(enr.preferred_days ?? []).filter(d => d >= 0 && d <= 6)}
           initialLong={enr.long_run_day}
