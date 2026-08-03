@@ -5,7 +5,7 @@ import {
   getTrainingPrograms, saveTrainingProgram, deleteTrainingProgram, getWorkoutLibrary,
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
-import { couchTo5k8Weeks, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
+import { couchTo5k8Weeks, progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
   Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays,
@@ -36,13 +36,16 @@ export function ProgramComposer() {
   async function load() { setLoading(true); setPrograms(await getTrainingPrograms()); setLoading(false) }
   useEffect(() => { load() }, [])
 
-  async function createExample() {
+  /** Cria um programa a partir de um modelo pronto e abre para edição. */
+  async function criarDoModelo(modelo: () => ReturnType<typeof couchTo5k8Weeks>) {
     setBusy(true)
-    const ex = couchTo5k8Weeks()
+    const ex = modelo()
     const res = await saveTrainingProgram({ ...ex, package_key: 'primeiros_5k', active: true })
     setBusy(false)
     if (res.ok) { const list = await getTrainingPrograms(); setPrograms(list); const created = list.find(p => p.id === res.id); if (created) setEditing(created) }
   }
+  const createExample = () => criarDoModelo(couchTo5k8Weeks)
+  const criarProgressao5k = () => criarDoModelo(progressao5kIniciantes)
 
   if (editing) return <ProgramEditor program={editing === 'new' ? null : editing} onClose={() => { setEditing(null); load() }} />
 
@@ -53,7 +56,10 @@ export function ProgramComposer() {
           <h2 className="text-lg font-black text-foreground">Programas</h2>
           <p className="text-xs text-muted-foreground">Composições de semanas × treinos, reutilizáveis e aplicáveis aos alunos.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar PROGRESSÃO 5K INICIANTES
+          </button>
           <button onClick={createExample} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar exemplo (0 aos 5 km)
           </button>
@@ -70,8 +76,8 @@ export function ProgramComposer() {
           <CalendarDays className="w-9 h-9 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm font-semibold text-foreground">Nenhum programa ainda</p>
           <p className="text-xs text-muted-foreground mt-1 mb-4">Comece pelo exemplo pronto ou monte do zero.</p>
-          <button onClick={createExample} disabled={busy} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar "Do 0 aos 5 km — 8 semanas"
+          <button onClick={criarProgressao5k} disabled={busy} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar "PROGRESSÃO 5K INICIANTES"
           </button>
         </div>
       ) : (

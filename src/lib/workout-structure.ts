@@ -17,7 +17,29 @@ export const KIND_LABEL: Record<StepKind, string> = {
   warmup: 'Aquecimento', work: 'Principal', recovery: 'Recuperação', steady: 'Constante', cooldown: 'Desaquecimento',
 }
 
-export type Step = { kind: StepKind; min: number; zone: Zone; note?: string }
+export type Step = {
+  kind: StepKind
+  min: number
+  zone: Zone
+  note?: string
+  /**
+   * Faixa de % do RITMO LIMITE, como o treinador prescreve: [88, 98].
+   *
+   * 100% = ritmo de limiar. Acima disso é mais rápido, abaixo é mais lento.
+   * Guardamos a faixa exata porque as cinco zonas achatam demais: 88–98%,
+   * 90–95% e 100–103% viram tudo "forte", e a intenção do treino se perde.
+   * Quando existe, manda no cálculo de carga e no ritmo mostrado ao aluno.
+   */
+  pacePct?: [number, number]
+  /** Alvo em distância, quando o treino é prescrito assim (ex.: prova de 5 km). */
+  km?: number
+}
+
+/** Intensidade de um passo em fração do limiar (1.0 = ritmo de limiar). */
+export function stepIntensity(s: Step): number {
+  if (s.pacePct) return (s.pacePct[0] + s.pacePct[1]) / 200
+  return ZONES[s.zone].if
+}
 export type Segment =
   | { type: 'step'; step: Step }
   | { type: 'repeat'; times: number; steps: Step[] }
@@ -39,7 +61,7 @@ export function estimateStructure(st: WorkoutStructure): { min: number; tss: num
   for (const s of flattenSteps(st)) {
     const dur = Math.max(0, s.min || 0)
     min += dur
-    const IF = ZONES[s.zone].if
+    const IF = stepIntensity(s)
     tss += (dur / 60) * IF * IF * 100
   }
   return { min: Math.round(min), tss: Math.round(tss) }
@@ -79,10 +101,18 @@ export function dominantZone(st: WorkoutStructure): Zone | null {
 }
 
 /** Resumo textual curto de uma estrutura (para descrição/legenda). */
+/** Rótulo curto de um passo: a % prescrita quando existe, senão a zona. */
+function stepLabel(s: Step): string {
+  const alvo = s.pacePct
+    ? (s.pacePct[1] === 0 ? 'parado' : `${s.pacePct[0]}-${s.pacePct[1]}%`)
+    : ZONES[s.zone].label
+  return s.km ? `${s.km.toFixed(2).replace('.', ',')}km ${alvo}` : `${s.min}min ${alvo}`
+}
+
 export function structureSummary(st: WorkoutStructure): string {
   return st.map(seg => {
-    if (seg.type === 'step') return `${seg.step.min}min ${ZONES[seg.step.zone].label}`
-    const inner = seg.steps.map(s => `${s.min}min ${ZONES[s.zone].label}`).join(' + ')
+    if (seg.type === 'step') return stepLabel(seg.step)
+    const inner = seg.steps.map(stepLabel).join(' + ')
     return `${seg.times}x (${inner})`
   }).join(' · ')
 }

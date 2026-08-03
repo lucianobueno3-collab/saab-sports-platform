@@ -5,7 +5,7 @@ import {
   flattenSteps, estimateStructure, dominantZone,
 } from '@/lib/workout-structure'
 import {
-  buildWorkoutTCX, downloadFile, slugify, paceRange, hrRange,
+  buildWorkoutTCX, downloadFile, slugify, paceRange, pacePctRange, hrRange,
   estimateKm, estimateTotalKm, fmtKm, type Thresholds,
 } from '@/lib/workout-export'
 import { StructureBar } from '@/components/athlete/structured-builder'
@@ -31,9 +31,11 @@ function Stat({ icon: Icon, value, label }: { icon: typeof Clock; value: string;
 
 function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: Thresholds; index?: number }) {
   const z = ZONES[step.zone]
-  const pace = paceRange(step.zone, sport, th)
-  const hr = hrRange(step.zone, th)
-  const km = estimateKm(step.min, step.zone, sport, th)
+  const parado = step.pacePct?.[1] === 0
+  // Com % prescrita, o ritmo sai dela; sem, cai na faixa larga da zona.
+  const pace = step.pacePct ? pacePctRange(step.pacePct, sport, th) : paceRange(step.zone, sport, th)
+  const hr = parado ? null : hrRange(step.zone, th)
+  const km = step.km ?? estimateKm(step.min, step.zone, sport, th, step.pacePct)
 
   return (
     <div className="flex items-start gap-2.5">
@@ -46,11 +48,18 @@ function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: 
           <span className="text-[10px] font-black px-1.5 py-px rounded" style={{ background: z.color + '22', color: z.color }}>
             {z.label}
           </span>
+          {step.pacePct && !parado && (
+            <span className="text-[10px] font-black text-muted-foreground tabular-nums">
+              {step.pacePct[0]}–{step.pacePct[1]}% do limite
+            </span>
+          )}
         </div>
 
         {/* Quanto tempo, quanto dá de distância */}
         <p className="text-[11px] font-bold text-foreground mt-0.5 tabular-nums">
-          {fmtMin(step.min)}{km ? <span className="text-muted-foreground font-normal"> · ~{fmtKm(km)}</span> : null}
+          {step.km
+            ? <>{fmtKm(step.km)}<span className="text-muted-foreground font-normal"> · ~{fmtMin(step.min)}</span></>
+            : <>{fmtMin(step.min)}{km ? <span className="text-muted-foreground font-normal"> · ~{fmtKm(km)}</span> : null}</>}
         </p>
 
         {/* Alvos: ritmo E batimento, quando os dois são conhecidos */}
@@ -61,8 +70,11 @@ function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: 
           </div>
         )}
 
-        <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">{ZONE_FEEL[step.zone]}</p>
-        {step.note && <p className="text-[10px] text-muted-foreground mt-0.5">{step.note}</p>}
+        {/* Com % prescrita a nota do treino já descreve o esforço; a sensação
+            genérica da zona só repetiria a mesma ideia em outras palavras. */}
+        {step.note
+          ? <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">{step.note}</p>
+          : <p className="text-[10px] text-muted-foreground/80 italic mt-0.5">{ZONE_FEEL[step.zone]}</p>}
       </div>
     </div>
   )
