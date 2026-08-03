@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { programWorkoutsToLibrary, apenasNovos } from './program-to-library'
+import { programWorkoutsToLibrary, apenasNovos, paraMoverDeGrupo } from './program-to-library'
 import { progressao5kIniciantes } from './program-templates'
 import type { ProgramWeek } from './program-templates'
 
@@ -86,5 +86,45 @@ describe('não regravar o que já está na biblioteca', () => {
     const primeira = apenasNovos(candidatos, [])
     const segunda = apenasNovos(candidatos, primeira.map(x => ({ sport: x.sport, title: x.title })))
     expect(segunda).toHaveLength(0)
+  })
+})
+
+describe('corrigir a pasta de quem ja esta na biblioteca', () => {
+  const candidatos = programWorkoutsToLibrary(progressao5kIniciantes().weeks, 'PROGRESSÃO 5K INICIANTES')
+  const naBiblioteca = (over: Partial<{ id: string; sport: string; title: string; group_name: string | null }> = {}) => ({
+    id: 'w1', sport: candidatos[0].sport, title: candidatos[0].title, group_name: null, ...over,
+  })
+
+  it('marca para mover o treino que está sem pasta', () => {
+    // Era exatamente o caso de quem importou antes de existir grupo: recarregar
+    // o plano não mudava nada, porque a checagem de duplicado o pulava.
+    expect(paraMoverDeGrupo(candidatos, [naBiblioteca()], 'PROGRESSÃO 5K INICIANTES')).toEqual(['w1'])
+  })
+
+  it('marca para mover o treino que está na pasta errada', () => {
+    expect(paraMoverDeGrupo(candidatos, [naBiblioteca({ group_name: 'Outra' })], 'PROGRESSÃO 5K INICIANTES')).toEqual(['w1'])
+  })
+
+  it('não mexe em quem já está na pasta certa', () => {
+    expect(paraMoverDeGrupo(candidatos, [naBiblioteca({ group_name: 'PROGRESSÃO 5K INICIANTES' })], 'PROGRESSÃO 5K INICIANTES')).toEqual([])
+  })
+
+  it('não toca em treino que não é do plano', () => {
+    const alheio = { id: 'x9', sport: 'cycling', title: 'Endurance 2h', group_name: null }
+    expect(paraMoverDeGrupo(candidatos, [alheio], 'PROGRESSÃO 5K INICIANTES')).toEqual([])
+  })
+
+  it('compara ignorando caixa e espaços', () => {
+    const bagunçado = naBiblioteca({ title: `  ${candidatos[0].title.toUpperCase()} ` })
+    expect(paraMoverDeGrupo(candidatos, [bagunçado], 'PROGRESSÃO 5K INICIANTES')).toEqual(['w1'])
+  })
+
+  it('biblioteca vazia não move nada', () => {
+    expect(paraMoverDeGrupo(candidatos, [], 'X')).toEqual([])
+  })
+
+  it('rodar de novo depois de mover não move mais nada', () => {
+    const depois = [naBiblioteca({ group_name: 'PROGRESSÃO 5K INICIANTES' })]
+    expect(paraMoverDeGrupo(candidatos, depois, 'PROGRESSÃO 5K INICIANTES')).toEqual([])
   })
 })
