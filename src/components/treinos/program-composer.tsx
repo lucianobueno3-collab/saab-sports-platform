@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getTrainingPrograms, saveTrainingProgram, deleteTrainingProgram, getWorkoutLibrary,
+  bulkCreateLibraryWorkouts,
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
+import { programWorkoutsToLibrary, apenasNovos } from '@/lib/program-to-library'
 import { couchTo5k8Weeks, progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
-  Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays,
+  Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays, Library,
 } from 'lucide-react'
 
 const RED = '#e8001c'
@@ -53,7 +55,7 @@ export function ProgramComposer() {
       ...ex, id: existente?.id, package_key: existente?.package_key ?? 'primeiros_5k', active: true,
     })
     setBusy(false)
-    if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o programa.', ok: false }); return }
+    if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o plano.', ok: false }); return }
     const list = await getTrainingPrograms()
     setPrograms(list)
     setAviso({
@@ -65,6 +67,28 @@ export function ProgramComposer() {
     const alvo = list.find(p => p.id === res.id)
     if (alvo) setEditing(alvo)
   }
+  /**
+   * Copia os treinos do plano para a biblioteca, para o treinador usar cada um
+   * solto. Só grava os que ainda não existem, então clicar de novo não duplica.
+   */
+  async function enviarParaBiblioteca(p: TrainingProgramRow) {
+    setBusy(true); setAviso(null)
+    const candidatos = programWorkoutsToLibrary(p.weeks)
+    const novos = apenasNovos(candidatos, await getWorkoutLibrary())
+    if (novos.length === 0) {
+      setBusy(false)
+      setAviso({ texto: `Os ${candidatos.length} treinos de "${p.name}" já estão na biblioteca.`, ok: true })
+      return
+    }
+    const gravados = await bulkCreateLibraryWorkouts(novos)
+    setBusy(false)
+    setAviso({
+      texto: `${gravados} treino${gravados > 1 ? 's' : ''} de "${p.name}" ${gravados > 1 ? 'foram enviados' : 'foi enviado'} para a biblioteca.`
+        + (candidatos.length > gravados ? ` Os outros ${candidatos.length - gravados} já estavam lá.` : ''),
+      ok: true,
+    })
+  }
+
   const createExample = () => sincronizarModelo(couchTo5k8Weeks)
   const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes)
 
@@ -74,8 +98,8 @@ export function ProgramComposer() {
     <div className="p-4 md:p-6 space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-black text-foreground">Programas</h2>
-          <p className="text-xs text-muted-foreground">Composições de semanas × treinos, reutilizáveis e aplicáveis aos alunos.</p>
+          <h2 className="text-lg font-black text-foreground">Planos de treinamento</h2>
+          <p className="text-xs text-muted-foreground">Semanas × treinos, reutilizáveis e aplicáveis aos alunos. Os treinos podem ir para a biblioteca e ser usados soltos.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
@@ -85,7 +109,7 @@ export function ProgramComposer() {
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar exemplo (0 aos 5 km)
           </button>
           <button onClick={() => setEditing('new')} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
-            <Plus className="w-4 h-4" /> Novo programa
+            <Plus className="w-4 h-4" /> Novo plano
           </button>
         </div>
       </div>
@@ -102,8 +126,8 @@ export function ProgramComposer() {
       ) : programs.length === 0 ? (
         <div className="rounded-2xl p-10 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <CalendarDays className="w-9 h-9 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-foreground">Nenhum programa ainda</p>
-          <p className="text-xs text-muted-foreground mt-1 mb-4">Comece pelo exemplo pronto ou monte do zero.</p>
+          <p className="text-sm font-semibold text-foreground">Nenhum plano de treinamento ainda</p>
+          <p className="text-xs text-muted-foreground mt-1 mb-4">Comece por um modelo pronto ou monte do zero.</p>
           <button onClick={criarProgressao5k} disabled={busy} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar "PROGRESSÃO 5K INICIANTES"
           </button>
@@ -114,19 +138,27 @@ export function ProgramComposer() {
             const info = sportInfo(p.sport)
             const sessions = p.weeks.reduce((s, w) => s + w.workouts.length, 0)
             return (
-              <button key={p.id} onClick={() => setEditing(p)} className="text-left rounded-2xl p-4 transition-colors hover:border-primary/40"
-                style={{ background: 'var(--card)', border: '1px solid var(--border)', borderLeft: `4px solid ${info.color}` }}>
-                <div className="flex items-center gap-2">
-                  <info.icon className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
-                  <span className="font-black text-foreground flex-1 min-w-0 truncate">{p.name}</span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</p>
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  <Tag>{p.weeks.length} semanas</Tag>
-                  <Tag>{sessions} treinos</Tag>
-                  {p.level && <Tag>{LEVELS.find(l => l.v === p.level)?.t ?? p.level}</Tag>}
-                </div>
-              </button>
+              <div key={p.id} className="rounded-2xl overflow-hidden flex flex-col"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                <div className="h-1.5" style={{ background: info.color }} />
+                <button onClick={() => setEditing(p)} className="text-left p-4 flex-1">
+                  <div className="flex items-center gap-2">
+                    <info.icon className="w-4 h-4 flex-shrink-0" style={{ color: info.color }} />
+                    <span className="font-black text-foreground flex-1 min-w-0 truncate">{p.name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.description}</p>
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    <Tag>{p.weeks.length} semanas</Tag>
+                    <Tag>{sessions} treinos</Tag>
+                    {p.level && <Tag>{LEVELS.find(l => l.v === p.level)?.t ?? p.level}</Tag>}
+                  </div>
+                </button>
+                <button onClick={() => enviarParaBiblioteca(p)} disabled={busy}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2.5 text-[11px] font-bold border-t border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-60">
+                  {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Library className="w-3.5 h-3.5" />}
+                  Enviar treinos para a biblioteca
+                </button>
+              </div>
             )
           })}
         </div>
@@ -169,7 +201,7 @@ function ProgramEditor({ program, onClose }: { program: TrainingProgramRow | nul
   }, [weeks])
 
   async function save() {
-    if (!name.trim()) { setError('Dê um nome ao programa.'); return }
+    if (!name.trim()) { setError('Dê um nome ao plano.'); return }
     setSaving(true); setError(null)
     const res = await saveTrainingProgram({
       id: program?.id, name: name.trim(), description: description.trim() || null, sport, level, goal,
@@ -182,7 +214,7 @@ function ProgramEditor({ program, onClose }: { program: TrainingProgramRow | nul
   }
 
   async function remove() {
-    if (!program?.id || !confirm('Excluir este programa?')) return
+    if (!program?.id || !confirm('Excluir este plano de treinamento?')) return
     await deleteTrainingProgram(program.id); onClose()
   }
 
@@ -190,7 +222,7 @@ function ProgramEditor({ program, onClose }: { program: TrainingProgramRow | nul
     <div className="p-4 md:p-6 space-y-4 max-w-6xl mx-auto">
       <div className="flex items-center gap-2">
         <button onClick={onClose} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground"><ChevronLeft className="w-5 h-5" /></button>
-        <h2 className="text-lg font-black text-foreground flex-1">{program ? 'Editar programa' : 'Novo programa'}</h2>
+        <h2 className="text-lg font-black text-foreground flex-1">{program ? 'Editar plano' : 'Novo plano'}</h2>
         {program && <button onClick={remove} className="p-2 rounded-lg hover:bg-secondary text-muted-foreground" title="Excluir"><Trash2 className="w-4 h-4" /></button>}
         <button onClick={save} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg disabled:opacity-60">
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Salvar
@@ -205,9 +237,9 @@ function ProgramEditor({ program, onClose }: { program: TrainingProgramRow | nul
             <select value={sport} onChange={e => setSport(e.target.value)} className={cls}>{SPORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}</select>
           </label>
         </div>
-        <label className="block"><span className="block text-xs font-semibold text-muted-foreground mb-1">Descrição</span><input value={description} onChange={e => setDescription(e.target.value)} className={cls} placeholder="Resumo do programa" /></label>
+        <label className="block"><span className="block text-xs font-semibold text-muted-foreground mb-1">Descrição</span><input value={description} onChange={e => setDescription(e.target.value)} className={cls} placeholder="Resumo do plano" /></label>
         <div className="pt-1">
-          <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Roteamento pela anamnese (quando aplicar este programa)</p>
+          <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Roteamento pela anamnese (quando aplicar este plano)</p>
           <div className="grid sm:grid-cols-3 gap-3">
             <label className="block"><span className="block text-xs font-semibold text-muted-foreground mb-1">Nível</span>
               <select value={level} onChange={e => setLevel(e.target.value)} className={cls}>{LEVELS.map(l => <option key={l.v} value={l.v}>{l.t}</option>)}</select>

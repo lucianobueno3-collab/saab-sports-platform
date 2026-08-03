@@ -312,7 +312,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-primary" />
             <span className="text-sm font-black text-foreground">{fallbackPlan?.name ?? 'Plano'}</span>
-            <span className="text-[10px] text-muted-foreground">(crie programas em Treinos → Programas)</span>
+            <span className="text-[10px] text-muted-foreground">(crie em Treinos → Planos de treinamento)</span>
           </div>
         )}
         <div className="flex flex-wrap items-end gap-3">
