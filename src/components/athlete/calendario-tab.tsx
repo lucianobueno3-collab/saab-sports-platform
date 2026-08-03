@@ -13,6 +13,7 @@ import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-opt
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
+import { LibraryPanel } from '@/components/athlete/library-panel'
 import type { Thresholds } from '@/lib/workout-export'
 import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
@@ -20,7 +21,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, BookmarkPlus, Pencil, Copy, ChevronDown, AlertTriangle,
+  Sparkles, BookmarkPlus, Pencil, Copy, ChevronDown, AlertTriangle, Library,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -66,6 +67,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
+  const [mostrarBiblioteca, setMostrarBiblioteca] = useState(true)
   const [th, setTh] = useState<Thresholds>({})
 
   // Limiares do atleta: permitem mostrar "Z2 = 6:10–6:40/km" no detalhe do treino.
@@ -392,6 +394,12 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
               <Trash2 className="w-3.5 h-3.5" /> Remover
             </button>
           )}
+          {!readOnly && !mostrarBiblioteca && (
+            <button onClick={() => setMostrarBiblioteca(true)} title="Mostrar a biblioteca ao lado"
+              className="hidden xl:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary">
+              <Library className="w-3.5 h-3.5" /> Biblioteca
+            </button>
+          )}
         </div>
       </div>
 
@@ -402,6 +410,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
         </p>
       )}
 
+      <div className="flex gap-3 items-start">
+      <div className="flex-1 min-w-0">
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
       ) : view === 'week' ? (
@@ -534,6 +544,23 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           </div>
         </div>
       )}
+      </div>
+
+      {/* Biblioteca encostada no calendário: arraste um treino para um dia.
+          Só no computador — arrastar não existe em tela sensível ao toque, e
+          lá o fluxo continua sendo abrir o dia e escolher. */}
+      {!readOnly && mostrarBiblioteca && (
+        <aside className="hidden xl:block w-72 shrink-0 sticky top-4" style={{ height: 'calc(100vh - 8rem)' }}>
+          <LibraryPanel
+            itens={library}
+            onDragStart={setDragLib}
+            onDragEnd={() => { setDragLib(null); setDragOverDay(null) }}
+            onPick={w => addFromLibrary(selectedDay, w)}
+            onClose={() => setMostrarBiblioteca(false)}
+          />
+        </aside>
+      )}
+      </div>
 
       {modal && !readOnly && (
         <PlannedModal
