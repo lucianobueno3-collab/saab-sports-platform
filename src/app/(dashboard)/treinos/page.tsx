@@ -13,7 +13,7 @@ import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import { buildSampleLibraryRows, SAMPLE_COUNT } from '@/lib/sample-workouts'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
-  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays, Search, ListChecks,
+  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays, Search, ListChecks, LayoutGrid, List,
 } from 'lucide-react'
 import { ProgramComposer } from '@/components/treinos/program-composer'
 
@@ -34,6 +34,15 @@ export default function TreinosPage() {
   const [modal, setModal] = useState<{ edit?: WorkoutLibraryRow } | null>(null)
   const [seeding, setSeeding] = useState(false)
   const [busca, setBusca] = useState('')
+  // Grade ou lista — fica guardado, senão o treinador reescolhe a cada visita.
+  const [modo, setModo] = useState<'grade' | 'lista'>('grade')
+  useEffect(() => {
+    try { const m = localStorage.getItem('saab:biblioteca-modo'); if (m === 'lista' || m === 'grade') setModo(m) } catch { /* modo privado */ }
+  }, [])
+  function trocarModo(m: 'grade' | 'lista') {
+    setModo(m)
+    try { localStorage.setItem('saab:biblioteca-modo', m) } catch { /* modo privado */ }
+  }
   const [view, setView] = useState<'biblioteca' | 'programas'>('biblioteca')
 
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
@@ -125,12 +134,26 @@ export default function TreinosPage() {
           </button>
         </div>
 
-        {/* Filtro por modalidade */}
-        <div className="flex flex-wrap gap-1.5">
-          <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`Todos (${items.length})`} />
-          {SPORTS.filter(s => countBySport[s.key]).map(s => (
-            <FilterChip key={s.key} active={filter === s.key} onClick={() => setFilter(s.key)} label={`${s.label} (${countBySport[s.key]})`} color={s.color} />
-          ))}
+        {/* Filtro por modalidade + modo de exibição */}
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="flex flex-wrap gap-1.5">
+            <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`Todos (${items.length})`} />
+            {SPORTS.filter(s => countBySport[s.key]).map(s => (
+              <FilterChip key={s.key} active={filter === s.key} onClick={() => setFilter(s.key)} label={`${s.label} (${countBySport[s.key]})`} color={s.color} />
+            ))}
+          </div>
+          <div className="flex gap-1 p-1 rounded-lg bg-secondary shrink-0">
+            <button onClick={() => trocarModo('grade')} aria-label="Ver em grade" title="Grade"
+              className="p-1.5 rounded-md transition-colors"
+              style={modo === 'grade' ? { background: 'var(--card)', color: 'var(--foreground)' } : { color: 'var(--muted-foreground)' }}>
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button onClick={() => trocarModo('lista')} aria-label="Ver em lista" title="Lista"
+              className="p-1.5 rounded-md transition-colors"
+              style={modo === 'lista' ? { background: 'var(--card)', color: 'var(--foreground)' } : { color: 'var(--muted-foreground)' }}>
+              <List className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -148,11 +171,19 @@ export default function TreinosPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {filtered.map(w => (
-              <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
-            ))}
-          </div>
+          modo === 'lista' ? (
+            <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+              {filtered.map((w, i) => (
+                <WorkoutRow key={w.id} w={w} primeiro={i === 0} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+              {filtered.map(w => (
+                <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+              ))}
+            </div>
+          )
         )}
       </div>
       )}
@@ -227,6 +258,50 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
         {w.description && !(w.exercises?.length) && (
           <p className="text-[11px] text-muted-foreground/80 mt-2 line-clamp-2 leading-relaxed">{w.description}</p>
         )}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Uma linha da visão em lista: densa, para bater o olho em muitos treinos.
+ *
+ * A grade mostra bem cada treino, mas com 25 itens vindos de um plano o
+ * treinador quer comparar duração e carga de relance — e aí a lista ganha.
+ */
+function WorkoutRow({ w, primeiro, onEdit, onRemove }: {
+  w: WorkoutLibraryRow; primeiro: boolean; onEdit: () => void; onRemove: () => void
+}) {
+  const info = sportInfo(w.sport)
+  const temEstrutura = Boolean(w.structure?.length)
+
+  return (
+    <div className="group flex items-center gap-3 px-3 md:px-4 py-2.5 hover:bg-secondary/40 transition-colors"
+      style={primeiro ? undefined : { borderTop: '1px solid var(--border)' }}>
+      <span className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: info.color + '1a' }}>
+        <info.icon className="w-3.5 h-3.5" style={{ color: info.color }} />
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-bold text-foreground truncate">{w.title}</p>
+        {w.description && <p className="text-[11px] text-muted-foreground truncate">{w.description}</p>}
+      </div>
+
+      {/* Assinatura do treino, só onde há largura para ela */}
+      {temEstrutura && <div className="hidden lg:block w-28 shrink-0"><StructureBar structure={w.structure!} height={6} /></div>}
+
+      <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums shrink-0 w-32 justify-end">
+        {w.duration_min ? <span>{w.duration_min} min</span> : null}
+        {w.tss ? <span>{w.tss} TSS</span> : null}
+      </div>
+
+      <div className="flex gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+        {temEstrutura && (
+          <button onClick={() => downloadFile(`${slugify(w.title)}.tcx`, buildWorkoutTCX(w.title, w.sport, w.structure!))}
+            title="Baixar para relógio (.TCX)" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Watch className="w-3.5 h-3.5" /></button>
+        )}
+        <button onClick={onEdit} title="Editar" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+        <button onClick={onRemove} title="Excluir" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
       </div>
     </div>
   )

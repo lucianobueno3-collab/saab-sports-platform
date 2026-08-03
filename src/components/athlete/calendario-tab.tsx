@@ -5,12 +5,11 @@ import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
-  getWorkoutLibrary, createLibraryWorkout,
+  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
 } from '@/lib/supabase/queries'
-import {
-  PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, structureForTitle, type PlanDef,
-} from '@/lib/training-plans'
+import { structureForTitle } from '@/lib/training-plans'
+import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-options'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import type { Thresholds } from '@/lib/workout-export'
@@ -1011,38 +1010,57 @@ function PlannedModal({ athleteId, date, edit, defaultSport, library, onClose, o
 }
 
 // ─── Aplicar um plano de mercado ao calendário ──────────────────────────────
+/** Uma opção de plano na lista de aplicar. */
+function PlanoItem({ p, sel, onSel }: { p: PlanoOpcao; sel: boolean; onSel: () => void }) {
+  return (
+    <button onClick={onSel} className="w-full text-left rounded-xl p-3 transition-colors"
+      style={{ background: sel ? '#7c3aed14' : 'var(--panel)', border: `1.5px solid ${sel ? '#7c3aed' : 'var(--panel-border)'}` }}>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-bold text-foreground flex-1 min-w-0">{p.nome}</span>
+        {p.nivel && <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded shrink-0" style={{ background: 'var(--panel-border)', color: '#8b93a7' }}>{p.nivel}</span>}
+      </div>
+      {p.resumo && <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">{p.resumo}</p>}
+      <p className="text-[10px] text-muted-foreground/80 mt-1.5 tabular-nums">
+        {PLAN_SPORT_LABEL[p.sport as keyof typeof PLAN_SPORT_LABEL] ?? p.sport} · {p.semanas} semanas · {p.treinos} treinos · ~{p.horas}h · {p.tss} TSS
+      </p>
+    </button>
+  )
+}
+
 function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
   athleteId: string; defaultSport: string; onClose: () => void; onApplied: () => void
 }) {
   const [filter, setFilter] = useState<string>(['running', 'cycling', 'triathlon'].includes(defaultSport) ? defaultSport : 'all')
-  const [selected, setSelected] = useState<PlanDef | null>(null)
+  const [selected, setSelected] = useState<PlanoOpcao | null>(null)
   const [start, setStart] = useState(ymd(addDays(startOfWeek(new Date()), 7))) // próxima segunda
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  const [opcoes, setOpcoes] = useState<PlanoOpcao[]>([])
+  const [carregando, setCarregando] = useState(true)
 
-  const plans = PLAN_LIBRARY.filter(p => filter === 'all' || p.sport === filter)
+  useEffect(() => {
+    setMounted(true)
+    // Os planos cadastrados vêm do banco; os modelos prontos vêm do código.
+    ;(async () => {
+      try { setOpcoes(opcoesDePlano(await getTrainingPrograms())) }
+      catch { setOpcoes(opcoesDePlano([])) }
+      finally { setCarregando(false) }
+    })()
+  }, [])
+
+  const plans = opcoes.filter(p => filter === 'all' || p.sport === filter)
+  const meus = plans.filter(p => p.salvo)
+  const modelos = plans.filter(p => !p.salvo)
 
   async function apply() {
     if (!selected) return
     setApplying(true); setError(null)
-    const startDate = new Date(start + 'T12:00:00')
-    const gen = generatePlan(selected)
-    const rows: PlannedWorkoutInput[] = []
-    for (const wk of gen) for (const s of wk.workouts) {
-      const d = addDays(startDate, (wk.week - 1) * 7 + s.day)
-      rows.push({
-        athlete_id: athleteId, date: ymd(d), sport: s.sport, title: s.title,
-        description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss, structure: s.structure,
-      })
-    }
+    const rows = selected.linhas(athleteId, new Date(start + 'T12:00:00'))
     const res = await bulkCreatePlannedWorkouts(rows)
     setApplying(false)
     if (res.ok) onApplied(); else setError(res.error ?? 'Falha ao aplicar o plano')
   }
-
-  const totals = selected ? planTotals(selected) : null
 
   if (!mounted) return null
   return createPortal(
@@ -1063,37 +1081,39 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
             ))}
           </div>
 
-          {/* Lista de planos */}
-          <div className="space-y-2">
-            {plans.map(p => {
-              const t = planTotals(p)
-              const isSel = selected?.key === p.key
-              return (
-                <button key={p.key} onClick={() => setSelected(p)}
-                  className="w-full text-left rounded-xl p-3 transition-colors"
-                  style={{ background: isSel ? '#7c3aed14' : 'var(--panel)', border: `1.5px solid ${isSel ? '#7c3aed' : 'var(--panel-border)'}` }}>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-foreground flex-1">{p.name}</span>
-                    <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: 'var(--panel-border)', color: '#8b93a7' }}>{p.level}</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">{p.focus}</p>
-                  <p className="text-[10px] text-muted-foreground/80 mt-1.5">{PLAN_SPORT_LABEL[p.sport]} · {p.weeks} semanas · {t.perWeek}x/sem · ~{t.hours}h · {t.tss} TSS</p>
-                </button>
-              )
-            })}
-          </div>
+          {/* Lista de planos: os do treinador primeiro, depois os modelos */}
+          {carregando ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : plans.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-8">Nenhum plano para esta modalidade.</p>
+          ) : (
+            <div className="space-y-4">
+              {meus.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Meus planos</p>
+                  {meus.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
+                </div>
+              )}
+              {modelos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Modelos prontos</p>
+                  {modelos.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Aplicar */}
           {selected && (
             <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-              <p className="text-xs font-bold text-foreground">Aplicar “{selected.name}” a partir de:</p>
+              <p className="text-xs font-bold text-foreground">Aplicar “{selected.nome}” a partir de:</p>
               <input type="date" value={start} onChange={e => setStart(e.target.value)}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
-              <p className="text-[11px] text-muted-foreground">Serão criados <b>{totals?.sessions}</b> treinos ao longo de <b>{selected.weeks} semanas</b> no calendário do atleta. Você pode editar cada um depois.</p>
+              <p className="text-[11px] text-muted-foreground">Serão criados <b>{selected.treinos}</b> treinos ao longo de <b>{selected.semanas} semanas</b> no calendário do atleta. Você pode editar cada um depois.</p>
               {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
               <button onClick={apply} disabled={applying}
                 className="w-full py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
-                {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}{applying ? 'Aplicando...' : `Aplicar plano (${totals?.sessions} treinos)`}
+                {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}{applying ? 'Aplicando...' : `Aplicar plano (${selected.treinos} treinos)`}
               </button>
             </div>
           )}
