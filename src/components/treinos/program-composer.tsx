@@ -7,7 +7,7 @@ import {
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { programWorkoutsToLibrary, apenasNovos } from '@/lib/program-to-library'
-import { couchTo5k8Weeks, progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
+import { progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
   Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays, Library,
@@ -47,7 +47,7 @@ export function ProgramComposer() {
    * outro. Sem isso, cada clique deixava um duplicado para trás e o treinador
    * não sabia qual dos dois estava sendo aplicado aos alunos.
    */
-  async function sincronizarModelo(modelo: () => ReturnType<typeof couchTo5k8Weeks>) {
+  async function sincronizarModelo(modelo: () => ReturnType<typeof progressao5kIniciantes>) {
     setBusy(true); setAviso(null)
     const ex = modelo()
     const existente = programs.find(p => p.name.trim().toLowerCase() === ex.name.trim().toLowerCase())
@@ -94,7 +94,6 @@ export function ProgramComposer() {
     })
   }
 
-  const createExample = () => sincronizarModelo(couchTo5k8Weeks)
   const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes)
 
   if (editing) return <ProgramEditor program={editing === 'new' ? null : editing} onClose={() => { setEditing(null); load() }} />
@@ -109,9 +108,6 @@ export function ProgramComposer() {
         <div className="flex flex-wrap gap-2">
           <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Carregar PROGRESSÃO 5K INICIANTES
-          </button>
-          <button onClick={createExample} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar exemplo (0 aos 5 km)
           </button>
           <button onClick={() => setEditing('new')} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
             <Plus className="w-4 h-4" /> Novo plano
@@ -134,7 +130,7 @@ export function ProgramComposer() {
           <p className="text-sm font-semibold text-foreground">Nenhum plano de treinamento ainda</p>
           <p className="text-xs text-muted-foreground mt-1 mb-4">Comece por um modelo pronto ou monte do zero.</p>
           <button onClick={criarProgressao5k} disabled={busy} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar "PROGRESSÃO 5K INICIANTES"
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar &quot;PROGRESSÃO 5K INICIANTES&quot;
           </button>
         </div>
       ) : (

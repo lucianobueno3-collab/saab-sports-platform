@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { progressao5kIniciantes, couchTo5k8Weeks } from './program-templates'
+import { progressao5kIniciantes } from './program-templates'
 
 /** Mesma busca que o compositor faz antes de gravar. */
 function acharExistente(programas: { id: string; name: string }[], nome: string) {
@@ -19,8 +19,8 @@ describe('carregar o programa no banco não duplica', () => {
     expect(acharExistente(banco, modelo.name)?.id).toBe('abc')
   })
 
-  it('não confunde com o outro modelo, de nome diferente', () => {
-    const banco = [{ id: 'abc', name: couchTo5k8Weeks().name }]
+  it('não confunde com um plano de nome diferente', () => {
+    const banco = [{ id: 'abc', name: 'Meia maratona — 12 semanas' }]
     expect(acharExistente(banco, modelo.name)).toBeUndefined()
   })
 

@@ -6,7 +6,7 @@ import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
   getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms,
-  type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
+  type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { structureForTitle } from '@/lib/training-plans'
 import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-options'
@@ -19,7 +19,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, Library, BookmarkPlus, Pencil, Copy, ChevronDown,
+  Sparkles, BookmarkPlus, Pencil, Copy, ChevronDown,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -1050,8 +1050,6 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
   }, [])
 
   const plans = opcoes.filter(p => filter === 'all' || p.sport === filter)
-  const meus = plans.filter(p => p.salvo)
-  const modelos = plans.filter(p => !p.salvo)
 
   async function apply() {
     if (!selected) return
@@ -1084,22 +1082,16 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
           {/* Lista de planos: os do treinador primeiro, depois os modelos */}
           {carregando ? (
             <div className="flex items-center justify-center py-8 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+          ) : opcoes.length === 0 ? (
+            <p className="text-xs text-muted-foreground text-center py-8 leading-relaxed">
+              Nenhum plano de treinamento cadastrado.<br />
+              Crie o seu em <b className="text-foreground">Treinos → Planos de treinamento</b>.
+            </p>
           ) : plans.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-8">Nenhum plano para esta modalidade.</p>
           ) : (
-            <div className="space-y-4">
-              {meus.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Meus planos</p>
-                  {meus.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
-                </div>
-              )}
-              {modelos.length > 0 && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Modelos prontos</p>
-                  {modelos.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
-                </div>
-              )}
+            <div className="space-y-2">
+              {plans.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
             </div>
           )}
 

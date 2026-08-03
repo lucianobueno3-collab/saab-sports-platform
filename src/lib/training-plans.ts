@@ -1,22 +1,13 @@
-// Biblioteca de planos de endurance com periodização gerada (base → específico →
-// pico → polimento), com semanas de recuperação e taper — inspirada em modelos
-// consagrados de mercado (Friel, Daniels, polarizado 80/20).
+// Catálogo de tipos de sessão de endurance e a estrutura de passos de cada um.
+//
+// Os planos prontos que existiam aqui foram removidos: o treinador monta os
+// dele em Treinos → Planos de treinamento. O que sobra é usado para remontar
+// os passos de treinos antigos, gravados antes de o app ter estrutura.
 
 import type { WorkoutStructure, Step, Zone } from '@/lib/workout-structure'
-import { estimateStructure, structureSummary } from '@/lib/workout-structure'
+import { estimateStructure } from '@/lib/workout-structure'
 
 export type PlanSport = 'running' | 'cycling' | 'triathlon'
-
-export interface PlanDef {
-  key: string
-  name: string
-  sport: PlanSport
-  goal: string
-  weeks: number
-  level: 'iniciante' | 'intermediario' | 'avancado'
-  focus: string
-  week: { day: number; type: SType }[]   // day: 0=segunda … 6=domingo
-}
 
 type SType =
   | 'easy' | 'long' | 'tempo' | 'intervals' | 'recovery'
@@ -121,6 +112,12 @@ function ajustarPara(st: WorkoutStructure, total: number): WorkoutStructure {
   return escalado
 }
 
+/** Todos os tipos de sessão conhecidos — usado para varrer o catálogo. */
+export const TIPOS_DE_SESSAO = [
+  'walkrun', 'run_base', 'easy', 'long', 'tempo', 'intervals', 'recovery',
+  'bike_end', 'bike_int', 'bike_long', 'swim', 'brick', 'strength',
+] as const satisfies readonly SType[]
+
 /** Monta a estrutura de uma sessão já sabendo quantos minutos ela terá. */
 export function structureFor(type: SType, min: number): WorkoutStructure {
   return ajustarPara(estruturaBruta(type, min), min)
@@ -178,121 +175,6 @@ export function structureForTitle(title: string, min: number | null | undefined)
   const achado = (Object.keys(BASE) as SType[]).find(t => BASE[t].title.toLowerCase() === alvo)
   return achado ? structureFor(achado, min) : null
 }
-
-export interface GenWorkout {
-  day: number; sport: string; title: string; description: string
-  duration_min: number; tss: number; structure: WorkoutStructure
-}
-export interface GenWeek { week: number; phase: string; workouts: GenWorkout[] }
-
-function taperWeeks(weeks: number) { return weeks >= 12 ? 2 : 1 }
-
-function phaseOf(week: number, weeks: number): string {
-  const t = taperWeeks(weeks)
-  if (week > weeks - t) return 'Polimento'
-  if (week > weeks * 0.72) return 'Pico'
-  if (week > weeks * 0.42) return 'Específico'
-  return 'Base'
-}
-
-// Carga relativa da semana (ramp + deload a cada 4ª semana + taper no fim)
-function weekLoad(week: number, weeks: number): number {
-  const t = taperWeeks(weeks)
-  if (week > weeks - t) {
-    const into = week - (weeks - t)              // 1..t
-    return 0.6 - 0.12 * (into - 1)               // taper decrescente
-  }
-  const rampEnd = weeks - t
-  const ramp = 0.82 + 0.42 * ((week - 1) / Math.max(1, rampEnd - 1)) // 0.82 → ~1.24
-  const isDeload = week % 4 === 0
-  return isDeload ? ramp * 0.62 : ramp
-}
-
-export function generatePlan(def: PlanDef): GenWeek[] {
-  const weeks: GenWeek[] = []
-  for (let w = 1; w <= def.weeks; w++) {
-    const load = weekLoad(w, def.weeks)
-    const progress = (w - 1) / Math.max(1, def.weeks - 1)
-    const workouts: GenWorkout[] = def.week.map(({ day, type }) => {
-      const b = BASE[type]
-      const factor = b.grow ? load * (0.8 + 0.55 * progress) : load
-      const dur = Math.max(20, Math.round((b.dur * factor) / 5) * 5)
-      const structure = structureFor(type, dur)
-      // A duração real é a soma dos passos: melhor o número bater com o que o
-      // aluno vai fazer do que com o alvo teórico da semana.
-      const est = estimateStructure(structure)
-      return {
-        day, sport: b.sport, title: b.title,
-        description: `${b.desc}\n\n${structureSummary(structure)}`,
-        duration_min: est.min, tss: Math.max(10, est.tss || Math.round(b.tss * factor)),
-        structure,
-      }
-    })
-    weeks.push({ week: w, phase: phaseOf(w, def.weeks), workouts })
-  }
-  return weeks
-}
-
-export function planTotals(def: PlanDef) {
-  const gen = generatePlan(def)
-  let sessions = 0, tss = 0, minutes = 0
-  for (const wk of gen) for (const s of wk.workouts) { sessions++; tss += s.tss; minutes += s.duration_min }
-  return { sessions, tss, hours: Math.round(minutes / 60), perWeek: def.week.length }
-}
-
-// ─── Catálogo (dias: 0=seg,1=ter,2=qua,3=qui,4=sex,5=sáb,6=dom) ──────────────
-export const PLAN_LIBRARY: PlanDef[] = [
-  {
-    key: 'run_first5k_12', name: 'Meus primeiros 5 km — 12 semanas', sport: 'running', goal: 'Concluir 5 km', weeks: 12, level: 'iniciante',
-    focus: 'Método corrida/caminhada progressivo (couch-to-5k) para quem está começando do zero. 3 sessões por semana, evoluindo de intervalos curtos até correr 5 km contínuos.',
-    week: [{ day: 0, type: 'walkrun' }, { day: 2, type: 'walkrun' }, { day: 5, type: 'run_base' }],
-  },
-  {
-    key: 'run_10k_8', name: '10 km — 8 semanas', sport: 'running', goal: 'Prova de 10 km', weeks: 8, level: 'iniciante',
-    focus: 'Base aeróbica + limiar. 4 sessões/semana, modelo 80/20 (maioria leve).',
-    week: [{ day: 1, type: 'intervals' }, { day: 3, type: 'tempo' }, { day: 4, type: 'easy' }, { day: 6, type: 'long' }],
-  },
-  {
-    key: 'run_21k_12', name: 'Meia maratona — 12 semanas', sport: 'running', goal: '21 km', weeks: 12, level: 'intermediario',
-    focus: 'Volume progressivo + limiar e ritmo de prova. 5 sessões, longo crescente até ~1h50.',
-    week: [{ day: 0, type: 'easy' }, { day: 1, type: 'intervals' }, { day: 3, type: 'tempo' }, { day: 4, type: 'easy' }, { day: 6, type: 'long' }],
-  },
-  {
-    key: 'run_42k_16', name: 'Maratona — 16 semanas', sport: 'running', goal: '42 km', weeks: 16, level: 'avancado',
-    focus: 'Grande volume aeróbico, longos com blocos no ritmo de maratona, taper de 2 semanas.',
-    week: [{ day: 0, type: 'easy' }, { day: 1, type: 'intervals' }, { day: 3, type: 'tempo' }, { day: 4, type: 'easy' }, { day: 5, type: 'recovery' }, { day: 6, type: 'long' }],
-  },
-  {
-    key: 'run_5k_6', name: '5 km rápido — 6 semanas', sport: 'running', goal: '5 km (velocidade)', weeks: 6, level: 'intermediario',
-    focus: 'Bloco curto e intenso: VO2max e ritmo de 5k. Ideal para afiar a velocidade.',
-    week: [{ day: 1, type: 'intervals' }, { day: 3, type: 'tempo' }, { day: 4, type: 'easy' }, { day: 6, type: 'long' }],
-  },
-  {
-    key: 'bike_base_8', name: 'Ciclismo — Base 8 semanas', sport: 'cycling', goal: 'Base aeróbica', weeks: 8, level: 'iniciante',
-    focus: 'Construção de base em Z2 com toques de limiar. Fundamento para qualquer objetivo.',
-    week: [{ day: 1, type: 'bike_int' }, { day: 3, type: 'bike_end' }, { day: 5, type: 'bike_long' }, { day: 6, type: 'bike_end' }],
-  },
-  {
-    key: 'bike_granfondo_12', name: 'Gran Fondo — 12 semanas', sport: 'cycling', goal: 'Prova de longa distância', weeks: 12, level: 'intermediario',
-    focus: 'Resistência para provas longas: dois longos no fim de semana + força específica no pedal.',
-    week: [{ day: 1, type: 'bike_int' }, { day: 2, type: 'strength' }, { day: 3, type: 'bike_end' }, { day: 5, type: 'bike_long' }, { day: 6, type: 'bike_long' }],
-  },
-  {
-    key: 'tri_sprint_8', name: 'Triathlon Sprint — 8 semanas', sport: 'triathlon', goal: '750m / 20km / 5km', weeks: 8, level: 'iniciante',
-    focus: 'Introdução ao triathlon: três modalidades + um brick semanal. 6 sessões.',
-    week: [{ day: 0, type: 'swim' }, { day: 1, type: 'bike_int' }, { day: 2, type: 'easy' }, { day: 3, type: 'swim' }, { day: 5, type: 'brick' }, { day: 6, type: 'long' }],
-  },
-  {
-    key: 'tri_olimpico_12', name: 'Triathlon Olímpico — 12 semanas', sport: 'triathlon', goal: '1,5km / 40km / 10km', weeks: 12, level: 'intermediario',
-    focus: 'Volume equilibrado nas 3 modalidades, brick crescente e força preventiva.',
-    week: [{ day: 0, type: 'swim' }, { day: 1, type: 'bike_int' }, { day: 2, type: 'intervals' }, { day: 3, type: 'swim' }, { day: 4, type: 'strength' }, { day: 5, type: 'brick' }, { day: 6, type: 'bike_long' }],
-  },
-  {
-    key: 'tri_703_16', name: 'Meio Ironman (70.3) — 16 semanas', sport: 'triathlon', goal: '1,9km / 90km / 21km', weeks: 16, level: 'avancado',
-    focus: 'Alto volume, longos de bike e corrida, bricks específicos e taper de 2 semanas.',
-    week: [{ day: 0, type: 'swim' }, { day: 1, type: 'bike_int' }, { day: 2, type: 'intervals' }, { day: 3, type: 'swim' }, { day: 4, type: 'bike_end' }, { day: 5, type: 'brick' }, { day: 6, type: 'long' }],
-  },
-]
 
 export const PLAN_SPORT_LABEL: Record<PlanSport, string> = {
   running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon',
