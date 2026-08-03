@@ -20,8 +20,23 @@ export type PlanoOpcao = {
   treinos: number
   horas: number
   tss: number
-  /** Os treinos datados que serão criados no calendário do aluno. */
-  linhas: (athleteId: string, inicio: Date) => PlannedWorkoutInput[]
+  /** Quantas corridas o plano tem por semana — quantos dias o treinador escolhe. */
+  corridasPorSemana: number
+  /** Dias que o próprio plano usa (0=seg…6=dom), como ponto de partida. */
+  diasPadrao: number[]
+  /**
+   * Os treinos datados que serão criados no calendário do aluno.
+   *
+   * `dias` são os dias de corrida escolhidos; a força cai nos que sobram.
+   * Lista vazia mantém os dias do próprio plano.
+   */
+  linhas: (athleteId: string, inicio: Date, dias?: number[], diaDoLongao?: number | null) => PlannedWorkoutInput[]
+}
+
+/** Dias de corrida da primeira semana — o padrão que o plano já traz. */
+function diasDoPlano(weeks: ProgramWeek[]): number[] {
+  const primeira = weeks[0]?.workouts ?? []
+  return [...new Set(primeira.filter(x => x.sport !== 'strength').map(x => x.day))].sort((a, b) => a - b)
 }
 
 function somar(weeks: ProgramWeek[]) {
@@ -43,10 +58,10 @@ export function opcaoDePlanoSalvo(p: TrainingProgramRow): PlanoOpcao {
     nivel: p.level,
     semanas: p.weeks.length,
     treinos, horas, tss,
-    linhas: (athleteId, inicio) =>
-      // Sem dias preferidos, mantém os dias do próprio plano — o treinador
-      // ajusta depois no calendário se quiser.
-      expandProgram(p.weeks, inicio, []).map(x => ({
+    corridasPorSemana: diasDoPlano(p.weeks).length,
+    diasPadrao: diasDoPlano(p.weeks),
+    linhas: (athleteId, inicio, dias = [], diaDoLongao = null) =>
+      expandProgram(p.weeks, inicio, dias, diaDoLongao).map(x => ({
         athlete_id: athleteId, date: x.date, sport: x.sport, title: x.title,
         description: x.description, planned_duration_min: x.planned_duration_min,
         planned_tss: x.planned_tss, structure: x.structure,
