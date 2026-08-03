@@ -20,7 +20,7 @@ import { estimateStructure, structureSummary, type WorkoutStructure } from '@/li
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
   CalendarDays, Dumbbell, Bike, Footprints, Waves, Activity as ActIcon,
-  Sparkles, BookmarkPlus, Pencil, Copy, ChevronDown,
+  Sparkles, BookmarkPlus, Pencil, Copy, ChevronDown, AlertTriangle,
 } from 'lucide-react'
 
 const SPORTS = [
@@ -1058,6 +1058,25 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
   const [mounted, setMounted] = useState(false)
   const [opcoes, setOpcoes] = useState<PlanoOpcao[]>([])
   const [carregando, setCarregando] = useState(true)
+  // Dias de corrida escolhidos; a força cai nos que sobram.
+  const [dias, setDias] = useState<number[]>([])
+  const [longao, setLongao] = useState<number | null>(null)
+
+  function escolher(p: PlanoOpcao) {
+    setSelected(p)
+    // Começa pelos dias do próprio plano — o treinador ajusta se quiser.
+    setDias(p.diasPadrao)
+    setLongao(null)
+  }
+  function alternarDia(d: number) {
+    const proximo = dias.includes(d) ? dias.filter(x => x !== d) : [...dias, d].sort((a, b) => a - b)
+    if (proximo.length === 0) return   // precisa de pelo menos um dia de corrida
+    setDias(proximo)
+    if (longao != null && !proximo.includes(longao)) setLongao(null)
+  }
+  // Dias seguidos pesam para iniciante — o mesmo alerta da anamnese.
+  const paresSeguidos = dias.flatMap((d, i) =>
+    dias.slice(i + 1).filter(e => e - d === 1 || (d === 0 && e === 6)).map(e => `${WEEKDAYS[d]} e ${WEEKDAYS[e]}`))
 
   useEffect(() => {
     setMounted(true)
@@ -1074,7 +1093,7 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
   async function apply() {
     if (!selected) return
     setApplying(true); setError(null)
-    const rows = selected.linhas(athleteId, new Date(start + 'T12:00:00'))
+    const rows = selected.linhas(athleteId, new Date(start + 'T12:00:00'), dias, longao)
     const res = await bulkCreatePlannedWorkouts(rows)
     setApplying(false)
     if (res.ok) onApplied(); else setError(res.error ?? 'Falha ao aplicar o plano')
@@ -1111,7 +1130,7 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
             <p className="text-xs text-muted-foreground text-center py-8">Nenhum plano para esta modalidade.</p>
           ) : (
             <div className="space-y-2">
-              {plans.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => setSelected(p)} />)}
+              {plans.map(p => <PlanoItem key={p.chave} p={p} sel={selected?.chave === p.chave} onSel={() => escolher(p)} />)}
             </div>
           )}
 
@@ -1121,9 +1140,72 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
               <p className="text-xs font-bold text-foreground">Aplicar “{selected.nome}” a partir de:</p>
               <input type="date" value={start} onChange={e => setStart(e.target.value)}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
-              <p className="text-[11px] text-muted-foreground">Serão criados <b>{selected.treinos}</b> treinos ao longo de <b>{selected.semanas} semanas</b> no calendário do atleta. Você pode editar cada um depois.</p>
+
+              {/* Dias da semana, como na matrícula */}
+              <div>
+                <div className="flex items-baseline justify-between gap-2 mb-1.5">
+                  <p className="text-xs font-bold text-foreground">Dias de corrida</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {dias.length} de {selected.corridasPorSemana} por semana
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  {WEEKDAYS.map((w, d) => (
+                    <button key={d} onClick={() => alternarDia(d)}
+                      className="flex-1 py-2 rounded-lg text-[11px] font-bold transition-colors"
+                      style={dias.includes(d)
+                        ? { background: '#7c3aed', color: '#fff' }
+                        : { background: 'var(--panel)', color: 'var(--muted-foreground)', border: '1px solid var(--panel-border)' }}>
+                      {w}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  A força vai para os dias que sobram.
+                  {dias.length < selected.corridasPorSemana && ' Com menos dias que corridas, mais de uma cai no mesmo dia.'}
+                </p>
+              </div>
+
+              {/* Dia do longão, entre os escolhidos */}
+              {dias.length > 1 && (
+                <div>
+                  <p className="text-xs font-bold text-foreground mb-1.5">Dia do treino mais longo</p>
+                  <div className="flex flex-wrap gap-1">
+                    <button onClick={() => setLongao(null)}
+                      className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+                      style={longao == null
+                        ? { background: '#7c3aed', color: '#fff' }
+                        : { background: 'var(--panel)', color: 'var(--muted-foreground)', border: '1px solid var(--panel-border)' }}>
+                      Automático
+                    </button>
+                    {dias.map(d => (
+                      <button key={d} onClick={() => setLongao(d)}
+                        className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-colors"
+                        style={longao === d
+                          ? { background: '#7c3aed', color: '#fff' }
+                          : { background: 'var(--panel)', color: 'var(--muted-foreground)', border: '1px solid var(--panel-border)' }}>
+                        {WEEKDAYS[d]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {paresSeguidos.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg px-3 py-2.5" style={{ background: '#f59e0b18', border: '1px solid #f59e0b55' }}>
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: '#f59e0b' }} />
+                  <p className="text-[11px] text-foreground leading-relaxed">
+                    <b>{paresSeguidos.join(', ')}</b> {paresSeguidos.length > 1 ? 'são dias seguidos' : 'são dias seguidos'}.
+                    Para quem está começando, um dia de descanso entre as corridas reduz o risco de lesão.
+                  </p>
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Serão criados <b>{selected.treinos}</b> treinos ao longo de <b>{selected.semanas} semanas</b>, com as corridas
+                em <b>{dias.map(d => WEEKDAYS[d]).join(', ') || 'nenhum dia'}</b>. Você pode editar cada um depois.
+              </p>
               {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
-              <button onClick={apply} disabled={applying}
+              <button onClick={apply} disabled={applying || dias.length === 0}
                 className="w-full py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg flex items-center justify-center gap-2">
                 {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}{applying ? 'Aplicando...' : `Aplicar plano (${selected.treinos} treinos)`}
               </button>
