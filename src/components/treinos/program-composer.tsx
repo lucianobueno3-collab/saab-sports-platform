@@ -33,19 +33,40 @@ export function ProgramComposer() {
   const [editing, setEditing] = useState<TrainingProgramRow | 'new' | null>(null)
   const [busy, setBusy] = useState(false)
 
+  const [aviso, setAviso] = useState<{ texto: string; ok: boolean } | null>(null)
+
   async function load() { setLoading(true); setPrograms(await getTrainingPrograms()); setLoading(false) }
   useEffect(() => { load() }, [])
 
-  /** Cria um programa a partir de um modelo pronto e abre para edição. */
-  async function criarDoModelo(modelo: () => ReturnType<typeof couchTo5k8Weeks>) {
-    setBusy(true)
+  /**
+   * Grava um modelo pronto no banco e abre para edição.
+   *
+   * Se já existe um programa com o mesmo nome, ATUALIZA aquele em vez de criar
+   * outro. Sem isso, cada clique deixava um duplicado para trás e o treinador
+   * não sabia qual dos dois estava sendo aplicado aos alunos.
+   */
+  async function sincronizarModelo(modelo: () => ReturnType<typeof couchTo5k8Weeks>) {
+    setBusy(true); setAviso(null)
     const ex = modelo()
-    const res = await saveTrainingProgram({ ...ex, package_key: 'primeiros_5k', active: true })
+    const existente = programs.find(p => p.name.trim().toLowerCase() === ex.name.trim().toLowerCase())
+    const res = await saveTrainingProgram({
+      ...ex, id: existente?.id, package_key: existente?.package_key ?? 'primeiros_5k', active: true,
+    })
     setBusy(false)
-    if (res.ok) { const list = await getTrainingPrograms(); setPrograms(list); const created = list.find(p => p.id === res.id); if (created) setEditing(created) }
+    if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o programa.', ok: false }); return }
+    const list = await getTrainingPrograms()
+    setPrograms(list)
+    setAviso({
+      texto: existente
+        ? `"${ex.name}" atualizado no banco com ${ex.weeks.length} semanas.`
+        : `"${ex.name}" criado com ${ex.weeks.length} semanas.`,
+      ok: true,
+    })
+    const alvo = list.find(p => p.id === res.id)
+    if (alvo) setEditing(alvo)
   }
-  const createExample = () => criarDoModelo(couchTo5k8Weeks)
-  const criarProgressao5k = () => criarDoModelo(progressao5kIniciantes)
+  const createExample = () => sincronizarModelo(couchTo5k8Weeks)
+  const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes)
 
   if (editing) return <ProgramEditor program={editing === 'new' ? null : editing} onClose={() => { setEditing(null); load() }} />
 
@@ -58,7 +79,7 @@ export function ProgramComposer() {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar PROGRESSÃO 5K INICIANTES
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Carregar PROGRESSÃO 5K INICIANTES
           </button>
           <button onClick={createExample} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar exemplo (0 aos 5 km)
@@ -68,6 +89,13 @@ export function ProgramComposer() {
           </button>
         </div>
       </div>
+
+      {aviso && (
+        <p className="text-xs font-semibold rounded-lg px-3 py-2.5"
+          style={{ background: aviso.ok ? '#00d08414' : '#ef444414', color: aviso.ok ? '#00d084' : '#ef4444' }}>
+          {aviso.texto}
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
