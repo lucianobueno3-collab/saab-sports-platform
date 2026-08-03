@@ -22,15 +22,51 @@ function fmtPace(sec: number) { const m = Math.floor(sec / 60), s = Math.round(s
 /** Alvo legível de um passo: faixa de pace/FC quando há limiar, senão só a zona. */
 export function stepTargetLabel(zone: Zone, sport: string, th?: Thresholds): string {
   const z = ZONES[zone]
-  if (sport === 'running' && th?.thresholdPaceSecKm) {
-    const [a, b] = PACE_MULT[zone]
-    return `${fmtPace(th.thresholdPaceSecKm * a)}–${fmtPace(th.thresholdPaceSecKm * b)} /km · ${z.label}`
-  }
-  if (th?.lthr) {
-    const [a, b] = HR_MULT[zone]
-    return `${Math.round(th.lthr * a)}–${Math.round(th.lthr * b)} bpm · ${z.label}`
-  }
+  const pace = paceRange(zone, sport, th)
+  if (pace) return `${pace} · ${z.label}`
+  const hr = hrRange(zone, th)
+  if (hr) return `${hr} · ${z.label}`
   return `${z.label} · ${z.name}`
+}
+
+/** Faixa de ritmo da zona, ex.: "6:10–6:40 /km". Só corrida e com limiar. */
+export function paceRange(zone: Zone, sport: string, th?: Thresholds): string | null {
+  if (sport !== 'running' || !th?.thresholdPaceSecKm) return null
+  const [a, b] = PACE_MULT[zone]
+  return `${fmtPace(th.thresholdPaceSecKm * a)}–${fmtPace(th.thresholdPaceSecKm * b)} /km`
+}
+
+/** Faixa de frequência cardíaca da zona, ex.: "148–162 bpm". */
+export function hrRange(zone: Zone, th?: Thresholds): string | null {
+  if (!th?.lthr) return null
+  const [a, b] = HR_MULT[zone]
+  return `${Math.round(th.lthr * a)}–${Math.round(th.lthr * b)} bpm`
+}
+
+/**
+ * Distância aproximada de um trecho, pelo ritmo médio da zona.
+ * Serve para o aluno saber se o treino "dá 5 km ou 12 km" antes de sair.
+ */
+export function estimateKm(min: number, zone: Zone, sport: string, th?: Thresholds): number | null {
+  if (sport !== 'running' || !th?.thresholdPaceSecKm || min <= 0) return null
+  const [a, b] = PACE_MULT[zone]
+  const paceMedio = th.thresholdPaceSecKm * ((a + b) / 2)   // seg por km
+  return (min * 60) / paceMedio
+}
+
+/** Distância aproximada do treino inteiro, em km (null quando não dá para estimar). */
+export function estimateTotalKm(
+  passos: { min: number; zone: Zone }[], sport: string, th?: Thresholds,
+): number | null {
+  if (sport !== 'running' || !th?.thresholdPaceSecKm) return null
+  const total = passos.reduce((soma, p) => soma + (estimateKm(p.min, p.zone, sport, th) ?? 0), 0)
+  return total > 0 ? total : null
+}
+
+/** Distância em texto curto: "8,4 km" ou "600 m". */
+export function fmtKm(km: number): string {
+  if (km < 1) return `${Math.round(km * 1000)} m`
+  return `${km.toFixed(1).replace('.', ',')} km`
 }
 
 export type DisplaySegment =

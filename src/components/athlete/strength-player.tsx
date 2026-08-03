@@ -7,8 +7,13 @@ import {
 } from '@/lib/supabase/queries'
 import {
   Dumbbell, CheckCircle2, ChevronLeft, ChevronRight, SkipForward,
-  ClipboardCheck, History, Flag,
+  ClipboardCheck, History, Flag, Minus, Plus, Trophy, Weight, Timer,
 } from 'lucide-react'
+import { RestTimer } from '@/components/athlete/rest-timer'
+import {
+  volumeTotal, fmtVolume, recordeAnterior, ehRecorde, ultimasSeries,
+  ajustarCarga, PASSO_CARGA,
+} from '@/lib/strength-metrics'
 
 function fmtDate(d: string) {
   return new Date(d + (d.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('pt-BR')
@@ -40,17 +45,12 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  // O `id` reinicia o cronômetro a cada série marcada. Sem ele, marcar duas
+  // séries com o mesmo descanso não reiniciaria a contagem na segunda.
+  const [descanso, setDescanso] = useState<{ segundos: number; id: number } | null>(null)
 
   // Última execução registrada por exercício (para a coluna "Último treino")
-  const lastSetsByExercise = useMemo(() => {
-    const m: Record<string, StrengthSetLog[]> = {}
-    for (const log of logs) {            // logs já vêm ordenados do mais recente
-      for (const e of log.completed) {
-        if (e.sets && e.sets.length && !(e.name in m)) m[e.name] = e.sets
-      }
-    }
-    return m
-  }, [logs])
+  const lastSetsByExercise = useMemo(() => ultimasSeries(logs), [logs])
 
   // (Re)inicializa as séries ao trocar de dia/programa
   useEffect(() => {
@@ -80,6 +80,14 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
 
   function patchSet(exI: number, setI: number, patch: Partial<SetEntry>) {
     setEntries(prev => prev.map((sets, i) => i !== exI ? sets : sets.map((s, j) => j !== setI ? s : { ...s, ...patch })))
+    // Marcou a série: o descanso começa sozinho, para o aluno não precisar
+    // mexer no celular com a mão ocupada. Desmarcar cancela.
+    if (patch.done === true) {
+      const descansoEx = day.exercises[exI]?.rest_s
+      if (descansoEx) setDescanso(d => ({ segundos: descansoEx, id: (d?.id ?? 0) + 1 }))
+    } else if (patch.done === false) {
+      setDescanso(null)
+    }
   }
   function addSet(exI: number) {
     setEntries(prev => prev.map((sets, i) => i !== exI ? sets : [...sets, { reps: sets[sets.length - 1]?.reps ?? '', load: sets[sets.length - 1]?.load ?? '', done: false }]))
@@ -87,6 +95,7 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
 
   const exDone = entries.map(sets => sets.some(s => s.done))
   const doneCount = exDone.filter(Boolean).length
+  const volumeSessao = entries.reduce((soma, sets) => soma + volumeTotal(sets), 0)
 
   async function save() {
     setSaving(true)
@@ -106,7 +115,9 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
   const ex = day.exercises[exIdx]
 
   return (
-    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+    // Espaço extra embaixo enquanto o descanso está na tela, senão a barra
+    // fixa cobre os botões de navegação do exercício.
+    <div className="bg-card border border-border rounded-2xl overflow-hidden" style={descanso ? { paddingBottom: '5.5rem' } : undefined}>
       {/* Cabeçalho: programa + dia + cronômetro */}
       <div className="flex items-center gap-2 px-5 pt-4 pb-3">
         <Dumbbell className="w-4 h-4 text-primary flex-shrink-0" />
@@ -114,7 +125,14 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
           <h2 className="text-sm font-bold text-foreground truncate">Treino de força</h2>
           <p className="text-[11px] text-muted-foreground truncate">{program.name}</p>
         </div>
-        <span className="text-xs font-black tabular-nums text-muted-foreground px-2 py-1 rounded-lg bg-secondary">{fmtClock(elapsed)}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {volumeSessao > 0 && (
+            <span className="text-xs font-black tabular-nums px-2 py-1 rounded-lg bg-secondary text-foreground" title="Peso total levantado nesta sessão">
+              {fmtVolume(volumeSessao)}
+            </span>
+          )}
+          <span className="text-xs font-black tabular-nums text-muted-foreground px-2 py-1 rounded-lg bg-secondary">{fmtClock(elapsed)}</span>
+        </div>
       </div>
 
       {/* Seletor de dia */}
@@ -141,7 +159,7 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
       {isReview ? (
         <ReviewPane
           exercises={day.exercises.map((e, i) => ({ name: e.name, done: exDone[i], sets: entries[i] }))}
-          doneCount={doneCount} total={total}
+          doneCount={doneCount} total={total} volumeSessao={volumeSessao} tempo={fmtClock(elapsed)}
           rpe={rpe} setRpe={setRpe} notes={notes} setNotes={setNotes}
           onBack={() => setExIdx(total - 1)} onSave={save} saving={saving} saved={saved}
         />
@@ -150,12 +168,18 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
           key={exIdx}
           ex={ex} exIdx={exIdx} total={total}
           sets={entries[exIdx]} last={lastSetsByExercise[ex.name]}
+          recordeAtual={recordeAnterior(logs, ex.name)}
           onPatch={(setI, patch) => patchSet(exIdx, setI, patch)}
           onAddSet={() => addSet(exIdx)}
           onPrev={() => setExIdx(i => Math.max(0, i - 1))}
           onSkip={() => setExIdx(i => i + 1)}
           onComplete={() => setExIdx(i => i + 1)}
         />
+      )}
+
+      {/* Descanso entre séries, fixo no rodapé */}
+      {descanso && (
+        <RestTimer key={descanso.id} seconds={descanso.segundos} onDismiss={() => setDescanso(null)} />
       )}
 
       {/* Histórico */}
@@ -182,12 +206,15 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
 }
 
 // ─── Um exercício com suas séries ───────────────────────────────────────────
-function ExercisePane({ ex, exIdx, total, sets, last, onPatch, onAddSet, onPrev, onSkip, onComplete }: {
+function ExercisePane({ ex, exIdx, total, sets, last, recordeAtual, onPatch, onAddSet, onPrev, onSkip, onComplete }: {
   ex: PortalStrengthProgram['structure'][number]['exercises'][number]
   exIdx: number; total: number; sets: SetEntry[]; last?: StrengthSetLog[]
+  recordeAtual: number | null
   onPatch: (setI: number, patch: Partial<SetEntry>) => void
   onAddSet: () => void; onPrev: () => void; onSkip: () => void; onComplete: () => void
 }) {
+  const volumeEx = volumeTotal(sets)
+  const bateuRecorde = sets.some(s => ehRecorde(s, recordeAtual))
   return (
     <div className="px-5">
       {/* Pílula "Exercício X de N" */}
@@ -198,34 +225,59 @@ function ExercisePane({ ex, exIdx, total, sets, last, onPatch, onAddSet, onPrev,
       <p className="text-[11px] font-bold uppercase tracking-wide text-primary text-center">{ex.muscle}</p>
       <h3 className="text-xl font-black text-foreground text-center leading-tight mt-0.5">{ex.name}</h3>
       <p className="text-[11px] text-muted-foreground text-center mt-1">
-        {ex.sets} séries × {ex.reps}{ex.load ? ` · ${ex.load}` : ''}{ex.rest_s ? ` · ${ex.rest_s}s desc.` : ''}
+        {ex.sets} séries × {ex.reps}{ex.load ? ` · ${ex.load}` : ''}
       </p>
+      {ex.rest_s ? (
+        <p className="text-[11px] text-center mt-1 flex items-center justify-center gap-1 text-muted-foreground">
+          <Timer className="w-3 h-3" /> Descanso de <b className="text-foreground">{fmtClock(ex.rest_s)}</b> — começa sozinho ao marcar a série
+        </p>
+      ) : null}
       {ex.notes && <p className="text-[11px] text-muted-foreground/80 italic text-center mt-1">{ex.notes}</p>}
 
       {/* Tabela de séries */}
       <div className="mt-4">
-        <div className="grid grid-cols-[28px_1fr_1fr_1fr_28px] gap-2 items-center px-1 pb-1.5">
+        <div className="grid grid-cols-[24px_1fr_1.6fr_52px_30px] gap-1.5 items-center px-1 pb-1.5">
           <span />
           <span className="text-[10px] font-bold uppercase text-muted-foreground text-center">Reps</span>
-          <span className="text-[10px] font-bold uppercase text-muted-foreground text-center">Carga(kg)</span>
+          <span className="text-[10px] font-bold uppercase text-muted-foreground text-center">Carga (kg)</span>
           <span className="text-[10px] font-bold uppercase text-muted-foreground text-center">Último</span>
           <span />
         </div>
         <div className="space-y-1.5">
           {sets.map((s, j) => {
             const lastLabel = last?.[j] ? `${last[j].reps || '?'}×${last[j].load || '?'}` : '—'
+            const recorde = ehRecorde(s, recordeAtual)
             return (
-              <div key={j} className="grid grid-cols-[28px_1fr_1fr_1fr_28px] gap-2 items-center rounded-xl p-1.5"
-                style={{ background: s.done ? '#00d0840f' : 'var(--panel)', border: `1px solid ${s.done ? '#00d08455' : 'var(--panel-border)'}` }}>
+              <div key={j} className="grid grid-cols-[24px_1fr_1.6fr_52px_30px] gap-1.5 items-center rounded-xl p-1.5"
+                style={{
+                  background: recorde ? '#f59e0b14' : s.done ? '#00d0840f' : 'var(--panel)',
+                  border: `1px solid ${recorde ? '#f59e0b88' : s.done ? '#00d08455' : 'var(--panel-border)'}`,
+                }}>
                 <span className="text-xs font-black text-muted-foreground text-center">{j + 1}</span>
                 <input value={s.reps} onChange={e => onPatch(j, { reps: e.target.value })} inputMode="numeric"
+                  aria-label={`Repetições da série ${j + 1}`}
                   className="w-full py-2 text-sm font-semibold text-center rounded-lg bg-background border border-border text-foreground outline-none focus:border-primary" />
-                <input value={s.load} onChange={e => onPatch(j, { load: e.target.value })} inputMode="decimal"
-                  placeholder={last?.[j]?.load || '0'}
-                  className="w-full py-2 text-sm font-semibold text-center rounded-lg bg-background border border-border text-foreground outline-none focus:border-primary" />
-                <span className="text-[11px] text-muted-foreground text-center tabular-nums">{lastLabel}</span>
+
+                {/* Ajuste rápido: na academia é mais fácil tocar do que digitar */}
+                <div className="flex items-center gap-1">
+                  <button onClick={() => onPatch(j, { load: ajustarCarga(s.load, -PASSO_CARGA) })}
+                    aria-label={`Diminuir carga da série ${j + 1}`}
+                    className="w-7 h-8 shrink-0 rounded-lg bg-secondary text-muted-foreground flex items-center justify-center active:scale-95 transition-transform">
+                    <Minus className="w-3.5 h-3.5" />
+                  </button>
+                  <input value={s.load} onChange={e => onPatch(j, { load: e.target.value })} inputMode="decimal"
+                    placeholder={last?.[j]?.load || '0'} aria-label={`Carga da série ${j + 1}`}
+                    className="w-full min-w-0 py-2 text-sm font-semibold text-center rounded-lg bg-background border border-border text-foreground outline-none focus:border-primary" />
+                  <button onClick={() => onPatch(j, { load: ajustarCarga(s.load, PASSO_CARGA) })}
+                    aria-label={`Aumentar carga da série ${j + 1}`}
+                    className="w-7 h-8 shrink-0 rounded-lg bg-secondary text-muted-foreground flex items-center justify-center active:scale-95 transition-transform">
+                    <Plus className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                <span className="text-[11px] text-muted-foreground text-center tabular-nums truncate">{lastLabel}</span>
                 <button onClick={() => onPatch(j, { done: !s.done })} aria-label={`Série ${j + 1} concluída`}
-                  className="w-6 h-6 rounded-full flex items-center justify-center mx-auto transition-colors"
+                  className="w-7 h-7 rounded-full flex items-center justify-center mx-auto transition-colors"
                   style={{ background: s.done ? '#00d084' : 'transparent', border: `1.5px solid ${s.done ? '#00d084' : 'var(--border)'}` }}>
                   {s.done && <CheckCircle2 className="w-4 h-4 text-white" />}
                 </button>
@@ -234,6 +286,25 @@ function ExercisePane({ ex, exIdx, total, sets, last, onPatch, onAddSet, onPrev,
           })}
         </div>
         <button onClick={onAddSet} className="w-full mt-2 py-1.5 text-[11px] font-bold text-muted-foreground rounded-lg border border-dashed border-border hover:bg-secondary transition-colors">+ série</button>
+
+        {/* Volume do exercício e recorde batido */}
+        <div className="flex items-center gap-2 mt-2.5 px-0.5">
+          <Weight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <span className="text-[11px] text-muted-foreground">
+            Volume deste exercício: <b className="text-foreground tabular-nums">{fmtVolume(volumeEx)}</b>
+          </span>
+          {bateuRecorde && (
+            <span className="ml-auto flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-full shrink-0"
+              style={{ background: '#f59e0b22', color: '#f59e0b' }}>
+              <Trophy className="w-3 h-3" /> Recorde!
+            </span>
+          )}
+        </div>
+        {recordeAtual != null && !bateuRecorde && (
+          <p className="text-[10px] text-muted-foreground/80 mt-1 px-0.5">
+            Seu recorde neste exercício é <b className="text-foreground">{recordeAtual} kg</b>.
+          </p>
+        )}
       </div>
 
       {/* Navegação */}
@@ -252,9 +323,9 @@ function ExercisePane({ ex, exIdx, total, sets, last, onPatch, onAddSet, onPrev,
 }
 
 // ─── Revisão final + RPE da sessão + salvar ─────────────────────────────────
-function ReviewPane({ exercises, doneCount, total, rpe, setRpe, notes, setNotes, onBack, onSave, saving, saved }: {
+function ReviewPane({ exercises, doneCount, total, volumeSessao, tempo, rpe, setRpe, notes, setNotes, onBack, onSave, saving, saved }: {
   exercises: { name: string; done: boolean; sets: SetEntry[] }[]
-  doneCount: number; total: number
+  doneCount: number; total: number; volumeSessao: number; tempo: string
   rpe: number; setRpe: (v: number) => void; notes: string; setNotes: (v: string) => void
   onBack: () => void; onSave: () => void; saving: boolean; saved: boolean
 }) {
@@ -263,6 +334,20 @@ function ReviewPane({ exercises, doneCount, total, rpe, setRpe, notes, setNotes,
     <div className="px-5 pb-4">
       <div className="flex justify-center mb-3">
         <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-secondary text-muted-foreground">Revisão do treino</span>
+      </div>
+
+      {/* O que o aluno fez, em três números */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        {[
+          { v: `${doneCount}/${total}`, l: 'exercícios' },
+          { v: fmtVolume(volumeSessao), l: 'peso total' },
+          { v: tempo, l: 'duração' },
+        ].map(c => (
+          <div key={c.l} className="rounded-xl py-2.5 text-center" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+            <p className="text-base font-black text-foreground tabular-nums leading-none">{c.v}</p>
+            <p className="text-[10px] text-muted-foreground mt-1">{c.l}</p>
+          </div>
+        ))}
       </div>
 
       <div className="space-y-1.5">

@@ -45,6 +45,39 @@ export function estimateStructure(st: WorkoutStructure): { min: number; tss: num
   return { min: Math.round(min), tss: Math.round(tss) }
 }
 
+export type ZoneTotal = { zone: Zone; min: number; pct: number }
+
+/**
+ * Quanto tempo o treino passa em cada zona.
+ *
+ * É o que o aluno mais pergunta ("quanto tempo eu fico forte?") e o que
+ * explica a intenção do treino melhor do que a duração total.
+ */
+export function zoneTotals(st: WorkoutStructure): ZoneTotal[] {
+  const porZona = new Map<Zone, number>()
+  for (const s of flattenSteps(st)) {
+    const dur = Math.max(0, s.min || 0)
+    if (dur > 0) porZona.set(s.zone, (porZona.get(s.zone) ?? 0) + dur)
+  }
+  const total = Array.from(porZona.values()).reduce((a, b) => a + b, 0)
+  if (total === 0) return []
+  return Array.from(porZona.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([zone, min]) => ({ zone, min: Math.round(min), pct: Math.round((min / total) * 100) }))
+}
+
+/**
+ * Zona que define o treino: a mais intensa com peso relevante (≥10% do tempo).
+ * Sem isso um aquecimento longo faria um treino de tiros parecer leve.
+ */
+export function dominantZone(st: WorkoutStructure): Zone | null {
+  const totais = zoneTotals(st)
+  if (totais.length === 0) return null
+  const relevantes = totais.filter(t => t.pct >= 10)
+  const base = relevantes.length ? relevantes : totais
+  return base.reduce((a, b) => (b.zone > a.zone ? b : a)).zone
+}
+
 /** Resumo textual curto de uma estrutura (para descrição/legenda). */
 export function structureSummary(st: WorkoutStructure): string {
   return st.map(seg => {
