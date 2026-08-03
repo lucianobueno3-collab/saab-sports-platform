@@ -299,6 +299,8 @@ export type LibExercise = { name: string; sets: string; reps: string; load: stri
 export type WorkoutLibraryRow = {
   id: string; sport: string; title: string; description: string | null
   duration_min: number | null; tss: number | null
+  /** Pasta livre da biblioteca (migração 044). Vazio = agrupa pela modalidade. */
+  group_name?: string | null
   structure?: import('@/lib/workout-structure').WorkoutStructure | null
   exercises?: LibExercise[] | null
 }
@@ -306,7 +308,7 @@ export type WorkoutLibraryRow = {
 export async function getWorkoutLibrary(): Promise<WorkoutLibraryRow[]> {
   const sb = createClient()
   const { data, error } = await sb.from('workout_library')
-    .select('id, sport, title, description, duration_min, tss, structure, exercises').order('created_at', { ascending: false })
+    .select('id, sport, title, description, duration_min, tss, group_name, structure, exercises').order('created_at', { ascending: false })
   if (error) {
     // banco sem a migração 023 (structure/exercises): repete sem essas colunas
     console.error('[queries]', error.message)

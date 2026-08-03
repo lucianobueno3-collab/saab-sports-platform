@@ -59,7 +59,7 @@ export function ProgramComposer() {
 
     // Os treinos vão junto para a biblioteca: é lá que o treinador pega um
     // treino solto, e ter que lembrar de um segundo botão só atrapalha.
-    const novos = apenasNovos(programWorkoutsToLibrary(ex.weeks), await getWorkoutLibrary())
+    const novos = apenasNovos(programWorkoutsToLibrary(ex.weeks, ex.name), await getWorkoutLibrary())
     const naBiblioteca = novos.length ? await bulkCreateLibraryWorkouts(novos) : 0
 
     const list = await getTrainingPrograms()
@@ -78,7 +78,7 @@ export function ProgramComposer() {
    */
   async function enviarParaBiblioteca(p: TrainingProgramRow) {
     setBusy(true); setAviso(null)
-    const candidatos = programWorkoutsToLibrary(p.weeks)
+    const candidatos = programWorkoutsToLibrary(p.weeks, p.name)
     const novos = apenasNovos(candidatos, await getWorkoutLibrary())
     if (novos.length === 0) {
       setBusy(false)

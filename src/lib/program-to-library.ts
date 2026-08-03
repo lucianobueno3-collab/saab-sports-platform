@@ -18,12 +18,15 @@ function chave(sport: string, title: string, structure: unknown) {
 /**
  * Converte as semanas de um plano em treinos de biblioteca, sem repetir.
  *
+ * Recebe o nome do plano como `grupo`: é assim que os treinos chegam à
+ * biblioteca já dentro da pasta certa, em vez de todos soltos na raiz.
+ *
  * Um plano repete o mesmo treino em várias semanas — só faz sentido guardar
  * uma cópia. Mas quando o título se repete com passos DIFERENTES (o
  * "Corrida/caminhada" que cresce a cada semana), guardar só o primeiro perderia
  * a progressão inteira: nesses casos o nome ganha a semana de origem.
  */
-export function programWorkoutsToLibrary(weeks: ProgramWeek[]): LibraryDraft[] {
+export function programWorkoutsToLibrary(weeks: ProgramWeek[], grupo?: string): LibraryDraft[] {
   // 1ª passada: quantas versões distintas cada título tem.
   const versoesPorTitulo = new Map<string, Set<string>>()
   weeks.forEach(wk => wk.workouts.forEach(w => {
@@ -44,6 +47,7 @@ export function programWorkoutsToLibrary(weeks: ProgramWeek[]): LibraryDraft[] {
       const precisaDistinguir = (versoesPorTitulo.get(w.title.trim().toLowerCase())?.size ?? 1) > 1
       saida.push({
         sport: w.sport,
+        group_name: grupo?.trim() || null,
         title: precisaDistinguir ? `${w.title} (Semana ${i + 1})` : w.title,
         description: w.description ?? (w.structure ? structureSummary(w.structure) : null) ?? null,
         duration_min: w.duration_min ?? null,

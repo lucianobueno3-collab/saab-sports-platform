@@ -7,6 +7,7 @@ import {
   type WorkoutLibraryRow, type LibExercise,
 } from '@/lib/supabase/queries'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
+import { gruposExistentes, grupoDe } from '@/lib/library-groups'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
@@ -56,6 +57,7 @@ export default function TreinosPage() {
     const m: Record<string, number> = {}; for (const i of items) m[i.sport] = (m[i.sport] ?? 0) + 1; return m
   }, [items])
   // Números do topo: o acervo inteiro, não o que está filtrado.
+  const gruposSugeridos = useMemo(() => gruposExistentes(items), [items])
   const totalHoras = useMemo(() => items.reduce((s, i) => s + (i.duration_min ?? 0), 0) / 60, [items])
   const estruturados = useMemo(() => items.filter(i => i.structure?.length).length, [items])
 
@@ -172,7 +174,7 @@ export default function TreinosPage() {
       </div>
       )}
 
-      {modal && <LibraryModal edit={modal.edit} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+      {modal && <LibraryModal edit={modal.edit} gruposSugeridos={gruposSugeridos} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
     </div>
   )
 }
@@ -204,7 +206,7 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-black text-foreground leading-tight">{w.title}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5" style={{ color: info.color }}>{info.label}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5 truncate" style={{ color: info.color }}>{grupoDe(w)}</p>
           </div>
 
           {/* Ações discretas, visíveis ao passar o mouse (sempre no toque) */}
@@ -298,9 +300,12 @@ function FilterChip({ active, onClick, label, color }: { active: boolean; onClic
   )
 }
 
-function LibraryModal({ edit, onClose, onSaved }: { edit?: WorkoutLibraryRow; onClose: () => void; onSaved: () => void }) {
+function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
+  edit?: WorkoutLibraryRow; gruposSugeridos: string[]; onClose: () => void; onSaved: () => void
+}) {
   const [sport, setSport] = useState(edit?.sport ?? 'strength')
   const [title, setTitle] = useState(edit?.title ?? '')
+  const [grupo, setGrupo] = useState(edit?.group_name ?? '')
   const [desc, setDesc] = useState(edit?.description ?? '')
   const [dur, setDur] = useState(edit?.duration_min?.toString() ?? '')
   const [tss, setTss] = useState(edit?.tss?.toString() ?? '')
@@ -318,6 +323,7 @@ function LibraryModal({ edit, onClose, onSaved }: { edit?: WorkoutLibraryRow; on
     const cleanEx = exercises.filter(x => x.name.trim())
     const payload: Omit<WorkoutLibraryRow, 'id'> = {
       sport, title: title.trim(),
+      group_name: grupo.trim() || null,
       description: desc.trim() || (useStruct ? structureSummary(structure) : '') || null,
       duration_min: useStruct ? est!.min : (dur ? parseInt(dur) : null),
       tss: useStruct ? est!.tss : (tss ? parseInt(tss) : null),
@@ -356,6 +362,18 @@ function LibraryModal({ edit, onClose, onSaved }: { edit?: WorkoutLibraryRow; on
           <div>
             <label className="block text-xs font-medium text-foreground mb-1.5">Título *</label>
             <input required value={title} onChange={e => setTitle(e.target.value)} placeholder={isStrength ? 'ex: Força — inferiores A' : 'ex: Intervalado 5x1km Z4'} className={cls} />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Grupo (pasta)</label>
+            <input list="grupos-biblioteca" value={grupo} onChange={e => setGrupo(e.target.value)}
+              placeholder="ex: 1 BIKE — ENDURANCE" className={cls} />
+            <datalist id="grupos-biblioteca">
+              {gruposSugeridos.map(g => <option key={g} value={g} />)}
+            </datalist>
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Em branco, o treino aparece na pasta da modalidade. Numerar o nome controla a ordem das pastas.
+            </p>
           </div>
 
           {isStrength ? (
