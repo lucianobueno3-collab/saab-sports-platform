@@ -188,7 +188,7 @@ function Detail({ enr, onChanged }: { enr: EnrollmentRow; onChanged: () => void 
         const day = dayMap[s.day] ?? s.day
         rows.push({
           athlete_id: enr.athlete_id, date: ymd(addDays(startDate, (wk.week - 1) * 7 + day)), sport: s.sport, title: s.title,
-          description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
+          description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss, structure: s.structure,
         })
       }
     } else { setMsg('Nenhum programa disponível para aplicar.'); return null }

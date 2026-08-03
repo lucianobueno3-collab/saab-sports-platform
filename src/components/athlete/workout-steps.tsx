@@ -69,13 +69,17 @@ function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: 
 }
 
 /** Visão "Passos" estilo TrainingPeaks + botão de exportar para o relógio (.TCX). */
-export function WorkoutSteps({ title, sport, structure, thresholds, compact }: {
+export function WorkoutSteps({ title, sport, structure, thresholds, compact, plannedTss }: {
   title: string; sport: string; structure: WorkoutStructure; thresholds?: Thresholds; compact?: boolean
+  /** Carga que o treinador gravou. Tem prioridade sobre a estimativa, senão o
+   *  aluno veria um TSS no card do treino e outro aqui embaixo. */
+  plannedTss?: number | null
 }) {
   if (!structure || structure.length === 0) return null
 
   const passos = flattenSteps(structure)
-  const { min, tss } = estimateStructure(structure)
+  const { min, tss: tssEstimado } = estimateStructure(structure)
+  const tss = plannedTss ?? tssEstimado
   const km = estimateTotalKm(passos, sport, thresholds)
   const principal = dominantZone(structure)
 
