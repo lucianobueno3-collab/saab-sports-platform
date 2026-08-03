@@ -13,7 +13,7 @@ import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import { buildSampleLibraryRows, SAMPLE_COUNT } from '@/lib/sample-workouts'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
-  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays,
+  Activity as ActIcon, Clock, Flame, Library, Watch, Sparkles, CalendarDays, Search, ListChecks,
 } from 'lucide-react'
 import { ProgramComposer } from '@/components/treinos/program-composer'
 
@@ -33,6 +33,7 @@ export default function TreinosPage() {
   const [filter, setFilter] = useState('all')
   const [modal, setModal] = useState<{ edit?: WorkoutLibraryRow } | null>(null)
   const [seeding, setSeeding] = useState(false)
+  const [busca, setBusca] = useState('')
   const [view, setView] = useState<'biblioteca' | 'programas'>('biblioteca')
 
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
@@ -46,46 +47,90 @@ export default function TreinosPage() {
     load()
   }
 
-  const filtered = useMemo(() => filter === 'all' ? items : items.filter(i => i.sport === filter), [items, filter])
+  const filtered = useMemo(() => {
+    const termo = busca.trim().toLowerCase()
+    return items.filter(i =>
+      (filter === 'all' || i.sport === filter) &&
+      (!termo || i.title.toLowerCase().includes(termo) || (i.description ?? '').toLowerCase().includes(termo)))
+  }, [items, filter, busca])
   const countBySport = useMemo(() => {
     const m: Record<string, number> = {}; for (const i of items) m[i.sport] = (m[i.sport] ?? 0) + 1; return m
   }, [items])
+  // Números do topo: o acervo inteiro, não o que está filtrado.
+  const totalHoras = useMemo(() => items.reduce((s, i) => s + (i.duration_min ?? 0), 0) / 60, [items])
+  const estruturados = useMemo(() => items.filter(i => i.structure?.length).length, [items])
 
   async function remove(id: string) { await deleteLibraryWorkout(id); load() }
 
   return (
     <div>
-      <Topbar title="Treinos" subtitle="Biblioteca central e programas de treino" />
-      {/* Seletor Biblioteca / Programas */}
+      <Topbar title="Treinos" subtitle="Biblioteca de treinos e planos de treinamento" />
+      {/* Seletor Biblioteca / Planos */}
       <div className="px-4 md:px-6 pt-4">
         <div className="flex gap-1 p-1 rounded-xl bg-secondary w-fit">
           <button onClick={() => setView('biblioteca')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors" style={view === 'biblioteca' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
             <Library className="w-3.5 h-3.5" /> Biblioteca
           </button>
           <button onClick={() => setView('programas')} className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors" style={view === 'programas' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
-            <CalendarDays className="w-3.5 h-3.5" /> Programas
+            <CalendarDays className="w-3.5 h-3.5" /> Planos de treinamento
           </button>
         </div>
       </div>
 
       {view === 'programas' ? <ProgramComposer /> : (
       <div className="p-4 md:p-6 space-y-5">
-        {/* Ações + filtro */}
-        <div className="flex flex-wrap items-center gap-2 justify-between">
-          <div className="flex flex-wrap gap-1.5">
-            <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`Todos (${items.length})`} />
-            {SPORTS.filter(s => countBySport[s.key]).map(s => (
-              <FilterChip key={s.key} active={filter === s.key} onClick={() => setFilter(s.key)} label={`${s.label} (${countBySport[s.key]})`} color={s.color} />
-            ))}
+        {/* Panorama do acervo */}
+        {items.length > 0 && (
+          <div className="rounded-2xl p-4 md:p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+            <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+              <div>
+                <p className="text-3xl font-black text-foreground leading-none tabular-nums">{items.length}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">treinos na biblioteca</p>
+              </div>
+              <div>
+                <p className="text-3xl font-black text-foreground leading-none tabular-nums">{totalHoras.toFixed(0)}h</p>
+                <p className="text-[11px] text-muted-foreground mt-1">de treino acumulado</p>
+              </div>
+              <div>
+                <p className="text-3xl font-black leading-none tabular-nums" style={{ color: '#e8001c' }}>{estruturados}</p>
+                <p className="text-[11px] text-muted-foreground mt-1">com passo a passo</p>
+              </div>
+            </div>
+            {/* Barra de composição por modalidade */}
+            <div className="flex h-1.5 rounded-full overflow-hidden gap-px mt-4">
+              {SPORTS.filter(s => countBySport[s.key]).map(s => (
+                <div key={s.key} title={`${s.label}: ${countBySport[s.key]}`}
+                  style={{ width: `${(countBySport[s.key] / items.length) * 100}%`, background: s.color }} />
+              ))}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={addSamples} disabled={seeding} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
-              {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Adicionar exemplos
-            </button>
-            <button onClick={() => setModal({})} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
-              <Plus className="w-4 h-4" /> Novo treino
-            </button>
+        )}
+
+        {/* Busca + ações */}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar treino pelo nome…"
+              className="w-full pl-9 pr-9 py-2 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+            {busca && (
+              <button onClick={() => setBusca('')} aria-label="Limpar busca"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+            )}
           </div>
+          <button onClick={addSamples} disabled={seeding} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
+            {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Exemplos
+          </button>
+          <button onClick={() => setModal({})} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
+            <Plus className="w-4 h-4" /> Novo treino
+          </button>
+        </div>
+
+        {/* Filtro por modalidade */}
+        <div className="flex flex-wrap gap-1.5">
+          <FilterChip active={filter === 'all'} onClick={() => setFilter('all')} label={`Todos (${items.length})`} />
+          {SPORTS.filter(s => countBySport[s.key]).map(s => (
+            <FilterChip key={s.key} active={filter === s.key} onClick={() => setFilter(s.key)} label={`${s.label} (${countBySport[s.key]})`} color={s.color} />
+          ))}
         </div>
 
         {loading ? (
@@ -104,49 +149,85 @@ export default function TreinosPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-            {filtered.map(w => {
-              const info = sportInfo(w.sport)
-              return (
-                <div key={w.id} className="rounded-xl p-4" style={{ background: 'var(--card)', border: '1px solid var(--border)', borderLeft: `3px solid ${info.color}` }}>
-                  <div className="flex items-start gap-2">
-                    <info.icon className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: info.color }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-foreground">{w.title}</p>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: info.color }}>{info.label}</p>
-                    </div>
-                    {w.structure && w.structure.length > 0 && (
-                      <button onClick={() => downloadFile(`${slugify(w.title)}.tcx`, buildWorkoutTCX(w.title, w.sport, w.structure!))}
-                        title="Baixar para relógio (.TCX)" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Watch className="w-3.5 h-3.5" /></button>
-                    )}
-                    <button onClick={() => setModal({ edit: w })} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Pencil className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => remove(w.id)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div>
-
-                  {(w.duration_min || w.tss) && (
-                    <div className="flex gap-3 text-[11px] text-muted-foreground mt-2">
-                      {w.duration_min ? <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{w.duration_min}min</span> : null}
-                      {w.tss ? <span className="flex items-center gap-1"><Flame className="w-3 h-3" />{w.tss} TSS</span> : null}
-                    </div>
-                  )}
-                  {w.structure && w.structure.length > 0 && <div className="mt-2"><StructureBar structure={w.structure} height={8} /></div>}
-                  {w.exercises && w.exercises.length > 0 && (
-                    <ul className="mt-2 space-y-0.5">
-                      {w.exercises.slice(0, 5).map((e, i) => (
-                        <li key={i} className="text-[11px] text-muted-foreground flex justify-between gap-2"><span className="truncate">{e.name}</span><span className="flex-shrink-0">{e.sets}×{e.reps}{e.load ? ` · ${e.load}` : ''}</span></li>
-                      ))}
-                      {w.exercises.length > 5 && <li className="text-[10px] text-muted-foreground/70">+{w.exercises.length - 5} exercícios</li>}
-                    </ul>
-                  )}
-                  {w.description && !(w.structure?.length) && !(w.exercises?.length) && <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">{w.description}</p>}
-                </div>
-              )
-            })}
+            {filtered.map(w => (
+              <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+            ))}
           </div>
         )}
       </div>
       )}
 
       {modal && <LibraryModal edit={modal.edit} onClose={() => setModal(null)} onSaved={() => { setModal(null); load() }} />}
+    </div>
+  )
+}
+
+/**
+ * Card de um treino da biblioteca.
+ *
+ * A barra de estrutura sobe para o topo e ganha altura: ela é a assinatura
+ * visual do treino — dá para reconhecer um intervalado de um longão de relance,
+ * sem ler o nome. As ações só aparecem no hover, para o cartão respirar.
+ */
+function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: () => void; onRemove: () => void }) {
+  const info = sportInfo(w.sport)
+  const temEstrutura = Boolean(w.structure?.length)
+  const passos = w.structure?.length ?? 0
+
+  return (
+    <div className="group relative rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5"
+      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      {/* Assinatura visual: a forma do treino */}
+      {temEstrutura
+        ? <StructureBar structure={w.structure!} height={6} />
+        : <div className="h-1.5" style={{ background: info.color }} />}
+
+      <div className="p-4">
+        <div className="flex items-start gap-2.5">
+          <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: info.color + '1a' }}>
+            <info.icon className="w-4 h-4" style={{ color: info.color }} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-black text-foreground leading-tight">{w.title}</p>
+            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5" style={{ color: info.color }}>{info.label}</p>
+          </div>
+
+          {/* Ações discretas, visíveis ao passar o mouse (sempre no toque) */}
+          <div className="flex gap-0.5 shrink-0 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+            {temEstrutura && (
+              <button onClick={() => downloadFile(`${slugify(w.title)}.tcx`, buildWorkoutTCX(w.title, w.sport, w.structure!))}
+                title="Baixar para relógio (.TCX)" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Watch className="w-3.5 h-3.5" /></button>
+            )}
+            <button onClick={onEdit} title="Editar" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+            <button onClick={onRemove} title="Excluir" className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+          </div>
+        </div>
+
+        {/* Números numa fileira só */}
+        {(w.duration_min || w.tss || temEstrutura) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground mt-2.5 tabular-nums">
+            {w.duration_min ? <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{w.duration_min} min</span> : null}
+            {w.tss ? <span className="flex items-center gap-1"><Flame className="w-3 h-3" />{w.tss} TSS</span> : null}
+            {temEstrutura ? <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{passos} {passos === 1 ? 'bloco' : 'blocos'}</span> : null}
+          </div>
+        )}
+
+        {w.exercises && w.exercises.length > 0 && (
+          <ul className="mt-2.5 space-y-0.5">
+            {w.exercises.slice(0, 4).map((e, i) => (
+              <li key={i} className="text-[11px] text-muted-foreground flex justify-between gap-2">
+                <span className="truncate">{e.name}</span>
+                <span className="shrink-0 tabular-nums">{e.sets}×{e.reps}</span>
+              </li>
+            ))}
+            {w.exercises.length > 4 && <li className="text-[10px] text-muted-foreground/70">+{w.exercises.length - 4} exercícios</li>}
+          </ul>
+        )}
+
+        {w.description && !(w.exercises?.length) && (
+          <p className="text-[11px] text-muted-foreground/80 mt-2 line-clamp-2 leading-relaxed">{w.description}</p>
+        )}
+      </div>
     </div>
   )
 }
