@@ -66,3 +66,22 @@ export function apenasNovos(candidatos: LibraryDraft[], jaNaBiblioteca: { sport:
   const existentes = new Set(jaNaBiblioteca.map(w => `${w.sport}::${w.title.trim().toLowerCase()}`))
   return candidatos.filter(c => !existentes.has(`${c.sport}::${c.title.trim().toLowerCase()}`))
 }
+
+/**
+ * Treinos que já estão na biblioteca mas fora da pasta do plano.
+ *
+ * Só inserir os novos não bastava: um treino gravado antes de o plano ter
+ * pasta ficava para sempre sem grupo, porque a checagem de duplicado o pulava
+ * e nada nunca o atualizava. Era o caso de quem recarregava o plano e via
+ * tudo igual.
+ */
+export function paraMoverDeGrupo(
+  candidatos: LibraryDraft[],
+  jaNaBiblioteca: { id: string; sport: string; title: string; group_name?: string | null }[],
+  grupo: string,
+): string[] {
+  const alvos = new Set(candidatos.map(c => `${c.sport}::${c.title.trim().toLowerCase()}`))
+  return jaNaBiblioteca
+    .filter(w => alvos.has(`${w.sport}::${w.title.trim().toLowerCase()}`) && (w.group_name ?? '') !== grupo)
+    .map(w => w.id)
+}

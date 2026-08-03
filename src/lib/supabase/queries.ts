@@ -328,14 +328,46 @@ export async function createLibraryWorkout(w: Omit<WorkoutLibraryRow, 'id'>): Pr
   return true
 }
 
-export async function bulkCreateLibraryWorkouts(rows: Omit<WorkoutLibraryRow, 'id'>[]): Promise<number> {
-  if (rows.length === 0) return 0
+/**
+ * Grava vários treinos na biblioteca.
+ *
+ * Devolve o erro em vez de engolir: quando a gravação falha, quem chamou
+ * precisa dizer isso ao treinador — antes o app afirmava que os treinos já
+ * estavam lá, o que era mentira e escondia o problema.
+ *
+ * Se o banco ainda não tem a coluna de grupo (migração 044), repete sem ela:
+ * é melhor gravar os treinos sem pasta do que não gravar nada.
+ */
+export async function bulkCreateLibraryWorkouts(
+  rows: Omit<WorkoutLibraryRow, 'id'>[],
+): Promise<{ count: number; error?: string; semGrupo?: boolean }> {
+  if (rows.length === 0) return { count: 0 }
   const sb = createClient()
   const { data: { user } } = await sb.auth.getUser()
-  if (!user) return 0
-  const { data, error } = await sb.from('workout_library').insert(rows.map(r => ({ ...r, coach_id: user.id }))).select('id')
+  if (!user) return { count: 0, error: 'Sessão expirada. Entre novamente.' }
+
+  const comCoach = rows.map(r => ({ ...r, coach_id: user.id }))
+  const { data, error } = await sb.from('workout_library').insert(comCoach).select('id')
+  if (!error) return { count: data?.length ?? rows.length }
+
+  console.error('[queries]', error.message)
+  // Banco sem a migração 044: tenta de novo sem o campo de grupo.
+  if (/group_name/i.test(error.message)) {
+    const semGrupo = comCoach.map(({ group_name: _g, ...r }) => r)  // eslint-disable-line @typescript-eslint/no-unused-vars
+    const retry = await sb.from('workout_library').insert(semGrupo).select('id')
+    if (retry.error) { console.error('[queries]', retry.error.message); return { count: 0, error: retry.error.message } }
+    return { count: retry.data?.length ?? rows.length, semGrupo: true }
+  }
+  return { count: 0, error: error.message }
+}
+
+/** Move vários treinos da biblioteca para uma pasta (ou tira da pasta). */
+export async function bulkSetLibraryGroup(ids: string[], grupo: string | null): Promise<number> {
+  if (ids.length === 0) return 0
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_library').update({ group_name: grupo }).in('id', ids).select('id')
   if (error) { console.error('[queries]', error.message); return 0 }
-  return data?.length ?? rows.length
+  return data?.length ?? 0
 }
 
 export async function updateLibraryWorkout(id: string, patch: Partial<Omit<WorkoutLibraryRow, 'id'>>): Promise<boolean> {

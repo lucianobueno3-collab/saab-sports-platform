@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   getTrainingPrograms, saveTrainingProgram, deleteTrainingProgram, getWorkoutLibrary,
-  bulkCreateLibraryWorkouts,
+  bulkCreateLibraryWorkouts, bulkSetLibraryGroup,
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
-import { programWorkoutsToLibrary, apenasNovos } from '@/lib/program-to-library'
+import { programWorkoutsToLibrary, apenasNovos, paraMoverDeGrupo } from '@/lib/program-to-library'
 import { progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
@@ -59,15 +59,13 @@ export function ProgramComposer() {
 
     // Os treinos vão junto para a biblioteca: é lá que o treinador pega um
     // treino solto, e ter que lembrar de um segundo botão só atrapalha.
-    const novos = apenasNovos(programWorkoutsToLibrary(ex.weeks, ex.name), await getWorkoutLibrary())
-    const naBiblioteca = novos.length ? await bulkCreateLibraryWorkouts(novos) : 0
+    const bib = await sincronizarBiblioteca(ex.weeks, ex.name)
 
     const list = await getTrainingPrograms()
     setPrograms(list)
     setAviso({
-      texto: `"${ex.name}" ${existente ? 'atualizado' : 'criado'} com ${ex.weeks.length} semanas.`
-        + (naBiblioteca ? ` ${naBiblioteca} treino${naBiblioteca > 1 ? 's' : ''} ${naBiblioteca > 1 ? 'foram' : 'foi'} para a biblioteca.` : ' Os treinos já estavam na biblioteca.'),
-      ok: true,
+      texto: `"${ex.name}" ${existente ? 'atualizado' : 'criado'} com ${ex.weeks.length} semanas. ${bib.texto}`,
+      ok: bib.ok,
     })
     const alvo = list.find(p => p.id === res.id)
     if (alvo) setEditing(alvo)
@@ -78,20 +76,48 @@ export function ProgramComposer() {
    */
   async function enviarParaBiblioteca(p: TrainingProgramRow) {
     setBusy(true); setAviso(null)
-    const candidatos = programWorkoutsToLibrary(p.weeks, p.name)
-    const novos = apenasNovos(candidatos, await getWorkoutLibrary())
-    if (novos.length === 0) {
-      setBusy(false)
-      setAviso({ texto: `Os ${candidatos.length} treinos de "${p.name}" já estão na biblioteca.`, ok: true })
-      return
-    }
-    const gravados = await bulkCreateLibraryWorkouts(novos)
+    const bib = await sincronizarBiblioteca(p.weeks, p.name)
     setBusy(false)
-    setAviso({
-      texto: `${gravados} treino${gravados > 1 ? 's' : ''} de "${p.name}" ${gravados > 1 ? 'foram enviados' : 'foi enviado'} para a biblioteca.`
-        + (candidatos.length > gravados ? ` Os outros ${candidatos.length - gravados} já estavam lá.` : ''),
+    setAviso({ texto: bib.texto, ok: bib.ok })
+  }
+
+  /**
+   * Põe os treinos do plano na biblioteca e corrige a pasta dos que já estão lá.
+   *
+   * Só inserir não bastava: um treino gravado antes ficava para sempre sem
+   * pasta, porque a checagem de duplicado o pulava e nada nunca o atualizava.
+   * Era o caso de quem apagou o plano, recarregou, e viu tudo igual.
+   */
+  async function sincronizarBiblioteca(weeks: ProgramWeek[], nome: string): Promise<{ texto: string; ok: boolean }> {
+    const candidatos = programWorkoutsToLibrary(weeks, nome)
+    const biblioteca = await getWorkoutLibrary()
+    const novos = apenasNovos(candidatos, biblioteca)
+
+    // Os que já existem mas estão fora da pasta certa.
+    const paraMover = paraMoverDeGrupo(candidatos, biblioteca, nome)
+
+    const movidos = paraMover.length ? await bulkSetLibraryGroup(paraMover, nome) : 0
+    if (novos.length === 0) {
+      return movidos
+        ? { texto: `${movidos} treino${movidos > 1 ? 's' : ''} da biblioteca ${movidos > 1 ? 'foram movidos' : 'foi movido'} para a pasta "${nome}".`, ok: true }
+        : { texto: `Os ${candidatos.length} treinos já estão na biblioteca, na pasta certa.`, ok: true }
+    }
+
+    const res = await bulkCreateLibraryWorkouts(novos)
+    if (res.error) {
+      return {
+        texto: `Não foi possível gravar os treinos na biblioteca: ${res.error}`
+          + (/group_name|column/i.test(res.error) ? ' Rode a migração 044 no Supabase.' : ''),
+        ok: false,
+      }
+    }
+    const partes = [`${res.count} treino${res.count > 1 ? 's' : ''} ${res.count > 1 ? 'foram' : 'foi'} para a biblioteca`]
+    if (movidos) partes.push(`${movidos} ${movidos > 1 ? 'foram movidos' : 'foi movido'} para a pasta "${nome}"`)
+    return {
+      texto: partes.join(' e ') + '.'
+        + (res.semGrupo ? ' As pastas não foram criadas: falta rodar a migração 044 no Supabase.' : ''),
       ok: true,
-    })
+    }
   }
 
   const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes)
