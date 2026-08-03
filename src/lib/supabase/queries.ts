@@ -237,6 +237,51 @@ export async function deletePlannedWorkout(id: string): Promise<boolean> {
   return true
 }
 
+export type BulkDeleteScope = {
+  /** Data inicial (inclusive), formato AAAA-MM-DD. Sem valor = desde sempre. */
+  from?: string | null
+  /** Data final (inclusive). Sem valor = até o fim do plano. */
+  to?: string | null
+  /** Apagar também o que o aluno já concluiu. Fora isso, o histórico fica. */
+  includeCompleted?: boolean
+}
+
+/**
+ * Quantos treinos seriam apagados — para mostrar o número ANTES de apagar.
+ *
+ * Sem isso o treinador confirmaria às cegas, e apagar o plano inteiro de um
+ * aluno não tem desfazer.
+ */
+export async function countPlannedWorkouts(athleteId: string, scope: BulkDeleteScope): Promise<number> {
+  const sb = createClient()
+  let q = sb.from('planned_workouts').select('id', { count: 'exact', head: true }).eq('athlete_id', athleteId)
+  if (scope.from) q = q.gte('date', scope.from)
+  if (scope.to) q = q.lte('date', scope.to)
+  if (!scope.includeCompleted) q = q.eq('completed', false)
+  const { count, error } = await q
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return count ?? 0
+}
+
+/**
+ * Apaga vários treinos programados de um aluno.
+ *
+ * Por padrão NÃO toca no que já foi concluído: o histórico do aluno é o registro
+ * do que ele fez, e apagar isso distorceria a carga e as conquistas dele.
+ */
+export async function bulkDeletePlannedWorkouts(
+  athleteId: string, scope: BulkDeleteScope,
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  const sb = createClient()
+  let q = sb.from('planned_workouts').delete().eq('athlete_id', athleteId)
+  if (scope.from) q = q.gte('date', scope.from)
+  if (scope.to) q = q.lte('date', scope.to)
+  if (!scope.includeCompleted) q = q.eq('completed', false)
+  const { data, error } = await q.select('id')
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: data?.length ?? 0 }
+}
+
 /** Insere vários treinos programados de uma vez (ao aplicar um plano). */
 export async function bulkCreatePlannedWorkouts(rows: PlannedWorkoutInput[]): Promise<{ ok: boolean; count: number; error?: string }> {
   if (rows.length === 0) return { ok: true, count: 0 }

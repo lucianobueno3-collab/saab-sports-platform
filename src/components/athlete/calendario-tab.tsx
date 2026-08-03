@@ -12,6 +12,7 @@ import { structureForTitle } from '@/lib/training-plans'
 import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-options'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import type { Thresholds } from '@/lib/workout-export'
 import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
@@ -60,6 +61,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [detailActivity, setDetailActivity] = useState<ActivityRow | null>(null)
   const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
+  const [showRemove, setShowRemove] = useState(false)
+  const [removidos, setRemovidos] = useState<number | null>(null)
   const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
@@ -383,9 +386,21 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
               <Sparkles className="w-3.5 h-3.5" /> Aplicar plano
             </button>
           )}
+          {!readOnly && (
+            <button onClick={() => setShowRemove(true)} title="Remover treinos em lote"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-muted-foreground hover:text-red-400 hover:bg-secondary">
+              <Trash2 className="w-3.5 h-3.5" /> Remover
+            </button>
+          )}
         </div>
       </div>
 
+
+      {removidos != null && (
+        <p className="text-xs font-semibold rounded-lg px-3 py-2.5 mb-3" style={{ background: '#00d08414', color: '#00d084' }}>
+          {removidos === 0 ? 'Nenhum treino foi removido.' : `${removidos} treino${removidos > 1 ? 's' : ''} removido${removidos > 1 ? 's' : ''} do calendário.`}
+        </p>
+      )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
@@ -536,6 +551,11 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       )}
 
       {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} />}
+
+      {showRemove && (
+        <RemoveWorkoutsModal athleteId={athleteId} onClose={() => setShowRemove(false)}
+          onRemoved={n => { setShowRemove(false); setRemovidos(n); load(); setTimeout(() => setRemovidos(null), 6000) }} />
+      )}
 
       {showPlan && (
         <ApplyPlanModal athleteId={athleteId} defaultSport={defaultSport}
