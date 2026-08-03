@@ -9,10 +9,13 @@ import {
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow, type PlannedWorkoutInput,
 } from '@/lib/supabase/queries'
 import {
-  PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, type PlanDef,
+  PLAN_LIBRARY, generatePlan, planTotals, PLAN_SPORT_LABEL, structureForTitle, type PlanDef,
 } from '@/lib/training-plans'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import type { Thresholds } from '@/lib/workout-export'
+import { createClient } from '@/lib/supabase/client'
+import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import {
   ChevronLeft, ChevronRight, Plus, X, Loader2, Trash2, CheckCircle2, Circle,
@@ -61,6 +64,27 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
+  const [th, setTh] = useState<Thresholds>({})
+
+  // Limiares do atleta: permitem mostrar "Z2 = 6:10–6:40/km" no detalhe do treino.
+  useEffect(() => {
+    const chave = offlineKey.thresholds(athleteId)
+    ;(async () => {
+      try {
+        const { data } = await createClient().from('athletes')
+          .select('lthr_run_bpm, lthr_bpm, threshold_pace_sec_km').eq('id', athleteId).maybeSingle()
+        const a = data as { lthr_run_bpm?: number | null; lthr_bpm?: number | null; threshold_pace_sec_km?: number | null } | null
+        if (a) {
+          const t: Thresholds = { lthr: a.lthr_run_bpm ?? a.lthr_bpm ?? null, thresholdPaceSecKm: a.threshold_pace_sec_km ?? null }
+          setTh(t); saveSnapshot(chave, t)
+        }
+      } catch {
+        // Sem internet: usa os limiares da última visita.
+        const copia = readSnapshot<Thresholds>(chave)
+        if (copia) setTh(copia.data)
+      }
+    })()
+  }, [athleteId])
 
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart])
   const monthGridStart = useMemo(() => startOfWeek(monthAnchor), [monthAnchor])
@@ -323,7 +347,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
         </div>
 
         {detail && (
-          <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)}
+          <WorkoutDetailModal workout={detail} thresholds={th} onClose={() => setDetail(null)}
             onComplete={(rpe, notes) => completeWorkout(detail, rpe, notes)}
             onReopen={() => toggleDone(detail)} />
         )}
@@ -507,7 +531,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       )}
 
       {detail && (
-        <WorkoutDetailModal workout={detail} onClose={() => setDetail(null)}
+        <WorkoutDetailModal workout={detail} thresholds={th} onClose={() => setDetail(null)}
           onComplete={(rpe, notes) => completeWorkout(detail, rpe, notes)}
           onReopen={() => toggleDone(detail)} />
       )}
@@ -725,8 +749,8 @@ function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; 
 }
 
 // Detalhe do treino (visão do atleta): leitura + concluir com check-in simples
-function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
-  workout: PlannedWorkoutRow; onClose: () => void
+function WorkoutDetailModal({ workout, thresholds, onClose, onComplete, onReopen }: {
+  workout: PlannedWorkoutRow; thresholds?: Thresholds; onClose: () => void
   onComplete: (rpe: number, notes: string) => Promise<void>; onReopen: () => void
 }) {
   const [mounted, setMounted] = useState(false)
@@ -734,6 +758,11 @@ function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
   const [rpe, setRpe] = useState(6)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
+  // Treinos aplicados antes da versão estruturada ficaram sem passos: remonta
+  // a partir do catálogo, pelo título, para o aluno não ver só uma frase.
+  const estrutura = workout.structure?.length
+    ? workout.structure
+    : structureForTitle(workout.title, workout.planned_duration_min)
   async function finish() {
     setSaving(true)
     await onComplete(rpe, notes)
@@ -762,10 +791,10 @@ function WorkoutDetailModal({ workout, onClose, onComplete, onReopen }: {
           </div>
         </div>
         <div className="p-5 space-y-4">
-          {workout.structure && workout.structure.length > 0 && (
+          {estrutura && estrutura.length > 0 && (
             <div>
-              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Passos (para o relógio)</p>
-              <WorkoutSteps title={workout.title} sport={workout.sport} structure={workout.structure} />
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Como fazer este treino</p>
+              <WorkoutSteps title={workout.title} sport={workout.sport} structure={estrutura} thresholds={thresholds} plannedTss={workout.planned_tss} />
             </div>
           )}
           {workout.description && (
@@ -1005,7 +1034,7 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
       const d = addDays(startDate, (wk.week - 1) * 7 + s.day)
       rows.push({
         athlete_id: athleteId, date: ymd(d), sport: s.sport, title: s.title,
-        description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss,
+        description: s.description, planned_duration_min: s.duration_min, planned_tss: s.tss, structure: s.structure,
       })
     }
     const res = await bulkCreatePlannedWorkouts(rows)

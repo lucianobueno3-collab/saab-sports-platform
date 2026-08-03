@@ -11,12 +11,22 @@ import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
+import { structureForTitle } from '@/lib/training-plans'
 import type { Thresholds } from '@/lib/workout-export'
 import {
   Footprints, Bike, Waves, Dumbbell, Activity as ActIcon,
   CheckCircle2, Circle, Loader2, Flame, Target, Trophy, Moon, ChevronRight,
   CalendarClock, X, MessageCircle, Send, SkipForward, CloudOff,
 } from 'lucide-react'
+
+/**
+ * Passos do treino: os salvos ou, para planos aplicados antes da versão
+ * estruturada, remontados pelo título do catálogo. Sem isso o aluno continua
+ * vendo só a frase da descrição nos treinos que já estão no calendário dele.
+ */
+function passosDe(w: PlannedWorkoutRow) {
+  return w.structure?.length ? w.structure : structureForTitle(w.title, w.planned_duration_min)
+}
 
 const RED = '#e8001c'
 const SPORTS: Record<string, { label: string; color: string; icon: typeof Footprints }> = {
@@ -194,6 +204,7 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
               const s = sportOf(w.sport)
               const Icon = s.icon
               const isOpen = open === w.id
+              const passos = passosDe(w)
               return (
                 <div key={w.id}>
                   <button onClick={() => setOpen(isOpen ? null : w.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-secondary/40 transition-colors text-left">
@@ -206,15 +217,15 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
                         {dayLabel(w.date)}{fmtDur(w.planned_duration_min) ? ` · ${fmtDur(w.planned_duration_min)}` : ''}
                       </p>
                     </div>
-                    {w.structure && w.structure.length > 0 && (
-                      <div className="hidden sm:block w-20 shrink-0"><StructureBar structure={w.structure} height={8} /></div>
+                    {passos && passos.length > 0 && (
+                      <div className="hidden sm:block w-20 shrink-0"><StructureBar structure={passos} height={8} /></div>
                     )}
                     <ChevronRight className={`w-4 h-4 text-muted-foreground shrink-0 transition-transform ${isOpen ? 'rotate-90' : ''}`} />
                   </button>
                   {isOpen && (
                     <div className="px-4 pb-4">
-                      {w.structure && w.structure.length > 0
-                        ? <WorkoutSteps title={w.title} sport={w.sport} structure={w.structure} thresholds={th} />
+                      {passos && passos.length > 0
+                        ? <WorkoutSteps title={w.title} sport={w.sport} structure={passos} thresholds={th} plannedTss={w.planned_tss} />
                         : <p className="text-xs text-muted-foreground whitespace-pre-line">{w.description || 'Sem detalhes adicionais.'}</p>}
                     </div>
                   )}
@@ -234,6 +245,7 @@ function HeroCard({ w, th, busy, onToggle, onNotDone, onChat, extra }: {
 }) {
   const s = sportOf(w.sport)
   const Icon = s.icon
+  const passos = passosDe(w)
   const [showSteps, setShowSteps] = useState(false)
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--card)', border: `1px solid ${s.color}44` }}>
@@ -259,16 +271,16 @@ function HeroCard({ w, th, busy, onToggle, onNotDone, onChat, extra }: {
           </div>
         </div>
 
-        {w.structure && w.structure.length > 0 && (
+        {passos && passos.length > 0 && (
           <div className="mt-3.5">
-            <StructureBar structure={w.structure} height={12} />
+            <StructureBar structure={passos} height={12} />
             <button onClick={() => setShowSteps(v => !v)} className="mt-2 text-[11px] font-bold hover:underline" style={{ color: s.color }}>
               {showSteps ? 'Ocultar passos' : 'Ver passo a passo'}
             </button>
-            {showSteps && <div className="mt-2.5"><WorkoutSteps title={w.title} sport={w.sport} structure={w.structure} thresholds={th} /></div>}
+            {showSteps && <div className="mt-2.5"><WorkoutSteps title={w.title} sport={w.sport} structure={passos} thresholds={th} plannedTss={w.planned_tss} /></div>}
           </div>
         )}
-        {!w.structure?.length && w.description && (
+        {!passos?.length && w.description && (
           <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{w.description}</p>
         )}
 
