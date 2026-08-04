@@ -7,13 +7,14 @@ import {
   type WorkoutLibraryRow, type LibExercise,
 } from '@/lib/supabase/queries'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
-import { gruposExistentes, grupoDe } from '@/lib/library-groups'
+import { agruparBiblioteca, gruposExistentes } from '@/lib/library-groups'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
   Activity as ActIcon, Clock, Flame, Library, Watch, CalendarDays, Search, ListChecks, LayoutGrid, List,
+  ChevronRight, FolderOpen,
 } from 'lucide-react'
 import { ProgramComposer } from '@/components/treinos/program-composer'
 
@@ -47,12 +48,20 @@ export default function TreinosPage() {
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
   useEffect(() => { load() }, [])
 
-  const filtered = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
-    return items.filter(i =>
-      (filter === 'all' || i.sport === filter) &&
-      (!termo || i.title.toLowerCase().includes(termo) || (i.description ?? '').toLowerCase().includes(termo)))
-  }, [items, filter, busca])
+  // A biblioteca é vista por pasta, igual ao painel encostado no calendário —
+  // com 25 treinos de um plano, a lista corrida não diz de onde cada um veio.
+  const grupos = useMemo(() => agruparBiblioteca(items, busca, filter), [items, busca, filter])
+  const totalVisivel = useMemo(() => grupos.reduce((s, g) => s + g.treinos.length, 0), [grupos])
+  const [fechados, setFechados] = useState<Set<string>>(new Set())
+  // Buscando, tudo abre: esconder resultado atrás de pasta fechada é frustrante.
+  const buscando = busca.trim().length > 0
+  function alternarPasta(nome: string) {
+    setFechados(prev => {
+      const p = new Set(prev)
+      if (p.has(nome)) p.delete(nome); else p.add(nome)
+      return p
+    })
+  }
   const countBySport = useMemo(() => {
     const m: Record<string, number> = {}; for (const i of items) m[i.sport] = (m[i.sport] ?? 0) + 1; return m
   }, [items])
@@ -147,29 +156,59 @@ export default function TreinosPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : filtered.length === 0 ? (
+        ) : totalVisivel === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Library className="w-10 h-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-semibold text-foreground">Nenhum treino na biblioteca</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-sm">
-              Cadastre um treino aqui, ou carregue um plano em <b className="text-foreground">Planos de treinamento</b> — os treinos dele vêm para cá automaticamente.
+            <p className="text-sm font-semibold text-foreground">
+              {items.length === 0 ? 'Nenhum treino na biblioteca' : 'Nenhum treino encontrado'}
             </p>
-            <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar treino</button>
+            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-sm">
+              {items.length === 0
+                ? <>Cadastre um treino aqui, ou carregue um plano em <b className="text-foreground">Planos de treinamento</b> — os treinos dele vêm para cá automaticamente.</>
+                : 'Tente outro termo, ou volte o filtro de modalidade para Todos.'}
+            </p>
+            {items.length === 0 && (
+              <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar treino</button>
+            )}
           </div>
         ) : (
-          modo === 'lista' ? (
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-              {filtered.map((w, i) => (
-                <WorkoutRow key={w.id} w={w} primeiro={i === 0} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filtered.map(w => (
-                <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
-              ))}
-            </div>
-          )
+          <div className="space-y-3">
+            {grupos.map(g => {
+              const aberto = buscando || !fechados.has(g.nome)
+              const minutos = g.treinos.reduce((s, w) => s + (w.duration_min ?? 0), 0)
+              return (
+                <section key={g.nome}>
+                  <button onClick={() => alternarPasta(g.nome)}
+                    className="w-full flex items-center gap-2 px-1 py-2 rounded-lg hover:bg-secondary/40 transition-colors text-left group/pasta">
+                    <ChevronRight className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${aberto ? 'rotate-90' : ''}`} />
+                    <FolderOpen className="w-4 h-4 shrink-0" style={{ color: '#e8001c' }} />
+                    <span className="text-sm font-black text-foreground truncate">{g.nome}</span>
+                    <span className="text-[11px] font-bold text-muted-foreground tabular-nums shrink-0">({g.treinos.length})</span>
+                    <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                    {minutos > 0 && (
+                      <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{(minutos / 60).toFixed(1)}h</span>
+                    )}
+                  </button>
+
+                  {aberto && (
+                    modo === 'lista' ? (
+                      <div className="rounded-2xl overflow-hidden mt-1" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                        {g.treinos.map((w, i) => (
+                          <WorkoutRow key={w.id} w={w} primeiro={i === 0} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-1">
+                        {g.treinos.map(w => (
+                          <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+                        ))}
+                      </div>
+                    )
+                  )}
+                </section>
+              )
+            })}
+          </div>
         )}
       </div>
       )}
@@ -206,7 +245,8 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-black text-foreground leading-tight">{w.title}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5 truncate" style={{ color: info.color }}>{grupoDe(w)}</p>
+            {/* A pasta já é o cabeçalho da seção — aqui vale a modalidade. */}
+            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5 truncate" style={{ color: info.color }}>{info.label}</p>
           </div>
 
           {/* Ações discretas, visíveis ao passar o mouse (sempre no toque) */}
