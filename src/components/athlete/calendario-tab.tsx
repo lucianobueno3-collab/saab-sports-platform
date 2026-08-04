@@ -12,6 +12,7 @@ import { structureForTitle } from '@/lib/training-plans'
 import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-options'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import { LibraryPanel } from '@/components/athlete/library-panel'
 import type { Thresholds } from '@/lib/workout-export'
@@ -178,7 +179,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     await createPlannedWorkout({
       athlete_id: athleteId, date, sport: w.sport, title: w.title,
       description: w.description ?? null, planned_duration_min: w.duration_min ?? null,
-      planned_tss: w.tss ?? null, structure: w.structure ?? null,
+      planned_tss: w.tss ?? null, structure: w.structure ?? null, exercises: w.exercises ?? null,
     })
     load()
   }
@@ -187,7 +188,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     await createPlannedWorkout({
       athlete_id: athleteId, date, sport: w.sport, title: w.title,
       description: w.description ?? null, planned_duration_min: w.duration_min ?? null,
-      planned_tss: w.tss ?? null, structure: w.structure ?? null,
+      planned_tss: w.tss ?? null, structure: w.structure ?? null, exercises: w.exercises ?? null,
     })
     load()
   }
@@ -196,7 +197,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     await createPlannedWorkout({
       athlete_id: athleteId, date: p.date, sport: p.sport, title: p.title,
       description: p.description, planned_duration_min: p.planned_duration_min,
-      planned_tss: p.planned_tss, structure: p.structure,
+      planned_tss: p.planned_tss, structure: p.structure, exercises: p.exercises ?? null,
     })
     load()
   }
@@ -843,7 +844,14 @@ function WorkoutDetailModal({ workout, thresholds, onClose, onComplete, onReopen
               <WorkoutSteps title={workout.title} sport={workout.sport} structure={estrutura} thresholds={thresholds} plannedTss={workout.planned_tss} />
             </div>
           )}
-          {workout.description && (
+          {workout.exercises && workout.exercises.length > 0 && (
+            <div>
+              <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-2">Como fazer este treino</p>
+              <StrengthSteps exercises={workout.exercises} />
+            </div>
+          )}
+          {/* Com os exercícios na tela, a descrição vira repetição do que já está acima. */}
+          {workout.description && !(workout.exercises?.length) && (
             <div>
               <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider mb-1">Instruções</p>
               <p className="text-sm text-foreground whitespace-pre-line leading-relaxed">{workout.description}</p>

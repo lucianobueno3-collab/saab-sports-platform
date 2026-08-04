@@ -10,6 +10,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { structureForTitle } from '@/lib/training-plans'
 import type { Thresholds } from '@/lib/workout-export'
@@ -226,6 +227,8 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
                     <div className="px-4 pb-4">
                       {passos && passos.length > 0
                         ? <WorkoutSteps title={w.title} sport={w.sport} structure={passos} thresholds={th} plannedTss={w.planned_tss} />
+                        : w.exercises?.length
+                        ? <StrengthSteps exercises={w.exercises} />
                         : <p className="text-xs text-muted-foreground whitespace-pre-line">{w.description || 'Sem detalhes adicionais.'}</p>}
                     </div>
                   )}
@@ -280,7 +283,15 @@ function HeroCard({ w, th, busy, onToggle, onNotDone, onChat, extra }: {
             {showSteps && <div className="mt-2.5"><WorkoutSteps title={w.title} sport={w.sport} structure={passos} thresholds={th} plannedTss={w.planned_tss} /></div>}
           </div>
         )}
-        {!passos?.length && w.description && (
+        {!passos?.length && w.exercises?.length ? (
+          <div className="mt-3.5">
+            <button onClick={() => setShowSteps(v => !v)} className="text-[11px] font-bold hover:underline" style={{ color: s.color }}>
+              {showSteps ? 'Ocultar exercícios' : `Ver os ${w.exercises.length} exercícios`}
+            </button>
+            {showSteps && <div className="mt-2.5"><StrengthSteps exercises={w.exercises} /></div>}
+          </div>
+        ) : null}
+        {!passos?.length && !w.exercises?.length && w.description && (
           <p className="text-sm text-muted-foreground mt-3 whitespace-pre-line">{w.description}</p>
         )}
 

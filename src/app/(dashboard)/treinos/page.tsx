@@ -7,13 +7,16 @@ import {
   type WorkoutLibraryRow, type LibExercise,
 } from '@/lib/supabase/queries'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
-import { gruposExistentes, grupoDe } from '@/lib/library-groups'
+import { agruparBiblioteca, gruposExistentes } from '@/lib/library-groups'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { StrengthSteps } from '@/components/athlete/strength-steps'
+import { estimarForca } from '@/lib/fase-1-forca'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import {
   Plus, X, Loader2, Trash2, Pencil, Dumbbell, Bike, Footprints, Waves,
   Activity as ActIcon, Clock, Flame, Library, Watch, CalendarDays, Search, ListChecks, LayoutGrid, List,
+  ChevronRight, FolderOpen,
 } from 'lucide-react'
 import { ProgramComposer } from '@/components/treinos/program-composer'
 
@@ -47,19 +50,29 @@ export default function TreinosPage() {
   async function load() { setLoading(true); setItems(await getWorkoutLibrary()); setLoading(false) }
   useEffect(() => { load() }, [])
 
-  const filtered = useMemo(() => {
-    const termo = busca.trim().toLowerCase()
-    return items.filter(i =>
-      (filter === 'all' || i.sport === filter) &&
-      (!termo || i.title.toLowerCase().includes(termo) || (i.description ?? '').toLowerCase().includes(termo)))
-  }, [items, filter, busca])
+  // A biblioteca é vista por pasta, igual ao painel encostado no calendário —
+  // com 25 treinos de um plano, a lista corrida não diz de onde cada um veio.
+  const grupos = useMemo(() => agruparBiblioteca(items, busca, filter), [items, busca, filter])
+  const totalVisivel = useMemo(() => grupos.reduce((s, g) => s + g.treinos.length, 0), [grupos])
+  const [fechados, setFechados] = useState<Set<string>>(new Set())
+  // Buscando, tudo abre: esconder resultado atrás de pasta fechada é frustrante.
+  const buscando = busca.trim().length > 0
+  function alternarPasta(nome: string) {
+    setFechados(prev => {
+      const p = new Set(prev)
+      if (p.has(nome)) p.delete(nome); else p.add(nome)
+      return p
+    })
+  }
   const countBySport = useMemo(() => {
     const m: Record<string, number> = {}; for (const i of items) m[i.sport] = (m[i.sport] ?? 0) + 1; return m
   }, [items])
   // Números do topo: o acervo inteiro, não o que está filtrado.
   const gruposSugeridos = useMemo(() => gruposExistentes(items), [items])
   const totalHoras = useMemo(() => items.reduce((s, i) => s + (i.duration_min ?? 0), 0) / 60, [items])
-  const estruturados = useMemo(() => items.filter(i => i.structure?.length).length, [items])
+  // Passo a passo é `structure` na corrida e `exercises` na força — as duas
+  // formas do treino chegar pronto ao aluno.
+  const estruturados = useMemo(() => items.filter(i => i.structure?.length || i.exercises?.length).length, [items])
 
   async function remove(id: string) { await deleteLibraryWorkout(id); load() }
 
@@ -147,29 +160,59 @@ export default function TreinosPage() {
 
         {loading ? (
           <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : filtered.length === 0 ? (
+        ) : totalVisivel === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Library className="w-10 h-10 text-muted-foreground/40 mb-3" />
-            <p className="text-sm font-semibold text-foreground">Nenhum treino na biblioteca</p>
-            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-sm">
-              Cadastre um treino aqui, ou carregue um plano em <b className="text-foreground">Planos de treinamento</b> — os treinos dele vêm para cá automaticamente.
+            <p className="text-sm font-semibold text-foreground">
+              {items.length === 0 ? 'Nenhum treino na biblioteca' : 'Nenhum treino encontrado'}
             </p>
-            <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar treino</button>
+            <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-sm">
+              {items.length === 0
+                ? <>Cadastre um treino aqui, ou carregue um plano em <b className="text-foreground">Planos de treinamento</b> — os treinos dele vêm para cá automaticamente.</>
+                : 'Tente outro termo, ou volte o filtro de modalidade para Todos.'}
+            </p>
+            {items.length === 0 && (
+              <button onClick={() => setModal({})} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">Criar treino</button>
+            )}
           </div>
         ) : (
-          modo === 'lista' ? (
-            <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-              {filtered.map((w, i) => (
-                <WorkoutRow key={w.id} w={w} primeiro={i === 0} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filtered.map(w => (
-                <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
-              ))}
-            </div>
-          )
+          <div className="space-y-3">
+            {grupos.map(g => {
+              const aberto = buscando || !fechados.has(g.nome)
+              const minutos = g.treinos.reduce((s, w) => s + (w.duration_min ?? 0), 0)
+              return (
+                <section key={g.nome}>
+                  <button onClick={() => alternarPasta(g.nome)}
+                    className="w-full flex items-center gap-2 px-1 py-2 rounded-lg hover:bg-secondary/40 transition-colors text-left group/pasta">
+                    <ChevronRight className={`w-4 h-4 shrink-0 text-muted-foreground transition-transform ${aberto ? 'rotate-90' : ''}`} />
+                    <FolderOpen className="w-4 h-4 shrink-0" style={{ color: '#e8001c' }} />
+                    <span className="text-sm font-black text-foreground truncate">{g.nome}</span>
+                    <span className="text-[11px] font-bold text-muted-foreground tabular-nums shrink-0">({g.treinos.length})</span>
+                    <span className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                    {minutos > 0 && (
+                      <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{(minutos / 60).toFixed(1)}h</span>
+                    )}
+                  </button>
+
+                  {aberto && (
+                    modo === 'lista' ? (
+                      <div className="rounded-2xl overflow-hidden mt-1" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+                        {g.treinos.map((w, i) => (
+                          <WorkoutRow key={w.id} w={w} primeiro={i === 0} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mt-1">
+                        {g.treinos.map(w => (
+                          <WorkoutCard key={w.id} w={w} onEdit={() => setModal({ edit: w })} onRemove={() => remove(w.id)} />
+                        ))}
+                      </div>
+                    )
+                  )}
+                </section>
+              )
+            })}
+          </div>
         )}
       </div>
       )}
@@ -190,6 +233,7 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
   const info = sportInfo(w.sport)
   const temEstrutura = Boolean(w.structure?.length)
   const passos = w.structure?.length ?? 0
+  const temExercicios = Boolean(w.exercises?.length)
 
   return (
     <div className="group relative rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5"
@@ -206,7 +250,8 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
           </span>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-black text-foreground leading-tight">{w.title}</p>
-            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5 truncate" style={{ color: info.color }}>{grupoDe(w)}</p>
+            {/* A pasta já é o cabeçalho da seção — aqui vale a modalidade. */}
+            <p className="text-[10px] font-bold uppercase tracking-wide mt-0.5 truncate" style={{ color: info.color }}>{info.label}</p>
           </div>
 
           {/* Ações discretas, visíveis ao passar o mouse (sempre no toque) */}
@@ -221,11 +266,12 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
         </div>
 
         {/* Números numa fileira só */}
-        {(w.duration_min || w.tss || temEstrutura) && (
+        {(w.duration_min || w.tss || temEstrutura || temExercicios) && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground mt-2.5 tabular-nums">
             {w.duration_min ? <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{w.duration_min} min</span> : null}
             {w.tss ? <span className="flex items-center gap-1"><Flame className="w-3 h-3" />{w.tss} TSS</span> : null}
             {temEstrutura ? <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{passos} {passos === 1 ? 'bloco' : 'blocos'}</span> : null}
+            {w.exercises?.length ? <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{w.exercises.length} exercícios</span> : null}
           </div>
         )}
 
@@ -316,6 +362,9 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
 
   const isStrength = sport === 'strength'
   const est = structured ? estimateStructure(structure) : null
+  // Linhas em branco não entram na prévia nem na estimativa.
+  const exFiltrados = useMemo(() => exercises.filter(x => x.name.trim()), [exercises])
+  const estForca = useMemo(() => estimarForca(exFiltrados), [exFiltrados])
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
@@ -325,8 +374,10 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
       sport, title: title.trim(),
       group_name: grupo.trim() || null,
       description: desc.trim() || (useStruct ? structureSummary(structure) : '') || null,
-      duration_min: useStruct ? est!.min : (dur ? parseInt(dur) : null),
-      tss: useStruct ? est!.tss : (tss ? parseInt(tss) : null),
+      // Força sem duração digitada usa a estimativa dos exercícios: um treino
+      // sem duração não entra na carga da semana nem aparece no calendário.
+      duration_min: useStruct ? est!.min : (dur ? parseInt(dur) : (isStrength && exFiltrados.length ? estForca.min : null)),
+      tss: useStruct ? est!.tss : (tss ? parseInt(tss) : (isStrength && exFiltrados.length ? estForca.tss : null)),
       structure: useStruct ? structure : null,
       exercises: isStrength ? cleanEx : null,
     }
@@ -379,23 +430,43 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
           {isStrength ? (
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Exercícios</label>
+              <div className="hidden sm:flex items-center gap-1.5 mb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                <span className="flex-1">Exercício</span>
+                <span className="w-12 text-center">Séries</span>
+                <span className="w-[70px] text-center">Reps</span>
+                <span className="w-14 text-center">Desc.</span>
+                <span className="w-16">Carga</span>
+                <span className="w-6" />
+              </div>
               <div className="space-y-2">
                 {exercises.map((ex, i) => (
                   <div key={i} className="flex items-center gap-1.5">
                     <input value={ex.name} onChange={e => setEx(i, { name: e.target.value })} placeholder="Exercício" className={cls + ' flex-1'} />
-                    <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} placeholder="3" className={cls + ' w-12 text-center px-1'} />
-                    <span className="text-muted-foreground text-xs">×</span>
-                    <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="10" className={cls + ' w-14 text-center px-1'} />
+                    <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} placeholder="4" className={cls + ' w-12 text-center px-1'} />
+                    <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="12/12/10/8" title="Uma repetição por série, separadas por barra — ex.: 12/12/10/8" className={cls + ' w-[70px] text-center px-1'} />
+                    <input value={ex.rest_s ?? ''} onChange={e => setEx(i, { rest_s: e.target.value ? parseInt(e.target.value) : null })} inputMode="numeric" placeholder="45" title="Intervalo entre séries, em segundos" className={cls + ' w-14 text-center px-1'} />
                     <input value={ex.load} onChange={e => setEx(i, { load: e.target.value })} placeholder="carga" className={cls + ' w-16 px-1'} />
                     <button type="button" onClick={() => setExercises(a => a.filter((_, j) => j !== i))} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
               </div>
-              <button type="button" onClick={() => setExercises(a => [...a, { name: '', sets: '3', reps: '10', load: '' }])}
+              <button type="button" onClick={() => setExercises(a => [...a, { name: '', sets: '4', reps: '12/12/10/8', load: '', rest_s: 45 }])}
                 className="mt-2 text-[11px] font-bold text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> exercício</button>
+              <p className="text-[10px] text-muted-foreground mt-1.5">
+                Em <b className="text-foreground">Reps</b>, uma repetição por série separada por barra — <b className="text-foreground">12/12/10/8</b> é a pirâmide, com a carga subindo. Um número só vale para todas as séries; use <b className="text-foreground">45s</b> para prancha e isometria.
+              </p>
+
+              {exFiltrados.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-1.5">Como o aluno vai ver</p>
+                  <StrengthSteps exercises={exFiltrados} compact />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">Estimativa: {estForca.min} min · {estForca.tss} TSS — pode ajustar abaixo.</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3 mt-3">
-                <div><label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label><input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder="45" className={cls} /></div>
-                <div><label className="block text-xs font-medium text-foreground mb-1.5">TSS (opcional)</label><input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="30" className={cls} /></div>
+                <div><label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label><input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder={String(estForca.min || 45)} className={cls} /></div>
+                <div><label className="block text-xs font-medium text-foreground mb-1.5">TSS (opcional)</label><input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder={String(estForca.tss || 30)} className={cls} /></div>
               </div>
             </div>
           ) : (
