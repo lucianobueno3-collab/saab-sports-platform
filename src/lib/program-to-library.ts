@@ -10,9 +10,14 @@ import { structureSummary } from '@/lib/workout-structure'
 
 export type LibraryDraft = Omit<WorkoutLibraryRow, 'id'>
 
-/** Identidade de um treino: mesmo esporte, mesmo título e mesmos passos. */
-function chave(sport: string, title: string, structure: unknown) {
-  return `${sport}::${title.trim().toLowerCase()}::${JSON.stringify(structure ?? null)}`
+/**
+ * Identidade de um treino: mesmo esporte, mesmo título e mesmo conteúdo.
+ *
+ * O conteúdo é `structure` na corrida e `exercises` na força — duas sessões de
+ * sala com o mesmo nome e exercícios diferentes são treinos diferentes.
+ */
+function chave(sport: string, title: string, structure: unknown, exercises?: unknown) {
+  return `${sport}::${title.trim().toLowerCase()}::${JSON.stringify(structure ?? null)}::${JSON.stringify(exercises ?? null)}`
 }
 
 /**
@@ -32,7 +37,7 @@ export function programWorkoutsToLibrary(weeks: ProgramWeek[], grupo?: string): 
   weeks.forEach(wk => wk.workouts.forEach(w => {
     const t = w.title.trim().toLowerCase()
     if (!versoesPorTitulo.has(t)) versoesPorTitulo.set(t, new Set())
-    versoesPorTitulo.get(t)!.add(chave(w.sport, w.title, w.structure))
+    versoesPorTitulo.get(t)!.add(chave(w.sport, w.title, w.structure, w.exercises))
   }))
 
   const vistos = new Set<string>()
@@ -40,7 +45,7 @@ export function programWorkoutsToLibrary(weeks: ProgramWeek[], grupo?: string): 
 
   weeks.forEach((wk, i) => {
     for (const w of wk.workouts) {
-      const k = chave(w.sport, w.title, w.structure)
+      const k = chave(w.sport, w.title, w.structure, w.exercises)
       if (vistos.has(k)) continue
       vistos.add(k)
 
@@ -53,7 +58,7 @@ export function programWorkoutsToLibrary(weeks: ProgramWeek[], grupo?: string): 
         duration_min: w.duration_min ?? null,
         tss: w.tss ?? null,
         structure: w.structure ?? null,
-        exercises: null,
+        exercises: w.exercises ?? null,
       })
     }
   })

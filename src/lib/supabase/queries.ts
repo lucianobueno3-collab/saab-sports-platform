@@ -168,6 +168,8 @@ export type PlannedWorkoutRow = {
   planned_tss: number | null
   completed: boolean
   structure: import('@/lib/workout-structure').WorkoutStructure | null
+  /** Exercícios, quando é treino de força (migração 045). */
+  exercises?: LibExercise[] | null
   skipped?: boolean
   skip_reason?: string | null
   moved_from?: string | null
@@ -176,14 +178,14 @@ export type PlannedWorkoutRow = {
 
 /** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
 export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
-  const cols = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, activity_id'
+  const cols = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, exercises, activity_id'
   try {
     const sb = createClient()
     const { data, error } = await sb.from('planned_workouts')
       .select(cols)
       .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
     if (error) {
-      // banco sem a migração 027 (activity_id): repete sem a coluna
+      // banco sem a migração 027 (activity_id) ou 045 (exercises): repete sem elas
       console.error('[queries]', error.message)
       const retry = await sb.from('planned_workouts')
         .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
@@ -213,14 +215,27 @@ export type PlannedWorkoutInput = {
   athlete_id: string; date: string; sport: string; title: string
   description?: string | null; planned_duration_min?: number | null; planned_tss?: number | null
   structure?: import('@/lib/workout-structure').WorkoutStructure | null
+  exercises?: LibExercise[] | null
+}
+
+/** Tira `exercises` das linhas — resgate para banco sem a migração 045. */
+function semExercicios<T extends { exercises?: unknown }>(rows: T[]): Omit<T, 'exercises'>[] {
+  return rows.map(({ exercises: _ignorado, ...resto }) => resto)
 }
 
 export async function createPlannedWorkout(input: PlannedWorkoutInput): Promise<boolean> {
   const sb = createClient()
   const { data: { user } } = await sb.auth.getUser()
-  const { error } = await sb.from('planned_workouts').insert({ ...input, created_by: user?.id ?? null })
-  if (error) { console.error('[queries]', error.message); return false }
-  return true
+  const linha = { ...input, created_by: user?.id ?? null }
+  const { error } = await sb.from('planned_workouts').insert(linha)
+  if (!error) return true
+  // Banco sem a migração 045: grava o treino sem os exercícios em vez de perdê-lo.
+  if (/exercises/i.test(error.message)) {
+    const { error: e2 } = await sb.from('planned_workouts').insert(semExercicios([linha])[0])
+    if (!e2) return true
+    console.error('[queries]', e2.message); return false
+  }
+  console.error('[queries]', error.message); return false
 }
 
 export async function updatePlannedWorkout(id: string, patch: Partial<PlannedWorkoutInput> & { completed?: boolean }): Promise<boolean> {
@@ -289,13 +304,36 @@ export async function bulkCreatePlannedWorkouts(rows: PlannedWorkoutInput[]): Pr
   const { data: { user } } = await sb.auth.getUser()
   const payload = rows.map(r => ({ ...r, created_by: user?.id ?? null }))
   const { data, error } = await sb.from('planned_workouts').insert(payload).select('id')
-  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
-  return { ok: true, count: data?.length ?? rows.length }
+  if (!error) return { ok: true, count: data?.length ?? rows.length }
+  // Banco sem a migração 045: aplica o plano sem os exercícios em vez de falhar
+  // inteiro — perder o plano do aluno é pior do que perder a lista de exercícios.
+  if (/exercises/i.test(error.message)) {
+    const r2 = await sb.from('planned_workouts').insert(semExercicios(payload)).select('id')
+    if (!r2.error) return { ok: true, count: r2.data?.length ?? rows.length }
+    console.error('[queries]', r2.error.message)
+    return { ok: false, count: 0, error: r2.error.message }
+  }
+  console.error('[queries]', error.message)
+  return { ok: false, count: 0, error: error.message }
 }
 
 // ─── Biblioteca de treinos do treinador (migração 021) ──────────────────────
 
-export type LibExercise = { name: string; sets: string; reps: string; load: string }
+/**
+ * Um exercício de força.
+ *
+ * `sets` e `reps` são texto porque vêm de campo livre: `reps` aceita tanto "12"
+ * quanto a pirâmide "12/12/10/8", uma repetição por série. `rest_s` é o
+ * intervalo entre séries — sem ele o passo a passo não tem como cronometrar.
+ */
+export type LibExercise = {
+  name: string; sets: string; reps: string; load: string
+  /** Grupo muscular, só para leitura. */
+  muscle?: string
+  /** Intervalo entre séries, em segundos. */
+  rest_s?: number | null
+  note?: string
+}
 export type WorkoutLibraryRow = {
   id: string; sport: string; title: string; description: string | null
   duration_min: number | null; tss: number | null

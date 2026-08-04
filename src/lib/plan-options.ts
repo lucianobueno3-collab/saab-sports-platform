@@ -33,10 +33,18 @@ export type PlanoOpcao = {
   linhas: (athleteId: string, inicio: Date, dias?: number[], diaDoLongao?: number | null) => PlannedWorkoutInput[]
 }
 
-/** Dias de corrida da primeira semana — o padrão que o plano já traz. */
+/**
+ * Dias principais da primeira semana — o padrão que o plano já traz.
+ *
+ * A força normalmente é complemento e cai nos dias que sobram, então não conta.
+ * Mas num plano só de sala ela é o treino principal: aí valem os dias dela,
+ * senão o modal ofereceria "0 dias para escolher".
+ */
 function diasDoPlano(weeks: ProgramWeek[]): number[] {
   const primeira = weeks[0]?.workouts ?? []
-  return [...new Set(primeira.filter(x => x.sport !== 'strength').map(x => x.day))].sort((a, b) => a - b)
+  const principais = primeira.filter(x => x.sport !== 'strength')
+  const base = principais.length ? principais : primeira
+  return [...new Set(base.map(x => x.day))].sort((a, b) => a - b)
 }
 
 function somar(weeks: ProgramWeek[]) {
@@ -64,7 +72,7 @@ export function opcaoDePlanoSalvo(p: TrainingProgramRow): PlanoOpcao {
       expandProgram(p.weeks, inicio, dias, diaDoLongao).map(x => ({
         athlete_id: athleteId, date: x.date, sport: x.sport, title: x.title,
         description: x.description, planned_duration_min: x.planned_duration_min,
-        planned_tss: x.planned_tss, structure: x.structure,
+        planned_tss: x.planned_tss, structure: x.structure, exercises: x.exercises,
       })),
   }
 }

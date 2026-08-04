@@ -9,6 +9,8 @@ import {
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { agruparBiblioteca, gruposExistentes } from '@/lib/library-groups'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { StrengthSteps } from '@/components/athlete/strength-steps'
+import { estimarForca } from '@/lib/fase-1-forca'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import {
@@ -68,7 +70,9 @@ export default function TreinosPage() {
   // Números do topo: o acervo inteiro, não o que está filtrado.
   const gruposSugeridos = useMemo(() => gruposExistentes(items), [items])
   const totalHoras = useMemo(() => items.reduce((s, i) => s + (i.duration_min ?? 0), 0) / 60, [items])
-  const estruturados = useMemo(() => items.filter(i => i.structure?.length).length, [items])
+  // Passo a passo é `structure` na corrida e `exercises` na força — as duas
+  // formas do treino chegar pronto ao aluno.
+  const estruturados = useMemo(() => items.filter(i => i.structure?.length || i.exercises?.length).length, [items])
 
   async function remove(id: string) { await deleteLibraryWorkout(id); load() }
 
@@ -229,6 +233,7 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
   const info = sportInfo(w.sport)
   const temEstrutura = Boolean(w.structure?.length)
   const passos = w.structure?.length ?? 0
+  const temExercicios = Boolean(w.exercises?.length)
 
   return (
     <div className="group relative rounded-2xl overflow-hidden transition-all hover:-translate-y-0.5"
@@ -261,11 +266,12 @@ function WorkoutCard({ w, onEdit, onRemove }: { w: WorkoutLibraryRow; onEdit: ()
         </div>
 
         {/* Números numa fileira só */}
-        {(w.duration_min || w.tss || temEstrutura) && (
+        {(w.duration_min || w.tss || temEstrutura || temExercicios) && (
           <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground mt-2.5 tabular-nums">
             {w.duration_min ? <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{w.duration_min} min</span> : null}
             {w.tss ? <span className="flex items-center gap-1"><Flame className="w-3 h-3" />{w.tss} TSS</span> : null}
             {temEstrutura ? <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{passos} {passos === 1 ? 'bloco' : 'blocos'}</span> : null}
+            {w.exercises?.length ? <span className="flex items-center gap-1"><ListChecks className="w-3 h-3" />{w.exercises.length} exercícios</span> : null}
           </div>
         )}
 
@@ -356,6 +362,9 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
 
   const isStrength = sport === 'strength'
   const est = structured ? estimateStructure(structure) : null
+  // Linhas em branco não entram na prévia nem na estimativa.
+  const exFiltrados = useMemo(() => exercises.filter(x => x.name.trim()), [exercises])
+  const estForca = useMemo(() => estimarForca(exFiltrados), [exFiltrados])
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setSaving(true)
@@ -365,8 +374,10 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
       sport, title: title.trim(),
       group_name: grupo.trim() || null,
       description: desc.trim() || (useStruct ? structureSummary(structure) : '') || null,
-      duration_min: useStruct ? est!.min : (dur ? parseInt(dur) : null),
-      tss: useStruct ? est!.tss : (tss ? parseInt(tss) : null),
+      // Força sem duração digitada usa a estimativa dos exercícios: um treino
+      // sem duração não entra na carga da semana nem aparece no calendário.
+      duration_min: useStruct ? est!.min : (dur ? parseInt(dur) : (isStrength && exFiltrados.length ? estForca.min : null)),
+      tss: useStruct ? est!.tss : (tss ? parseInt(tss) : (isStrength && exFiltrados.length ? estForca.tss : null)),
       structure: useStruct ? structure : null,
       exercises: isStrength ? cleanEx : null,
     }
@@ -419,23 +430,43 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
           {isStrength ? (
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Exercícios</label>
+              <div className="hidden sm:flex items-center gap-1.5 mb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
+                <span className="flex-1">Exercício</span>
+                <span className="w-12 text-center">Séries</span>
+                <span className="w-[70px] text-center">Reps</span>
+                <span className="w-14 text-center">Desc.</span>
+                <span className="w-16">Carga</span>
+                <span className="w-6" />
+              </div>
               <div className="space-y-2">
                 {exercises.map((ex, i) => (
                   <div key={i} className="flex items-center gap-1.5">
                     <input value={ex.name} onChange={e => setEx(i, { name: e.target.value })} placeholder="Exercício" className={cls + ' flex-1'} />
-                    <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} placeholder="3" className={cls + ' w-12 text-center px-1'} />
-                    <span className="text-muted-foreground text-xs">×</span>
-                    <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="10" className={cls + ' w-14 text-center px-1'} />
+                    <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} placeholder="4" className={cls + ' w-12 text-center px-1'} />
+                    <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="12/12/10/8" title="Uma repetição por série, separadas por barra — ex.: 12/12/10/8" className={cls + ' w-[70px] text-center px-1'} />
+                    <input value={ex.rest_s ?? ''} onChange={e => setEx(i, { rest_s: e.target.value ? parseInt(e.target.value) : null })} inputMode="numeric" placeholder="45" title="Intervalo entre séries, em segundos" className={cls + ' w-14 text-center px-1'} />
                     <input value={ex.load} onChange={e => setEx(i, { load: e.target.value })} placeholder="carga" className={cls + ' w-16 px-1'} />
                     <button type="button" onClick={() => setExercises(a => a.filter((_, j) => j !== i))} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
                   </div>
                 ))}
               </div>
-              <button type="button" onClick={() => setExercises(a => [...a, { name: '', sets: '3', reps: '10', load: '' }])}
+              <button type="button" onClick={() => setExercises(a => [...a, { name: '', sets: '4', reps: '12/12/10/8', load: '', rest_s: 45 }])}
                 className="mt-2 text-[11px] font-bold text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> exercício</button>
+              <p className="text-[10px] text-muted-foreground mt-1.5">
+                Em <b className="text-foreground">Reps</b>, uma repetição por série separada por barra — <b className="text-foreground">12/12/10/8</b> é a pirâmide, com a carga subindo. Um número só vale para todas as séries; use <b className="text-foreground">45s</b> para prancha e isometria.
+              </p>
+
+              {exFiltrados.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-1.5">Como o aluno vai ver</p>
+                  <StrengthSteps exercises={exFiltrados} compact />
+                  <p className="text-[10px] text-muted-foreground mt-1.5 tabular-nums">Estimativa: {estForca.min} min · {estForca.tss} TSS — pode ajustar abaixo.</p>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-3 mt-3">
-                <div><label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label><input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder="45" className={cls} /></div>
-                <div><label className="block text-xs font-medium text-foreground mb-1.5">TSS (opcional)</label><input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder="30" className={cls} /></div>
+                <div><label className="block text-xs font-medium text-foreground mb-1.5">Duração (min)</label><input type="number" min="0" value={dur} onChange={e => setDur(e.target.value)} placeholder={String(estForca.min || 45)} className={cls} /></div>
+                <div><label className="block text-xs font-medium text-foreground mb-1.5">TSS (opcional)</label><input type="number" min="0" value={tss} onChange={e => setTss(e.target.value)} placeholder={String(estForca.tss || 30)} className={cls} /></div>
               </div>
             </div>
           ) : (

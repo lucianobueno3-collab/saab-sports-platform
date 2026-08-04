@@ -7,11 +7,14 @@ import {
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { programWorkoutsToLibrary, apenasNovos, paraMoverDeGrupo } from '@/lib/program-to-library'
-import { progressao5kIniciantes, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
+import { progressao5kIniciantes, fase1Forca, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
   Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays, Library,
 } from 'lucide-react'
+
+/** Um modelo pronto de plano — o que os botões "Carregar …" gravam. */
+type ModeloPronto = ReturnType<typeof progressao5kIniciantes> | ReturnType<typeof fase1Forca>
 
 const RED = '#e8001c'
 const SPORTS = [
@@ -47,12 +50,12 @@ export function ProgramComposer() {
    * outro. Sem isso, cada clique deixava um duplicado para trás e o treinador
    * não sabia qual dos dois estava sendo aplicado aos alunos.
    */
-  async function sincronizarModelo(modelo: () => ReturnType<typeof progressao5kIniciantes>) {
+  async function sincronizarModelo(modelo: () => ModeloPronto, packageKey: string | null = null) {
     setBusy(true); setAviso(null)
     const ex = modelo()
     const existente = programs.find(p => p.name.trim().toLowerCase() === ex.name.trim().toLowerCase())
     const res = await saveTrainingProgram({
-      ...ex, id: existente?.id, package_key: existente?.package_key ?? 'primeiros_5k', active: true,
+      ...ex, id: existente?.id, package_key: existente?.package_key ?? packageKey, active: true,
     })
     setBusy(false)
     if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o plano.', ok: false }); return }
@@ -120,7 +123,10 @@ export function ProgramComposer() {
     }
   }
 
-  const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes)
+  // A PROGRESSÃO 5K é o plano do pacote "primeiros_5k": é por essa chave que a
+  // matrícula sabe qual plano aplicar. A FASE 1 FORÇA não vende pacote.
+  const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes, 'primeiros_5k')
+  const criarFase1Forca = () => sincronizarModelo(fase1Forca)
 
   if (editing) return <ProgramEditor program={editing === 'new' ? null : editing} onClose={() => { setEditing(null); load() }} />
 
@@ -134,6 +140,9 @@ export function ProgramComposer() {
         <div className="flex flex-wrap gap-2">
           <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Carregar PROGRESSÃO 5K INICIANTES
+          </button>
+          <button onClick={criarFase1Forca} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Dumbbell className="w-4 h-4" />} Carregar FASE 1 FORÇA
           </button>
           <button onClick={() => setEditing('new')} className="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90">
             <Plus className="w-4 h-4" /> Novo plano
