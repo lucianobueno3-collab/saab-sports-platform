@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { publicEnroll, type PublicEnrollInput } from '@/lib/supabase/queries'
-import { ChevronLeft, ChevronRight, Check, Loader2, Footprints, AlertTriangle } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Loader2, Footprints, AlertTriangle, Timer } from 'lucide-react'
+import { limiarDeEsforco, lerTempo, lerDistancia, fmtRitmo } from '@/lib/ritmo-limiar'
 
 // ─── Funil "Meus primeiros 5 km": cadastro + anamnese (FÓRMULA RIO INICIAL) ──
 // Formulário em etapas, com ramificação por "está correndo atualmente?".
@@ -19,6 +20,9 @@ type Data = {
   goal: string | null
   preferred_days: number[]
   long_run_day: number | null
+  /** Esforço cronometrado recente — de onde sai o ritmo de limiar do aluno. */
+  esforco_km: string
+  esforco_tempo: string
   website: string // honeypot
 }
 
@@ -27,7 +31,8 @@ const EMPTY: Data = {
   age: '', height_cm: '', weight_kg: '',
   currently_running: null, running_level: null, activity_level: null,
   // objetivo fixo: este funil é dedicado aos primeiros 5 km
-  days_running: null, weekly_distance: null, goal: '5km', preferred_days: [], long_run_day: null, website: '',
+  days_running: null, weekly_distance: null, goal: '5km', preferred_days: [], long_run_day: null,
+  esforco_km: '', esforco_tempo: '', website: '',
 }
 
 // Dias corridos consecutivos (calendário), incluindo a virada Domingo→Segunda.
@@ -102,7 +107,7 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
     const s: string[] = ['contato', 'running_now']
     if (d.currently_running === true) s.push('running_level', 'days_running', 'weekly_distance')
     else if (d.currently_running === false) s.push('activity_level')
-    s.push('preferred_days')
+    s.push('esforco', 'preferred_days')
     if (d.preferred_days.length > 1) s.push('long_run_day')
     s.push('review')
     return s
@@ -110,6 +115,15 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
 
   const key = screens[Math.min(step, screens.length - 1)]
   const progress = Math.round(((step + 1) / screens.length) * 100)
+
+  // Ritmo estimado ao vivo, para o aluno conferir o que digitou antes de seguir.
+  const esforco = useMemo(() => {
+    const km = lerDistancia(d.esforco_km)
+    const seg = lerTempo(d.esforco_tempo)
+    return km != null && seg != null ? { km, seg } : null
+  }, [d.esforco_km, d.esforco_tempo])
+  const ritmoPrevisto = esforco ? limiarDeEsforco({ km: esforco.km, segundos: esforco.seg }) : null
+  const esforcoInvalido = Boolean(d.esforco_km && d.esforco_tempo) && ritmoPrevisto == null
 
   const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email.trim())
   const contatoOk = d.full_name.trim().length > 1 && emailOk && d.password.length >= 6
@@ -123,6 +137,8 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
       case 'days_running': return !!d.days_running
       case 'weekly_distance': return !!d.weekly_distance
       case 'goal': return !!d.goal
+      // Opcional de propósito: quem nunca cronometrou nada não pode travar aqui.
+      case 'esforco': return true
       case 'preferred_days': return d.preferred_days.length > 0
       case 'long_run_day': return d.long_run_day != null
       default: return true
@@ -150,7 +166,9 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
       currently_running: d.currently_running,
       running_level: d.running_level, activity_level: d.activity_level,
       days_running: d.days_running, weekly_distance: d.weekly_distance,
-      goal: d.goal, preferred_days: d.preferred_days, long_run_day: d.long_run_day, website: d.website,
+      goal: d.goal, preferred_days: d.preferred_days, long_run_day: d.long_run_day,
+      recent_distance_km: esforco?.km ?? null, recent_time_sec: esforco?.seg ?? null,
+      website: d.website,
     }
     const res = await publicEnroll(input)
     if (!res.ok) { setError(res.error ?? 'Não foi possível concluir a matrícula.'); setSubmitting(false); return }
@@ -296,6 +314,42 @@ export function AnamneseFlow({ packageKey = 'primeiros_5k', packageTitle = 'Meus
             <div className="grid grid-cols-2 gap-3">
               {WEEKLY_DIST.map(o => <BigChoice key={o.v} active={d.weekly_distance === o.v} onClick={() => choose({ weekly_distance: o.v })}>{o.t}</BigChoice>)}
             </div>
+          </Screen>
+        )}
+
+        {key === 'esforco' && (
+          <Screen
+            title="Você já correu alguma distância cronometrada?"
+            subtitle="Pode ser uma prova ou um treino qualquer, mesmo devagar. É com isso que seus treinos passam a mostrar o ritmo em minutos por quilômetro, em vez de só a zona.">
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-xs font-semibold text-white/70 mb-1.5">Distância</span>
+                <input value={d.esforco_km} onChange={e => set({ esforco_km: e.target.value })}
+                  inputMode="decimal" placeholder="5" className={inputCls} />
+                <span className="block text-[11px] text-white/40 mt-1">em km</span>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-semibold text-white/70 mb-1.5">Tempo</span>
+                <input value={d.esforco_tempo} onChange={e => set({ esforco_tempo: e.target.value })}
+                  inputMode="numeric" placeholder="32:00" className={inputCls} />
+                <span className="block text-[11px] text-white/40 mt-1">min:seg</span>
+              </label>
+            </div>
+
+            {ritmoPrevisto && (
+              <div className="flex items-start gap-2.5 rounded-xl px-4 py-3 mt-4" style={{ background: '#ffffff12' }}>
+                <Timer className="w-4 h-4 shrink-0 mt-0.5" style={{ color: RED }} />
+                <p className="text-sm text-white/80 leading-relaxed">
+                  Seus treinos vão sair com ritmo por volta de <b className="text-white">{fmtRitmo(ritmoPrevisto)}/km</b>. Seu treinador ajusta depois de te ver correr.
+                </p>
+              </div>
+            )}
+            {esforcoInvalido && (
+              <p className="text-sm text-white/60 mt-4">Confira os números — algo ali não fecha. Ou deixe em branco e siga.</p>
+            )}
+            {!d.esforco_km && !d.esforco_tempo && (
+              <p className="text-sm text-white/50 mt-4">Nunca cronometrou? Pode pular. Seu treinador define seu ritmo depois.</p>
+            )}
           </Screen>
         )}
 
