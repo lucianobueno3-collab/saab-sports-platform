@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, type ElementType } from 'react'
+import { useCallback, useEffect, useState, type ElementType } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   getMyAthleteId, getMyRole, getAthleteSelf, updatePlannedWorkout, uploadAvatar,
-  getMyEnrollmentStatus,
+  getMyEnrollmentStatus, getAthleteUnreadCount,
   type CheckinRow, type PlannedWorkoutRow,
 } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
@@ -24,8 +24,9 @@ import { InstallAppCard, InstallCoach } from '@/components/pwa/install-app'
 import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
+import { RecadosTab } from '@/components/athlete/recados-tab'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
-import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users } from 'lucide-react'
+import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users, MessageCircle } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -48,7 +49,7 @@ type AthleteProfile = {
   vo2max_ml_kg_min: number | null
   avatar_url: string | null; full_name: string | null
 }
-type AtletaTab = 'calendario' | 'inicio' | 'saude' | 'nutricao' | 'metricas' | 'provas' | 'parceiros' | 'evolucao' | 'dados' | 'juntos'
+type AtletaTab = 'calendario' | 'inicio' | 'recados' | 'saude' | 'nutricao' | 'metricas' | 'provas' | 'parceiros' | 'evolucao' | 'dados' | 'juntos'
 
 export default function AtletaPage() {
   const sb = createClient()
@@ -58,7 +59,19 @@ export default function AtletaPage() {
   const [loading, setLoading] = useState(true)
   const [needsPassword, setNeedsPassword] = useState(false)
   const [canCoach, setCanCoach] = useState(false)
-  const [tab, setTab] = useState<AtletaTab>('calendario')
+  // Abre em "Hoje", não no calendário. A pergunta de quem abre o app de manhã
+  // é "o que eu faço hoje?" — a grade do mês é a tela de quem planeja.
+  const [tab, setTab] = useState<AtletaTab>('inicio')
+  // Contador de recados não lidos: é o que faz a resposta do treinador chegar.
+  // Sem ele, o aviso vivia dentro de uma aba e quem não entrava lá nunca via.
+  const [naoLidos, setNaoLidos] = useState(0)
+  const carregarNaoLidos = useCallback(async () => {
+    if (!athleteId) return
+    setNaoLidos(await getAthleteUnreadCount(athleteId).catch(() => 0))
+  }, [athleteId])
+  // Recarrega ao trocar de aba: o aluno também lê recados dentro do treino, e
+  // o contador tem de acompanhar isso.
+  useEffect(() => { carregarNaoLidos() }, [carregarNaoLidos, tab])
   const [moreOpen, setMoreOpen] = useState(false)
   // portão de aprovação: enquanto a anamnese estiver 'pending', o aluno vê a
   // tela de boas-vindas em vez do portal (o treinador ainda vai montar o plano).
@@ -143,13 +156,14 @@ export default function AtletaPage() {
   // Menu inferior (estilo TrainingPeaks): 4 principais + "Mais"
   type TabDef = { key: AtletaTab; label: string; icon: ElementType }
   const primaryTabs: TabDef[] = [
-    { key: 'calendario', label: 'Calendário', icon: CalendarDays },
     { key: 'inicio', label: 'Hoje', icon: Activity },
-    { key: 'juntos', label: 'Juntos', icon: Users },
+    { key: 'calendario', label: 'Calendário', icon: CalendarDays },
+    { key: 'recados', label: 'Recados', icon: MessageCircle },
     { key: 'saude', label: 'Saúde', icon: Heart },
     { key: 'evolucao', label: 'Evolução', icon: Target },
   ]
   const moreTabs: TabDef[] = [
+    { key: 'juntos', label: 'Juntos', icon: Users },
     { key: 'provas', label: 'Provas', icon: Trophy },
     { key: 'parceiros', label: 'Parceiros', icon: Handshake },
     { key: 'dados', label: 'Meus dados', icon: UserRound },
@@ -179,6 +193,9 @@ export default function AtletaPage() {
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
               style={tab === key ? { background: '#e8001c15', color: '#e8001c', border: '1px solid #e8001c40' } : { color: 'var(--muted-foreground)' }}>
               <Icon className="w-4 h-4 flex-shrink-0" /><span className="flex-1 text-left">{label}</span>
+              {key === 'recados' && naoLidos > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: '#e8001c' }}>{naoLidos}</span>
+              )}
             </button>
           ))}
         </nav>
@@ -325,6 +342,7 @@ export default function AtletaPage() {
       )}
 
       {tab === 'saude' && athleteId && <SaudeNutricaoTab athleteId={athleteId} sex={profile?.gender === 'M' || profile?.gender === 'F' ? profile.gender : null} />}
+      {tab === 'recados' && athleteId && <RecadosTab athleteId={athleteId} onLido={carregarNaoLidos} />}
       {tab === 'juntos' && <MeetupsTab athleteId={athleteId} athleteName={profile?.full_name ?? a.full_name} />}
       {tab === 'parceiros' && <PartnersTab />}
       {tab === 'provas' && athleteId && <ProvasTab athleteId={athleteId} />}
@@ -369,9 +387,14 @@ export default function AtletaPage() {
             const active = tab === key
             return (
               <button key={key} onClick={() => go(key)}
-                className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors"
+                className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors relative"
                 style={{ color: active ? '#e8001c' : 'var(--muted-foreground)' }}>
-                <Icon className="w-5 h-5" />
+                <span className="relative">
+                  <Icon className="w-5 h-5" />
+                  {key === 'recados' && naoLidos > 0 && (
+                    <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: '#e8001c' }}>{naoLidos}</span>
+                  )}
+                </span>
                 <span className="text-[10px] font-semibold">{label}</span>
               </button>
             )

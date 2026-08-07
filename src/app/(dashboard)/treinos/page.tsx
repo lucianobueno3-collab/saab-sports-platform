@@ -430,30 +430,57 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
           {isStrength ? (
             <div>
               <label className="block text-xs font-medium text-foreground mb-1.5">Exercícios</label>
-              <div className="hidden sm:flex items-center gap-1.5 mb-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wide">
-                <span className="flex-1">Exercício</span>
-                <span className="w-12 text-center">Séries</span>
-                <span className="w-[70px] text-center">Reps</span>
-                <span className="w-14 text-center">Desc.</span>
-                <span className="w-16">Carga</span>
-                <span className="w-6" />
-              </div>
-              <div className="space-y-2">
+              {/*
+                Cada exercício num bloco próprio, com o nome numa linha inteira.
+                Tudo numa linha só espremia o nome — o campo mais importante e o
+                único de texto livre — a uns 40px, enquanto séries e intervalo
+                tinham largura fixa de sobra.
+              */}
+              <div className="space-y-2.5">
                 {exercises.map((ex, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <input value={ex.name} onChange={e => setEx(i, { name: e.target.value })} placeholder="Exercício" className={cls + ' flex-1'} />
-                    <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} placeholder="4" className={cls + ' w-12 text-center px-1'} />
-                    <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="12/12/10/8" title="Uma repetição por série, separadas por barra — ex.: 12/12/10/8" className={cls + ' w-[70px] text-center px-1'} />
-                    <input value={ex.rest_s ?? ''} onChange={e => setEx(i, { rest_s: e.target.value ? parseInt(e.target.value) : null })} inputMode="numeric" placeholder="45" title="Intervalo entre séries, em segundos" className={cls + ' w-14 text-center px-1'} />
-                    <input value={ex.load} onChange={e => setEx(i, { load: e.target.value })} placeholder="carga" className={cls + ' w-16 px-1'} />
-                    <button type="button" onClick={() => setExercises(a => a.filter((_, j) => j !== i))} className="p-1 text-muted-foreground hover:text-red-400"><X className="w-3.5 h-3.5" /></button>
+                  <div key={i} className="rounded-lg p-2.5" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-black tabular-nums"
+                        style={{ background: '#e8001c1f', color: '#e8001c' }}>{i + 1}</span>
+                      <input value={ex.name} onChange={e => setEx(i, { name: e.target.value })} placeholder="Nome do exercício" className={cls + ' flex-1 min-w-0'} />
+                      <button type="button" onClick={() => setExercises(a => a.filter((_, j) => j !== i))}
+                        aria-label="Remover exercício" className="p-1.5 shrink-0 text-muted-foreground hover:text-red-400"><X className="w-4 h-4" /></button>
+                    </div>
+                    {/* Reps ocupa duas colunas: "12/12/10/8" nao cabe numa so. */}
+                    <div className="grid grid-cols-5 gap-1.5 mt-2 pl-[26px]">
+                      <label className="block">
+                        <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-0.5">Séries</span>
+                        <input value={ex.sets} onChange={e => setEx(i, { sets: e.target.value })} inputMode="numeric" placeholder="4" className={cls + ' text-center px-1'} />
+                      </label>
+                      <label className="block col-span-2">
+                        <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-0.5">Reps</span>
+                        <input value={ex.reps} onChange={e => setEx(i, { reps: e.target.value })} placeholder="12/12/10/8" className={cls + ' text-center px-1'} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-0.5">Interv.</span>
+                        <input value={ex.rest_s ?? ''} onChange={e => setEx(i, { rest_s: e.target.value ? parseInt(e.target.value) : null })}
+                          inputMode="numeric" placeholder="45" title="Intervalo entre séries, em segundos" className={cls + ' text-center px-1'} />
+                      </label>
+                      <label className="block">
+                        <span className="block text-[10px] font-bold text-muted-foreground uppercase tracking-wide mb-0.5">Carga</span>
+                        <input value={ex.load} onChange={e => setEx(i, { load: e.target.value })} placeholder="—" className={cls + ' text-center px-1'} />
+                      </label>
+                    </div>
+                    {/* O esquema mais usado a um toque: são 8 exercícios por sessão. */}
+                    <div className="flex flex-wrap gap-1 mt-1.5 pl-[26px]">
+                      {[{ t: '12/12/10/8', s: '4' }, { t: '15', s: '4' }, { t: '12', s: '3' }, { t: '45s', s: '3' }].map(o => (
+                        <button key={o.t} type="button" onClick={() => setEx(i, { reps: o.t, sets: o.s })}
+                          className="px-1.5 py-0.5 rounded text-[10px] font-bold text-muted-foreground hover:text-foreground"
+                          style={{ background: 'var(--secondary)' }}>{o.s}× {o.t}</button>
+                      ))}
+                    </div>
                   </div>
                 ))}
               </div>
               <button type="button" onClick={() => setExercises(a => [...a, { name: '', sets: '4', reps: '12/12/10/8', load: '', rest_s: 45 }])}
                 className="mt-2 text-[11px] font-bold text-muted-foreground hover:text-foreground flex items-center gap-1"><Plus className="w-3.5 h-3.5" /> exercício</button>
               <p className="text-[10px] text-muted-foreground mt-1.5">
-                Em <b className="text-foreground">Reps</b>, uma repetição por série separada por barra — <b className="text-foreground">12/12/10/8</b> é a pirâmide, com a carga subindo. Um número só vale para todas as séries; use <b className="text-foreground">45s</b> para prancha e isometria.
+                Em <b className="text-foreground">Reps</b>, uma repetição por série separada por barra — <b className="text-foreground">12/12/10/8</b> é a pirâmide, com a carga subindo. Um número só vale para todas as séries; use <b className="text-foreground">45s</b> para prancha e isometria. O intervalo é em segundos.
               </p>
 
               {exFiltrados.length > 0 && (

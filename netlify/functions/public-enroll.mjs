@@ -18,6 +18,20 @@ const WEEKLY_DIST = ['ate_15', '15_30', '30_40', '40_mais']
 const GOALS = ['5km', '10km', '21km', '42km']
 const pick = (v, allowed) => (allowed.includes(v) ? v : null)
 
+// Ritmo de limiar a partir do esforço cronometrado que o aluno informou.
+// Espelha src/lib/ritmo-limiar.ts — a Function não compartilha o bundle do app,
+// e sem isso o aluno entraria sem ritmo e veria "88-98%" em vez de min/km.
+// Riegel (1977): projeta o esforço para o que ele sustentaria em 1 hora.
+function limiarDeEsforco(km, segundos) {
+  if (!Number.isFinite(km) || !Number.isFinite(segundos)) return null
+  if (km < 0.8 || km > 42.5 || segundos <= 0) return null
+  const ritmo = segundos / km
+  if (ritmo < 120 || ritmo > 900) return null
+  const kmEmUmaHora = km * Math.pow(3600 / segundos, 1 / 1.06)
+  const limiar = Math.round(3600 / kmEmUmaHora)
+  return limiar >= 120 && limiar <= 900 ? limiar : null
+}
+
 // Matrícula pública: cria a conta do aluno + registro em athletes + anamnese.
 // Sem exigir login (é o funil de venda). A conta nasce com a senha escolhida
 // pela pessoa (não força troca) e e-mail já confirmado para entrar na hora.
@@ -76,6 +90,12 @@ export default async (req) => {
     if (Number(body.height_cm)) athletePayload.height_cm = Number(body.height_cm)
     if (Number(body.weight_kg)) athletePayload.weight_kg = Number(body.weight_kg)
 
+    // O ritmo de limiar é o que faz o treino chegar em min/km em vez de "88-98%".
+    const km = Number(body.recent_distance_km)
+    const seg = Number(body.recent_time_sec)
+    const limiar = limiarDeEsforco(km, seg)
+    if (limiar) athletePayload.threshold_pace_sec_km = limiar
+
     const { data: ath, error: aErr } = await admin.from('athletes').insert(athletePayload).select('id').single()
     if (aErr) throw aErr
     const athleteId = ath.id
@@ -94,8 +114,19 @@ export default async (req) => {
         ? body.preferred_days.filter(d => Number.isInteger(d) && d >= 0 && d <= 6)
         : null,
       long_run_day: Number.isInteger(body.long_run_day) && body.long_run_day >= 0 && body.long_run_day <= 6 ? body.long_run_day : null,
+      // Guardado cru para o treinador ver de onde saiu o ritmo, e refazer a
+      // conta se quiser: "5 km em 32:00" diz mais que "5:53/km".
+      recent_distance_km: limiar ? km : null,
+      recent_time_sec: limiar ? seg : null,
     }
-    const { error: anErr } = await admin.from('anamneses').insert(anamnese)
+    let { error: anErr } = await admin.from('anamneses').insert(anamnese)
+    if (anErr && /recent_distance_km|recent_time_sec/i.test(anErr.message ?? '')) {
+      // Banco sem a migração 046: matricula o aluno mesmo assim. O ritmo de
+      // limiar já foi gravado em athletes; o que se perde é só o registro de
+      // onde ele saiu. Derrubar a matrícula por causa disso seria muito pior.
+      const { recent_distance_km: _d, recent_time_sec: _t, ...semEsforco } = anamnese
+      ;({ error: anErr } = await admin.from('anamneses').insert(semEsforco))
+    }
     if (anErr) throw anErr
 
     return json({ ok: true, userId: uid, athleteId })
