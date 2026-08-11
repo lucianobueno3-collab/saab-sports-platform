@@ -3,7 +3,8 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { portalGetAthlete, portalGetCheckins, portalSubmitCheckin, type PortalAthlete, type CheckinRow } from '@/lib/supabase/queries'
-import { Activity, Heart, Moon, Battery, TrendingUp, Loader2, CheckCircle2, Dumbbell } from 'lucide-react'
+import { getBrand } from '@/lib/portal-brands'
+import { Activity, Heart, Moon, Battery, TrendingUp, Loader2, CheckCircle2, Dumbbell, Waves, Bike, Footprints } from 'lucide-react'
 
 function sportLabel(s: string) {
   const map: Record<string, string> = { running: 'Corrida', cycling: 'Ciclismo', triathlon: 'Triathlon', swimming: 'Natação', duathlon: 'Duathlon', other: 'Outro' }
@@ -103,16 +104,51 @@ function PortalContent() {
   const formColor = tsb == null ? '#888' : tsb >= 5 ? '#4ade80' : tsb >= -10 ? '#fbbf24' : '#ef4444'
   const formLabel = tsb == null ? '—' : tsb >= 5 ? 'Descansado' : tsb >= -10 ? 'Equilibrado' : 'Fadigado'
 
+  const brand = getBrand(athlete.portal_brand)
+  // Sobrescreve as variáveis do tema com as cores da marca — todo o subtree se rebranda
+  const brandVars = {
+    '--background': brand.bg, '--card': brand.card, '--border': brand.border,
+    '--foreground': brand.text, '--muted-foreground': brand.muted,
+    '--primary': brand.primary, '--secondary': brand.secondary,
+    background: brand.bg, color: brand.text, fontFamily: brand.bodyFont,
+  } as React.CSSProperties
+
   return (
-    <div className="min-h-screen max-w-lg mx-auto px-4 py-6 space-y-5">
-      {/* Header */}
+    <div style={brandVars} className="min-h-screen">
+    {/* Cabeçalho da marca */}
+    <div className="relative overflow-hidden" style={{ background: brand.id === 'caqui' ? brand.secondary : brand.card, borderBottom: `3px solid ${brand.primary}` }}>
+      {brand.diagonalMotif && (
+        <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
+          backgroundImage: `repeating-linear-gradient(115deg, transparent, transparent 22px, ${brand.primary} 22px, ${brand.primary} 24px)`,
+        }} />
+      )}
+      <div className="relative max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
+        <div>
+          {/* LOGO — placeholder tipográfico. Troque por <img src="/logo-caqui.png" .../> quando tiver o arquivo. */}
+          <h1 className="text-2xl leading-none tracking-tight" style={{ fontFamily: brand.headingFont, fontWeight: 900, color: brand.id === 'caqui' ? '#fff' : brand.text }}>
+            {brand.id === 'caqui' ? <>CAQUI<span style={{ color: brand.primary }}> PRO</span></> : brand.name}
+          </h1>
+          <p className="text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: brand.id === 'caqui' ? brand.primary : brand.muted, fontFamily: brand.headingFont, fontWeight: 700 }}>
+            {brand.tagline}
+          </p>
+        </div>
+        {brand.id === 'caqui' && (
+          <div className="flex gap-2" style={{ color: '#ffffff88' }}>
+            <Waves className="w-4 h-4" /><Bike className="w-4 h-4" /><Footprints className="w-4 h-4" />
+          </div>
+        )}
+      </div>
+    </div>
+
+    <div className="max-w-lg mx-auto px-4 py-6 space-y-5">
+      {/* Saudação do atleta */}
       <header className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary">
+        <div className="w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold" style={{ background: brand.primary + '22', border: `1px solid ${brand.primary}55`, color: brand.primary }}>
           {athlete.full_name.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
         </div>
         <div>
-          <h1 className="text-lg font-bold text-foreground leading-tight">{athlete.full_name}</h1>
-          <p className="text-xs text-muted-foreground">{sportLabel(athlete.primary_sport)} · Portal do Atleta</p>
+          <h2 className="text-lg font-bold leading-tight" style={{ fontFamily: brand.headingFont, color: brand.text }}>Olá, {athlete.full_name.split(' ')[0]}</h2>
+          <p className="text-xs" style={{ color: brand.muted }}>{sportLabel(athlete.primary_sport)} · Portal do Atleta</p>
         </div>
       </header>
 
@@ -224,7 +260,10 @@ function PortalContent() {
         </div>
       )}
 
-      <p className="text-center text-[10px] text-muted-foreground/60 pt-2">Saab Sports Performance Platform</p>
+      <p className="text-center text-[10px] pt-2" style={{ color: brand.muted }}>
+        {brand.id === 'caqui' ? 'Caqui Pro · Metodologia by SAAB Sports' : 'SAAB Sports Performance Platform'}
+      </p>
+    </div>
     </div>
   )
 }

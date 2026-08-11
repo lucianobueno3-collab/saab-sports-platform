@@ -33,6 +33,7 @@ export type AthleteRow = {
   initial_atl: number | null
   initial_date: string | null
   portal_token: string | null
+  portal_brand: 'saab' | 'caqui' | null
 }
 
 export type PMCRow = {
@@ -85,7 +86,7 @@ export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
   const [{ data: summary }, { data: extra }] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token, portal_brand').eq('id', id).single(),
   ])
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
@@ -347,6 +348,7 @@ export async function getAthleteDocuments(athleteId: string, area: 'saude' | 'nu
 export type PortalAthlete = {
   full_name: string
   primary_sport: string
+  portal_brand: 'saab' | 'caqui'
   metrics: {
     date: string; ctl: number | null; atl: number | null; tsb: number | null
     hrv_ms: number | null; body_battery: number | null; sleep_hours: number | null

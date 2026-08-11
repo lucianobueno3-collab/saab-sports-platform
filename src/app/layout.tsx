@@ -1,9 +1,12 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import { Inter, Montserrat, Open_Sans } from 'next/font/google'
 import { AuthProvider } from '@/context/auth-context'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
+// Fontes da marca Caqui Pro (usadas no portal do aluno)
+const montserrat = Montserrat({ subsets: ['latin'], variable: '--font-montserrat', weight: ['600', '700', '800', '900'] })
+const openSans = Open_Sans({ subsets: ['latin'], variable: '--font-open-sans' })
 
 export const metadata: Metadata = {
   title: 'Saab Sports Platform',
@@ -19,7 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           `try{if(localStorage.getItem('theme')==='light')document.documentElement.classList.remove('dark')}catch(e){}`
         }} />
       </head>
-      <body className={`${inter.variable} font-sans antialiased min-h-full`}>
+      <body className={`${inter.variable} ${montserrat.variable} ${openSans.variable} font-sans antialiased min-h-full`}>
         <AuthProvider>
           {children}
         </AuthProvider>

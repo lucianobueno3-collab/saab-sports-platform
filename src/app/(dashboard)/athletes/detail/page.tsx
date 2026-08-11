@@ -48,7 +48,7 @@ function AthleteDetailContent() {
   const [hrv, setHrv] = useState<DailyMetricRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
-  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '' })
+  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '', portal_brand: 'saab' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
@@ -85,6 +85,7 @@ function AthleteDetailContent() {
         initial_ctl: a.initial_ctl?.toString() ?? '',
         initial_atl: a.initial_atl?.toString() ?? '',
         initial_date: a.initial_date ?? '',
+        portal_brand: a.portal_brand ?? 'saab',
       })
       setPmc(p)
       setActivities(acts)
@@ -135,6 +136,7 @@ function AthleteDetailContent() {
       vo2max_ml_kg_min: editValues.vo2max_ml_kg_min ? parseFloat(editValues.vo2max_ml_kg_min) : null,
       weight_kg: editValues.weight_kg ? parseFloat(editValues.weight_kg) : null,
       primary_sport: editValues.primary_sport || athlete.primary_sport,
+      portal_brand: editValues.portal_brand || 'saab',
     }
     if (editValues.phone !== undefined) (updates as Record<string, unknown>).phone = editValues.phone.trim().replace(/\s/g, '') || null
     if (editValues.initial_ctl) (updates as Record<string, unknown>).initial_ctl = parseFloat(editValues.initial_ctl)
@@ -611,6 +613,26 @@ function AthleteDetailContent() {
                     <option key={s} value={s}>{sportLabel(s)}</option>
                   ))}
                 </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1.5">Marca do Portal do Aluno</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { id: 'saab', name: 'SAAB Sports', color: '#e8001c' },
+                    { id: 'caqui', name: 'Caqui Pro', color: '#e8551f' },
+                  ] as const).map(b => {
+                    const sel = editValues.portal_brand === b.id
+                    return (
+                      <button key={b.id} type="button" onClick={() => setEditValues(v => ({ ...v, portal_brand: b.id }))}
+                        className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-semibold transition-all"
+                        style={{ border: sel ? `2px solid ${b.color}` : '2px solid var(--border)', color: sel ? b.color : 'var(--muted-foreground)' }}>
+                        <span className="w-3 h-3 rounded-full" style={{ background: b.color }} />
+                        {b.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-1.5">Define a identidade visual pública que o aluno vê no portal (não afeta treinador/admin).</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
