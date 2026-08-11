@@ -27,6 +27,10 @@ export interface Brand {
   bodyFont: string
   /** mostra o motivo de linhas diagonais no cabeçalho */
   diagonalMotif: boolean
+  /** fundo do cabeçalho da marca */
+  headerBg: string
+  /** caminho do logo em imagem (em /public); null = usa wordmark tipográfico */
+  logoSrc: string | null
 }
 
 export const BRANDS: Record<BrandId, Brand> = {
@@ -44,6 +48,8 @@ export const BRANDS: Record<BrandId, Brand> = {
     headingFont: 'var(--font-sans)',
     bodyFont: 'var(--font-sans)',
     diagonalMotif: false,
+    headerBg: '#111118',
+    logoSrc: null,
   },
   caqui: {
     id: 'caqui',
@@ -59,6 +65,8 @@ export const BRANDS: Record<BrandId, Brand> = {
     headingFont: 'var(--font-montserrat)',
     bodyFont: 'var(--font-open-sans)',
     diagonalMotif: true,
+    headerBg: '#ffffff',   // Branco Ágil — combina com o fundo claro do logo
+    logoSrc: '/logo-caqui.png',
   },
 }
 

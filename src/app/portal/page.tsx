@@ -134,24 +134,30 @@ function PortalContent() {
   return (
     <div style={brandVars} className="min-h-screen">
     {/* Cabeçalho da marca */}
-    <div className="relative overflow-hidden" style={{ background: brand.id === 'caqui' ? brand.secondary : brand.card, borderBottom: `3px solid ${brand.primary}` }}>
+    <div className="relative overflow-hidden" style={{ background: brand.headerBg, borderBottom: `3px solid ${brand.primary}` }}>
       {brand.diagonalMotif && (
-        <div className="absolute inset-0 opacity-20 pointer-events-none" style={{
+        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{
           backgroundImage: `repeating-linear-gradient(115deg, transparent, transparent 22px, ${brand.primary} 22px, ${brand.primary} 24px)`,
         }} />
       )}
       <div className="relative max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
-        <div>
-          {/* LOGO — placeholder tipográfico. Troque por <img src="/logo-caqui.png" .../> quando tiver o arquivo. */}
-          <h1 className="text-2xl leading-none tracking-tight" style={{ fontFamily: brand.headingFont, fontWeight: 900, color: brand.id === 'caqui' ? '#fff' : brand.text }}>
-            {brand.id === 'caqui' ? <>CAQUI<span style={{ color: brand.primary }}> PRO</span></> : brand.name}
-          </h1>
-          <p className="text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: brand.id === 'caqui' ? brand.primary : brand.muted, fontFamily: brand.headingFont, fontWeight: 700 }}>
-            {brand.tagline}
-          </p>
+        <div className="flex items-center gap-3">
+          {brand.logoSrc ? (
+            // Logo em imagem (arquivo em /public). Se faltar, cai no wordmark tipográfico.
+            <img src={brand.logoSrc} alt={brand.name} className="h-14 w-auto object-contain"
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; (e.currentTarget.nextElementSibling as HTMLElement).style.display = 'block' }} />
+          ) : null}
+          <div style={{ display: brand.logoSrc ? 'none' : 'block' }}>
+            <h1 className="text-2xl leading-none tracking-tight" style={{ fontFamily: brand.headingFont, fontWeight: 900, color: brand.id === 'caqui' ? brand.secondary : brand.text }}>
+              {brand.id === 'caqui' ? <>CAQUI<span style={{ color: brand.primary }}> PRO</span></> : brand.name}
+            </h1>
+            <p className="text-[10px] uppercase tracking-[0.2em] mt-1" style={{ color: brand.primary, fontFamily: brand.headingFont, fontWeight: 700 }}>
+              {brand.tagline}
+            </p>
+          </div>
         </div>
         {brand.id === 'caqui' && (
-          <div className="flex gap-2" style={{ color: '#ffffff88' }}>
+          <div className="flex gap-2" style={{ color: brand.primary }}>
             <Waves className="w-4 h-4" /><Bike className="w-4 h-4" /><Footprints className="w-4 h-4" />
           </div>
         )}
