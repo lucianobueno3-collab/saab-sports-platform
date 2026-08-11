@@ -2,7 +2,9 @@
 
 import { useEffect, useState, useRef, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Printer, MessageCircle, ArrowLeft, ImageDown, Loader2 } from 'lucide-react'
+import { Printer, ArrowLeft, ImageDown, Loader2, Sparkles } from 'lucide-react'
+import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
+import { StoryCardModal, type StoryData } from '@/components/report/story-card'
 import Link from 'next/link'
 import {
   getAthlete, getAthletePMC, getAthleteHRV,
@@ -339,6 +341,7 @@ function ReportContent() {
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
   const [capturing, setCapturing] = useState(false)
+  const [storyOpen, setStoryOpen] = useState(false)
   const reportRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -627,6 +630,12 @@ function ReportContent() {
                 <p className="text-[8px] text-[#334455]">saab-sports-platform.netlify.app</p>
               </div>
               <div className="flex gap-2">
+                <button onClick={() => setStoryOpen(true)} disabled={exporting}
+                  className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold rounded-lg disabled:opacity-40 transition-colors"
+                  style={{ background: '#1a0f22', border: '1px solid #4a2a6a', color: '#c4a0ff' }}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Card com IA
+                </button>
                 <button onClick={handleDownloadPDF} disabled={exporting}
                   className="flex items-center gap-2 px-4 py-2 text-[12px] font-bold rounded-lg disabled:opacity-40 transition-colors"
                   style={{ background: '#131320', border: '1px solid var(--border)', color: '#aabbcc' }}>
@@ -636,7 +645,7 @@ function ReportContent() {
                 <button onClick={handleWhatsApp} disabled={exporting}
                   className="flex items-center gap-2 px-5 py-2 text-[12px] font-bold rounded-lg disabled:opacity-40 transition-colors"
                   style={{ background: '#071a0e', border: '1px solid #1a4a25', color: '#25d366' }}>
-                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                  {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <WhatsappIcon className="w-3.5 h-3.5" />}
                   {exporting ? 'Gerando PDF...' : 'Enviar no WhatsApp'}
                 </button>
               </div>
@@ -645,6 +654,41 @@ function ReportContent() {
           </div>
         </div>
       </div>
+
+      {storyOpen && (
+        <StoryCardModal onClose={() => setStoryOpen(false)} data={{
+          athleteName: athlete.full_name,
+          sport: sportLabel(athlete.primary_sport),
+          dateLabel: today,
+          ctl: lastPmc?.ctl ?? null,
+          atl: lastPmc?.atl ?? null,
+          tsb: lastPmc?.tsb ?? null,
+          tsbLabel,
+          hrv: latestM?.hrv_ms ?? null,
+          sleep: latestM?.sleep_hours ?? null,
+          readiness: readiness?.level ?? null,
+          readinessLabel: rc?.label ?? null,
+          tsbSpark,
+          ai: {
+            firstName: athlete.full_name.split(' ')[0],
+            sport: sportLabel(athlete.primary_sport),
+            ctl: lastPmc?.ctl ?? null,
+            atl: lastPmc?.atl ?? null,
+            tsb: lastPmc?.tsb ?? null,
+            tsbTrend: tsbSpark.length > 1
+              ? (tsbSpark[tsbSpark.length - 1] > tsbSpark[0] ? 'subindo (recuperando)' : tsbSpark[tsbSpark.length - 1] < tsbSpark[0] ? 'caindo (acumulando fadiga)' : 'estável')
+              : null,
+            hrv: latestM?.hrv_ms ?? null,
+            hrvAvg: (() => { const v = metrics.slice(-14).map(m => m.hrv_ms).filter((x): x is number => typeof x === 'number'); return v.length ? Math.round(v.reduce((a, b) => a + b, 0) / v.length) : null })(),
+            sleep: latestM?.sleep_hours ?? null,
+            sleepAvg: (() => { const v = metrics.slice(-7).map(m => m.sleep_hours).filter((x): x is number => typeof x === 'number'); return v.length ? Number((v.reduce((a, b) => a + b, 0) / v.length).toFixed(1)) : null })(),
+            bodyBattery: latestM?.body_battery ?? null,
+            stress: latestM?.stress_avg ?? null,
+            restingHr: latestM?.resting_hr ?? null,
+            readiness: readiness ? `${readiness.level} — ${readiness.recommendation}` : null,
+          },
+        }} />
+      )}
     </div>
   )
 }

@@ -1,22 +1,42 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Topbar } from '@/components/layout/topbar'
+import { PartnersManager } from '@/components/admin/partners-manager'
 import { useAuth } from '@/context/auth-context'
-import { getCoaches, getMyRole, setCoachActive, setCoachRole, type CoachRow } from '@/lib/supabase/queries'
-import { createClient } from '@/lib/supabase/client'
-import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, ChevronDown } from 'lucide-react'
+import { getCoaches, getMyRole, setCoachActive, setCoachRole, updateCoachName, adminResetPassword, getAthletesForAdmin, updateAthleteCoach, getStaffAthleteMap, createStaffAthleteProfile, deleteStaff, type CoachRow, type AthleteLinkRow } from '@/lib/supabase/queries'
+import { CreateAccessModal } from '@/components/access/create-access-modal'
+import { UserPlus, Shield, ShieldOff, Users, CheckCircle2, XCircle, Loader2, Mail, Phone, Crown, Pencil, KeyRound, RefreshCw, Copy, X, Link2, ChevronDown, Dumbbell, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 
 function planLabel(p: string) {
   return p === 'elite' ? 'Elite' : p === 'pro' ? 'Pro' : 'Starter'
 }
 
-function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading }: {
+const SPORTS: { value: string; label: string }[] = [
+  { value: 'running', label: 'Corrida' },
+  { value: 'cycling', label: 'Ciclismo' },
+  { value: 'triathlon', label: 'Triathlon' },
+  { value: 'swimming', label: 'Natação' },
+  { value: 'duathlon', label: 'Duathlon' },
+  { value: 'other', label: 'Outro' },
+]
+
+function genTempPassword() {
+  const a = 'abcdefghijkmnpqrstuvwxyz', n = '23456789'
+  const pick = (s: string, k: number) => Array.from({ length: k }, () => s[Math.floor(Math.random() * s.length)]).join('')
+  return pick(a, 1).toUpperCase() + pick(a, 3) + pick(n, 3)
+}
+
+function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, onEdit, onMakeAthlete, athleteId, loading }: {
   coach: CoachRow
   currentUserId: string
   onToggleActive: (id: string, active: boolean) => void
   onToggleRole: (id: string, role: 'coach' | 'admin') => void
+  onEdit: (coach: CoachRow) => void
+  onMakeAthlete: (coach: CoachRow) => void
+  athleteId: string | null
   loading: string | null
 }) {
   const isSelf = coach.id === currentUserId
@@ -103,10 +123,228 @@ function CoachCard({ coach, currentUserId, onToggleActive, onToggleRole, loading
               {isAdmin ? <ShieldOff className="w-3 h-3" /> : <Shield className="w-3 h-3" />}
               {isAdmin ? 'Remover admin' : 'Tornar admin'}
             </button>
+            <button
+              onClick={() => onEdit(coach)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors flex-1 justify-center"
+              style={{ background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }}>
+              <Pencil className="w-3 h-3" /> Editar
+            </button>
           </div>
         )}
+
+        {/* Também é atleta (conta dupla) */}
+        <div className={`flex items-center gap-2 mt-2 pt-2 ${isSelf ? '' : 'border-t border-border'}`}>
+          {athleteId ? (
+            <Link href={`/athletes/detail?id=${athleteId}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg flex-1 justify-center transition-colors"
+              style={{ background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }}>
+              <Dumbbell className="w-3 h-3" /> Também é atleta — ver perfil
+            </Link>
+          ) : (
+            <button onClick={() => onMakeAthlete(coach)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold rounded-lg flex-1 justify-center transition-colors"
+              style={{ background: 'var(--panel-border)', border: '1px solid var(--border)', color: '#6677aa' }}>
+              <Dumbbell className="w-3 h-3" /> Tornar também atleta
+            </button>
+          )}
+        </div>
       </div>
     </div>
+  )
+}
+
+// Cria o perfil de atleta de um treinador/admin (conta dupla).
+function MakeAthleteModal({ coach, onClose, onSaved }: {
+  coach: CoachRow; onClose: () => void; onSaved: () => void
+}) {
+  const [sport, setSport] = useState('running')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function confirm() {
+    setSaving(true); setError(null)
+    const res = await createStaffAthleteProfile(coach, sport)
+    setSaving(false)
+    if (res.ok) onSaved()
+    else setError(res.error ?? 'Falha ao criar o perfil de atleta.')
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-sm shadow-2xl">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-sm font-bold text-foreground">Tornar também atleta</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">{coach.full_name ?? coach.email}</span> passa a ter também um perfil de atleta, usando o mesmo login. No login, o seletor <span className="font-semibold">Sou treinador / Sou atleta</span> decide qual área abrir.
+          </p>
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Modalidade principal</label>
+            <select value={sport} onChange={e => setSport(e.target.value)}
+              className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary appearance-none">
+              {SPORTS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </div>
+          {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={confirm} disabled={saving}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white text-sm font-bold rounded-lg transition-colors">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Dumbbell className="w-4 h-4" />} Criar perfil de atleta
+            </button>
+            <button onClick={onClose} disabled={saving}
+              className="px-4 py-2.5 border border-border text-sm font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
+// Editar treinador/admin: renomear + redefinir senha temporária + excluir
+function EditCoachModal({ coach, currentUserId, onClose, onSaved, onDeleted }: {
+  coach: CoachRow; currentUserId: string; onClose: () => void; onSaved: () => void; onDeleted: () => void
+}) {
+  const isSelf = coach.id === currentUserId
+  const [name, setName] = useState(coach.full_name ?? '')
+  const [savingName, setSavingName] = useState(false)
+  const [nameSaved, setNameSaved] = useState(false)
+
+  const [pwd, setPwd] = useState(genTempPassword())
+  const [resetting, setResetting] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  async function handleDelete() {
+    setDeleting(true); setError(null)
+    const res = await deleteStaff(coach.id)
+    setDeleting(false)
+    if (res.ok) onDeleted()
+    else setError(res.error ?? 'Falha ao excluir o treinador')
+  }
+
+  async function saveName() {
+    setSavingName(true); setError(null)
+    const ok = await updateCoachName(coach.id, name.trim())
+    setSavingName(false)
+    if (ok) { setNameSaved(true); onSaved(); setTimeout(() => setNameSaved(false), 2000) }
+    else setError('Não foi possível salvar o nome.')
+  }
+
+  async function resetPassword() {
+    setResetting(true); setError(null); setResetDone(false)
+    const res = await adminResetPassword(coach.id, pwd)
+    setResetting(false)
+    if (res.ok) setResetDone(true)
+    else setError(res.error ?? 'Falha ao redefinir senha')
+  }
+
+  function copyCreds() {
+    navigator.clipboard?.writeText(`Acesso ao app SAAB\nE-mail: ${coach.email}\nSenha temporária: ${pwd}\n(troque a senha no primeiro acesso)`)
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border sticky top-0 bg-card">
+          <h2 className="text-sm font-bold text-foreground">Editar acesso</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+        <div className="p-6 space-y-5">
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">E-mail (login)</label>
+            <input value={coach.email} disabled className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-muted-foreground" />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-foreground mb-1.5">Nome completo</label>
+            <div className="flex gap-2">
+              <input value={name} onChange={e => setName(e.target.value)}
+                className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+              <button onClick={saveName} disabled={savingName || !name.trim()}
+                className="px-4 rounded-lg bg-secondary text-foreground text-xs font-bold disabled:opacity-50 flex items-center gap-1.5">
+                {savingName ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : nameSaved ? <CheckCircle2 className="w-3.5 h-3.5 text-[#00d084]" /> : null}
+                {nameSaved ? 'Salvo' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <div className="flex items-center gap-1.5 mb-2"><KeyRound className="w-3.5 h-3.5 text-primary" /><p className="text-xs font-bold text-foreground">Redefinir senha</p></div>
+            {resetDone ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-[#00d084] text-xs font-bold"><CheckCircle2 className="w-4 h-4" /> Senha redefinida!</div>
+                <div className="rounded-xl bg-background border border-border p-3 text-sm space-y-1">
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">E-mail</span><span className="font-semibold text-foreground break-all">{coach.email}</span></div>
+                  <div className="flex justify-between gap-3"><span className="text-muted-foreground">Nova senha</span><span className="font-mono font-bold text-foreground">{pwd}</span></div>
+                </div>
+                <button onClick={copyCreds} className="w-full py-2 border border-border text-xs font-semibold text-foreground rounded-lg hover:bg-secondary flex items-center justify-center gap-2">
+                  {copied ? <><CheckCircle2 className="w-4 h-4 text-[#00d084]" /> Copiado!</> : <><Copy className="w-4 h-4" /> Copiar dados de acesso</>}
+                </button>
+                <p className="text-[11px] text-muted-foreground">A pessoa vai trocar esta senha no próximo login.</p>
+              </div>
+            ) : (
+              <div>
+                <div className="flex gap-2">
+                  <input value={pwd} onChange={e => setPwd(e.target.value)} minLength={6}
+                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-sm font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                  <button onClick={() => setPwd(genTempPassword())} title="Gerar nova senha"
+                    className="px-3 rounded-lg border border-border text-muted-foreground hover:bg-secondary"><RefreshCw className="w-4 h-4" /></button>
+                </div>
+                <button onClick={resetPassword} disabled={resetting || pwd.length < 6}
+                  className="w-full mt-2 py-2 bg-primary text-white text-xs font-bold rounded-lg disabled:opacity-50 flex items-center justify-center gap-2">
+                  {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Redefinir senha
+                </button>
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>}
+
+          <button onClick={onClose} className="w-full py-2.5 border border-border text-sm font-semibold text-muted-foreground rounded-lg hover:bg-secondary">Fechar</button>
+
+          {/* Zona de perigo: excluir treinador */}
+          {!isSelf && (
+            <div className="pt-4 border-t border-border">
+              {!confirmDelete ? (
+                <button onClick={() => { setConfirmDelete(true); setError(null) }}
+                  className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir treinador
+                </button>
+              ) : (
+                <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-3">
+                  <p className="text-xs font-bold text-red-300 mb-1">Excluir {coach.full_name ?? coach.email}?</p>
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                    Remove o login e o acesso desta pessoa. Se ela tiver atletas, reatribua-os a outro treinador antes. Não pode ser desfeito.
+                  </p>
+                  <div className="flex gap-2">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors">
+                      {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                      className="px-3 py-2 border border-border text-xs font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -118,11 +356,12 @@ export default function AdminPage() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [notAdmin, setNotAdmin] = useState(false)
 
-  // Invite form
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteName, setInviteName] = useState('')
-  const [inviteLoading, setInviteLoading] = useState(false)
-  const [inviteResult, setInviteResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [showCreate, setShowCreate] = useState(false)
+  const [editing, setEditing] = useState<CoachRow | null>(null)
+  const [makingAthlete, setMakingAthlete] = useState<CoachRow | null>(null)
+  const [staffAthlete, setStaffAthlete] = useState<Record<string, string>>({})
+  const [links, setLinks] = useState<AthleteLinkRow[]>([])
+  const [reassigning, setReassigning] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -130,7 +369,20 @@ export default function AdminPage() {
     if (role !== 'admin') { setNotAdmin(true); setLoading(false); return }
     setIsAdmin(true)
     setCoaches(coachesList)
+    const [linkRows, staffMap] = await Promise.all([getAthletesForAdmin(), getStaffAthleteMap()])
+    setLinks(linkRows)
+    setStaffAthlete(staffMap)
     setLoading(false)
+  }
+
+  async function handleReassign(athleteId: string, coachId: string) {
+    setReassigning(athleteId)
+    const ok = await updateAthleteCoach(athleteId, coachId)
+    if (ok) {
+      setLinks(prev => prev.map(l => l.id === athleteId ? { ...l, coach_id: coachId } : l))
+      getCoaches().then(setCoaches)   // atualiza contagem de atletas por treinador
+    }
+    setReassigning(null)
   }
 
   useEffect(() => { load() }, [])
@@ -147,33 +399,6 @@ export default function AdminPage() {
     await setCoachRole(id, role)
     setCoaches(prev => prev.map(c => c.id === id ? { ...c, role } : c))
     setActionLoading(null)
-  }
-
-  async function handleInvite(e: React.FormEvent) {
-    e.preventDefault()
-    if (!inviteEmail) return
-    setInviteLoading(true)
-    setInviteResult(null)
-
-    const sb = createClient()
-    const { data: { session } } = await sb.auth.getSession()
-    const token = session?.access_token ?? ''
-
-    const res = await fetch('/api/invite-coach', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ email: inviteEmail, full_name: inviteName }),
-    })
-    const json = await res.json()
-    if (res.ok) {
-      setInviteResult({ ok: true, msg: `Convite enviado para ${inviteEmail}!` })
-      setInviteEmail('')
-      setInviteName('')
-      load()
-    } else {
-      setInviteResult({ ok: false, msg: json.error ?? 'Erro ao enviar convite' })
-    }
-    setInviteLoading(false)
   }
 
   if (loading) return (
@@ -220,44 +445,23 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {/* Invite form */}
+        {/* Cadastro central de acesso */}
         <div className="rounded-xl p-5" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <UserPlus className="w-4 h-4 text-primary" />
-            <p className="text-sm font-bold text-foreground">Convidar novo treinador</p>
-          </div>
-          <form onSubmit={handleInvite} className="flex flex-col md:flex-row gap-3">
-            <input
-              value={inviteName}
-              onChange={e => setInviteName(e.target.value)}
-              placeholder="Nome completo"
-              className="flex-1 px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            />
-            <input
-              value={inviteEmail}
-              onChange={e => setInviteEmail(e.target.value)}
-              placeholder="e-mail do treinador"
-              type="email"
-              required
-              className="flex-1 px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary"
-            />
-            <button type="submit" disabled={inviteLoading || !inviteEmail}
-              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0">
-              {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
-              Enviar convite
-            </button>
-          </form>
-          {inviteResult && (
-            <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold px-3 py-2 rounded-lg"
-              style={inviteResult.ok
-                ? { background: '#00d08414', border: '1px solid #00d08433', color: '#00d084' }
-                : { background: '#e8001c14', border: '1px solid #e8001c33', color: '#e8001c' }}>
-              {inviteResult.ok ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-              {inviteResult.msg}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-primary" />
+              <div>
+                <p className="text-sm font-bold text-foreground">Cadastro de acesso</p>
+                <p className="text-[11px] text-muted-foreground">Crie o acesso de treinadores, admins ou atletas com senha temporária.</p>
+              </div>
             </div>
-          )}
+            <button onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-primary hover:bg-primary/90 text-white text-sm font-bold rounded-lg transition-colors flex-shrink-0">
+              <UserPlus className="w-4 h-4" /> Novo cadastro
+            </button>
+          </div>
           <p className="text-[10px] text-muted-foreground mt-3 leading-relaxed">
-            O treinador receberá um e-mail com link para definir a senha e acessar a plataforma. Após o primeiro login, o perfil ficará visível aqui.
+            Você informa o e-mail e uma senha temporária. A pessoa entra e é obrigada a trocar a senha no primeiro acesso.
           </p>
         </div>
 
@@ -274,13 +478,73 @@ export default function AdminPage() {
                 currentUserId={user?.id ?? ''}
                 onToggleActive={handleToggleActive}
                 onToggleRole={handleToggleRole}
+                onEdit={setEditing}
+                onMakeAthlete={setMakingAthlete}
+                athleteId={staffAthlete[coach.id] ?? null}
                 loading={actionLoading}
               />
             ))}
           </div>
         </div>
 
+        {/* Vínculo treinador ⇄ atleta */}
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Link2 className="w-4 h-4 text-primary" />
+            <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wider">
+              Vínculo treinador ⇄ atleta ({links.length})
+            </p>
+          </div>
+          {links.length === 0 ? (
+            <p className="text-xs text-muted-foreground rounded-xl p-4" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+              Nenhum atleta cadastrado ainda.
+            </p>
+          ) : (
+            <div className="rounded-xl overflow-hidden" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
+              {links.map((l, i) => (
+                <div key={l.id} className="flex items-center gap-3 px-4 py-3" style={{ borderTop: i === 0 ? 'none' : '1px solid var(--panel-border)' }}>
+                  <Users className="w-3.5 h-3.5 text-[#445566] flex-shrink-0" />
+                  <span className="text-sm font-semibold text-foreground flex-1 min-w-0 truncate">
+                    {l.full_name}{!l.active && <span className="text-[10px] text-muted-foreground ml-2">(inativo)</span>}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground hidden sm:inline">Treinador:</span>
+                  <div className="relative flex items-center">
+                    <select
+                      value={l.coach_id}
+                      disabled={reassigning === l.id}
+                      onChange={e => handleReassign(l.id, e.target.value)}
+                      className="text-xs font-semibold text-foreground bg-background border border-border rounded-lg pl-2.5 pr-7 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary disabled:opacity-50 appearance-none">
+                      {coaches.map(c => (
+                        <option key={c.id} value={c.id}>{c.full_name ?? c.email}{c.role === 'admin' ? ' (admin)' : ''}</option>
+                      ))}
+                    </select>
+                    {reassigning === l.id
+                      ? <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground absolute right-2 pointer-events-none" />
+                      : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2 pointer-events-none" />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6">
+          <PartnersManager />
+        </div>
+
       </div>
+
+      {showCreate && (
+        <CreateAccessModal variant="staff" canCreateStaff onClose={() => setShowCreate(false)} onSaved={load} />
+      )}
+      {editing && (
+        <EditCoachModal coach={editing} currentUserId={user?.id ?? ''} onClose={() => setEditing(null)} onSaved={load}
+          onDeleted={() => { setEditing(null); load() }} />
+      )}
+      {makingAthlete && (
+        <MakeAthleteModal coach={makingAthlete} onClose={() => setMakingAthlete(null)}
+          onSaved={() => { setMakingAthlete(null); load() }} />
+      )}
     </div>
   )
 }

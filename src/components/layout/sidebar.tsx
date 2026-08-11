@@ -1,20 +1,28 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2, MessageCircle
 } from 'lucide-react'
-import { getAthletesForAlerts, getMyRole } from '@/lib/supabase/queries'
+import { getAthletesForAlerts, getMyAccess, getEnrollments, getCoachInbox } from '@/lib/supabase/queries'
+import { setViewMode } from '@/lib/view-mode'
+import { VersionTag } from '@/components/ui/version-tag'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
+import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
 const navItems = [
   { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
   { href: '/athletes', label: 'Alunos', icon: Users },
+  { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
+  { href: '/treinos', label: 'Treinos', icon: Dumbbell },
+  { href: '/recados', label: 'Recados', icon: MessageCircle, msgBadge: true },
+  { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
   { href: '/import', label: 'Importar Dados', icon: Upload },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },
@@ -22,18 +30,33 @@ const navItems = [
   { href: '/settings', label: 'Configurações', icon: Settings },
 ]
 
+// Médico: navegação clínica (sem matrículas, treinos, importação nem configurações).
+const DOCTOR_HREFS = ['/dashboard', '/athletes', '/alerts', '/recovery']
+
 export function Sidebar() {
   const pathname = usePathname()
   const { user, signOut } = useAuth()
   const [criticalCount, setCriticalCount] = useState(0)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [pendingEnrolls, setPendingEnrolls] = useState(0)
+  const [unreadMsgs, setUnreadMsgs] = useState(0)
+  const [role, setRole] = useState<string | null>(null)
+  const [dual, setDual] = useState(false)
+  const isAdmin = role === 'admin'
+  const isDoctor = role === 'doctor'
+  const roleLabel = role === 'admin' ? 'Admin' : role === 'doctor' ? 'Médico' : 'Treinador'
+  const visibleNav = isDoctor ? navItems.filter(i => DOCTOR_HREFS.includes(i.href)) : navItems
+
+  function switchToAthlete() {
+    setViewMode('athlete')
+    window.location.href = '/atleta'
+  }
 
   const initials = user?.user_metadata?.full_name
     ? user.user_metadata.full_name.split(' ').slice(0, 2).map((n: string) => n[0]).join('').toUpperCase()
     : user?.email?.slice(0, 2).toUpperCase() ?? 'CO'
   const displayName = user?.user_metadata?.full_name ?? user?.email?.split('@')[0] ?? 'Coach'
 
-  useEffect(() => {
+  const refreshCriticalCount = () => {
     getAthletesForAlerts().then(rows => {
       let count = 0
       for (const a of rows) {
@@ -50,25 +73,28 @@ export function Sidebar() {
       }
       setCriticalCount(count)
     }).catch(() => {})
-    getMyRole().then(role => setIsAdmin(role === 'admin')).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshCriticalCount()
+    getMyAccess().then(({ role, dual }) => { setRole(role); setDual(dual) }).catch(() => {})
+    getEnrollments('pending').then(rows => setPendingEnrolls(rows.length)).catch(() => {})
+    getCoachInbox().then(t => setUnreadMsgs(t.reduce((n, x) => n + x.unread, 0))).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useAutoRefresh(refreshCriticalCount)
 
   return (
-    <aside className="hidden md:flex flex-col w-64 min-h-screen bg-[var(--sidebar)] border-r border-border">
+    <aside className="hidden md:flex flex-col w-64 shrink-0 overflow-y-auto bg-sidebar border-r border-border">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-5 py-5 border-b border-border">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary text-white font-black text-sm tracking-tight">
-          SS
-        </div>
-        <div>
-          <p className="text-sm font-bold text-foreground tracking-wide uppercase">Saab Sports</p>
-          <p className="text-xs text-muted-foreground">Performance Platform</p>
-        </div>
+      <div className="flex flex-col gap-1.5 px-5 py-5 border-b border-border">
+        <Image src="/logo-saab.png" alt="SAAB Sports" width={150} height={39} priority className="h-auto w-[150px] max-w-full invert dark:invert-0" />
+        <p className="text-xs text-muted-foreground">Performance Platform</p>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map((item) => {
+        {visibleNav.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
           return (
@@ -87,6 +113,16 @@ export function Sidebar() {
               {item.alertBadge && criticalCount > 0 && (
                 <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
                   {criticalCount}
+                </span>
+              )}
+              {item.msgBadge && unreadMsgs > 0 && (
+                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
+                  {unreadMsgs}
+                </span>
+              )}
+              {item.enrollBadge && pendingEnrolls > 0 && (
+                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
+                  {pendingEnrolls}
                 </span>
               )}
             </Link>
@@ -115,6 +151,17 @@ export function Sidebar() {
         )}
       </nav>
 
+      {/* Conta dupla: alternar para a visão de atleta */}
+      {dual && (
+        <div className="px-3 pt-3">
+          <button onClick={switchToAthlete}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors border border-border">
+            <UserRound className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1 text-left">Ver como atleta</span>
+          </button>
+        </div>
+      )}
+
       {/* User */}
       <div className="px-3 py-4 border-t border-border">
         <button onClick={signOut} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary cursor-pointer transition-colors text-left">
@@ -122,11 +169,16 @@ export function Sidebar() {
             {initials}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded flex-shrink-0"
+                style={isAdmin ? { background: '#e8001c22', color: '#e8001c' } : { background: 'var(--panel-border)', color: '#6677aa' }}>{roleLabel}</span>
+            </div>
             <p className="text-xs text-muted-foreground truncate">{user?.email ?? ''}</p>
           </div>
           <LogOut className="w-4 h-4 text-muted-foreground flex-shrink-0" />
         </button>
+        <VersionTag className="text-[10px] text-muted-foreground/50 mt-2 px-1" />
       </div>
     </aside>
   )

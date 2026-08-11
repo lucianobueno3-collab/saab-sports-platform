@@ -1,6 +1,6 @@
 {
   "name": "saab-sports-platform",
-  "version": "0.1.0",
+  "version": "1.0.89",
   "private": true,
   "scripts": {
     "dev": "next dev --port 3001",
@@ -24,13 +24,16 @@
     "next": "16.2.9",
     "papaparse": "^5.5.4",
     "pdfjs-dist": "^6.1.200",
+    "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.9.0",
     "shadcn": "^4.13.0",
     "tailwind-merge": "^3.6.0",
     "tesseract.js": "^7.0.0",
-    "tw-animate-css": "^1.4.0"
+    "tw-animate-css": "^1.4.0",
+    "unpdf": "^1.8.0",
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@netlify/plugin-nextjs": "^5.15.12",
@@ -38,6 +41,7 @@
     "@types/jszip": "^3.4.0",
     "@types/node": "^20",
     "@types/papaparse": "^5.5.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

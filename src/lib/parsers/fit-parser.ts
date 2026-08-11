@@ -2,6 +2,18 @@ import FitParser from 'fit-file-parser'
 import { calcActivityTss, ftpForSport, lthrForSport, type SportThresholds } from '@/lib/calculations/tss'
 import { computeZoneDistribution, type ZoneDistribution } from '@/lib/calculations/zone-distribution'
 
+export interface FitLap {
+  i: number
+  duration_s: number
+  distance_m: number | null
+  avg_hr: number | null
+  max_hr: number | null
+  avg_power: number | null
+  max_power: number | null
+  avg_speed_mps: number | null
+  avg_cadence: number | null
+}
+
 export interface FitActivity {
   date: string
   name: string
@@ -19,6 +31,7 @@ export interface FitActivity {
   avg_cadence: number | null
   elevation_gain_m: number | null
   calories: number | null
+  laps: FitLap[] | null
 }
 
 export async function parseFitFile(
@@ -58,10 +71,21 @@ export async function parseFitFile(
         const calories = session.total_calories ?? null
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const records: { power?: number; heart_rate?: number }[] = sessions.flatMap((s: any) =>
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (s.laps ?? []).flatMap((l: any) => l.records ?? [])
-        )
+        const rawLaps: any[] = sessions.flatMap((s: any) => s.laps ?? [])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const records: { power?: number; heart_rate?: number }[] = rawLaps.flatMap((l: any) => l.records ?? [])
+        // Laps / tiros (só quando há mais de um — senão é o treino inteiro)
+        const laps: FitLap[] | null = rawLaps.length >= 2 ? rawLaps.slice(0, 200).map((l, i) => ({
+          i: i + 1,
+          duration_s: Math.round(l.total_timer_time ?? l.total_elapsed_time ?? 0),
+          distance_m: l.total_distance != null ? Math.round(l.total_distance) : null,
+          avg_hr: l.avg_heart_rate != null ? Math.round(l.avg_heart_rate) : null,
+          max_hr: l.max_heart_rate != null ? Math.round(l.max_heart_rate) : null,
+          avg_power: l.avg_power != null ? Math.round(l.avg_power) : null,
+          max_power: l.max_power != null ? Math.round(l.max_power) : null,
+          avg_speed_mps: typeof l.avg_speed === 'number' ? l.avg_speed : null,
+          avg_cadence: l.avg_cadence != null ? Math.round(l.avg_cadence) : null,
+        })) : null
         const powers = records.map(r => r.power).filter((p): p is number => typeof p === 'number' && p > 0)
 
         // Normalized Power: média móvel de 30s elevada à 4ª potência
@@ -114,6 +138,7 @@ export async function parseFitFile(
           avg_cadence: avgCadence ? Math.round(avgCadence) : null,
           elevation_gain_m: elevGain ? Math.round(elevGain) : null,
           calories: calories ? Math.round(calories) : null,
+          laps,
         })
       } catch (e) {
         reject(e)

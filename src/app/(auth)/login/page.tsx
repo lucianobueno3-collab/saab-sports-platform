@@ -2,16 +2,33 @@
 
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { getMyAccess } from '@/lib/supabase/queries'
+import { setViewMode, type ViewMode } from '@/lib/view-mode'
+import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
+import { VersionTag } from '@/components/ui/version-tag'
 import Image from 'next/image'
 
+// Destino pós-login conforme o papel. Contas normais vão direto para a sua
+// área. Contas duplas (treinador que também é atleta) seguem a escolha do
+// seletor "Sou treinador / Sou atleta".
+async function routeAfterLogin(mode: ViewMode) {
+  const { isCoach, athleteId, dual } = await getMyAccess()
+  if (dual) {
+    setViewMode(mode)
+    window.location.href = mode === 'athlete' ? '/atleta' : '/dashboard'
+    return
+  }
+  if (athleteId) { setViewMode('athlete'); window.location.href = '/atleta' }
+  else { setViewMode('coach'); window.location.href = isCoach ? '/dashboard' : '/atleta' }
+}
+
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register'>('login')
+  const [mode, setMode] = useState<'coach' | 'athlete'>('coach')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+  const [needsPassword, setNeedsPassword] = useState(false)
 
   const sb = createClient()
 
@@ -19,35 +36,24 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    setMessage(null)
 
-    if (mode === 'login') {
-      const { data, error } = await sb.auth.signInWithPassword({ email, password })
-      console.log('login result:', { data, error })
-      if (error) {
-        setError(error.message || error.name || JSON.stringify(error) || 'Erro desconhecido')
-      } else {
-        window.location.href = '/dashboard'
-      }
-    } else {
-      const { error } = await sb.auth.signUp({
-        email,
-        password,
-        options: { data: { full_name: name } },
-      })
-      if (error) {
-        if (error.message?.includes('already registered') || error.message?.includes('already exists') || error.message?.includes('User already')) {
-          setError('Este email já está cadastrado. Clique em "Fazer login".')
-        } else {
-          setError(error.message || 'Erro ao criar conta. Tente novamente.')
-        }
-      } else {
-        setMessage('Conta criada com sucesso! Faça login abaixo.')
-        setMode('login')
-      }
+    const { data, error } = await sb.auth.signInWithPassword({ email, password })
+    if (error) {
+      setError(/invalid login/i.test(error.message) ? 'E-mail ou senha incorretos.' : (error.message || 'Erro ao entrar.'))
+      setLoading(false)
+      return
     }
+    // Primeiro acesso: força a troca da senha temporária antes de seguir
+    if (mustChangePassword(data.user)) {
+      setNeedsPassword(true)
+      setLoading(false)
+      return
+    }
+    await routeAfterLogin(mode)
+  }
 
-    setLoading(false)
+  if (needsPassword) {
+    return <ForcePasswordChange onDone={() => routeAfterLogin(mode)} />
   }
 
   return (
@@ -59,36 +65,36 @@ export default function LoginPage() {
       </div>
 
       <div className="bg-card border border-border rounded-2xl p-7">
-        <h2 className="text-lg font-bold text-foreground mb-1">
-          {mode === 'login' ? 'Entrar' : 'Criar conta'}
-        </h2>
+        {/* Seletor de perfil — o login é o mesmo; para quem é treinador E atleta, decide qual área abrir */}
+        <div className="flex gap-1 p-1 rounded-xl bg-background border border-border mb-5">
+          <button type="button" onClick={() => setMode('coach')}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode === 'coach' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            Sou treinador
+          </button>
+          <button type="button" onClick={() => setMode('athlete')}
+            className="flex-1 py-2 text-xs font-bold rounded-lg transition-colors"
+            style={mode === 'athlete' ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>
+            Sou atleta
+          </button>
+        </div>
+
+        <h2 className="text-lg font-bold text-foreground mb-1">Entrar</h2>
         <p className="text-xs text-muted-foreground mb-6">
-          {mode === 'login' ? 'Acesse sua plataforma de treinamento' : 'Crie sua conta de treinador'}
+          {mode === 'athlete'
+            ? 'Acesse com o e-mail e a senha que seu treinador te enviou.'
+            : 'Acesse com o e-mail e a senha da sua conta.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'register' && (
-            <div>
-              <label className="block text-xs font-medium text-foreground mb-1.5">Nome completo</label>
-              <input
-                type="text"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                required
-                placeholder="Luciano Bueno"
-                className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
-              />
-            </div>
-          )}
-
           <div>
-            <label className="block text-xs font-medium text-foreground mb-1.5">Email</label>
+            <label className="block text-xs font-medium text-foreground mb-1.5">E-mail</label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               required
-              placeholder="treinador@saabsports.com.br"
+              placeholder="voce@email.com"
               className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
             />
           </div>
@@ -100,7 +106,6 @@ export default function LoginPage() {
               value={password}
               onChange={e => setPassword(e.target.value)}
               required
-              minLength={6}
               placeholder="••••••••"
               className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-colors"
             />
@@ -109,29 +114,24 @@ export default function LoginPage() {
           {error && (
             <p className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">{error}</p>
           )}
-          {message && (
-            <p className="text-xs text-[#00d084] bg-[#00d084]/10 border border-[#00d084]/20 rounded-lg px-3 py-2">{message}</p>
-          )}
 
           <button
             type="submit"
             disabled={loading}
             className="w-full py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-60 text-white font-semibold text-sm rounded-lg transition-colors"
           >
-            {loading ? 'Aguarde...' : mode === 'login' ? 'Entrar' : 'Criar conta'}
+            {loading ? 'Aguarde...' : 'Entrar'}
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted-foreground mt-5">
-          {mode === 'login' ? 'Ainda não tem conta?' : 'Já tem conta?'}{' '}
-          <button
-            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(null); setMessage(null) }}
-            className="text-primary hover:underline font-medium"
-          >
-            {mode === 'login' ? 'Criar conta' : 'Fazer login'}
-          </button>
+        <p className="text-[11px] text-muted-foreground mt-5 text-center">
+          {mode === 'athlete'
+            ? 'Não tem acesso? Peça ao seu treinador para criar o seu.'
+            : 'Não tem acesso? Peça ao administrador para criar o seu.'}
         </p>
       </div>
+
+      <VersionTag className="text-[10px] text-muted-foreground/50 text-center mt-4" />
     </div>
   )
 }

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { getAthleteDocuments, type AthleteDocumentRow } from '@/lib/supabase/queries'
-import { extractPdfText, ocrPdf, hasExtractableText } from '@/lib/parsers/pdf-parser'
+import { getAthleteDocuments, extractPdfViaServer, type AthleteDocumentRow } from '@/lib/supabase/queries'
+import { extractPdfText, ocrPdf, hasExtractableText, withTimeout } from '@/lib/parsers/pdf-parser'
 import { FileText, Upload, Download, X, Loader2, Sparkles, ScanText } from 'lucide-react'
 
 interface Props {
@@ -69,22 +69,36 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
   async function handleExtract(doc: AthleteDocumentRow) {
     setError(null)
     setExtracting(doc.id)
+    let serverMsg = ''
     try {
+      // 1) Servidor (Node) — robusto em qualquer navegador (já tem timeout).
+      const srv = await extractPdfViaServer(doc.storage_path)
+      if (srv.ok) {
+        if (srv.text && hasExtractableText(srv.text)) { onExtractText(srv.text, doc.file_name); return }
+        // Servidor respondeu mas sem texto útil → PDF digitalizado → OCR.
+        setOcrDoc(doc)
+        setError(`O servidor leu o arquivo, mas não achou texto (${(srv.text ?? '').replace(/\s/g, '').length} caracteres). Parece digitalizado — use "Rodar OCR" abaixo.`)
+        return
+      }
+      serverMsg = srv.error ?? 'falhou'
+
+      // 2) Fallback: leitura no navegador (pdfjs) caso o servidor falhe.
       const sb = createClient()
-      const { data, error: dlErr } = await sb.storage.from('athlete-docs').download(doc.storage_path)
+      const { data, error: dlErr } = await withTimeout(
+        sb.storage.from('athlete-docs').download(doc.storage_path), 30_000, 'download demorou')
       if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
       const file = new File([data], doc.file_name, { type: 'application/pdf' })
-      const text = await extractPdfText(file)
-      if (!hasExtractableText(text)) {
-        // PDF sem camada de texto (digitalizado) → oferece OCR
-        setOcrDoc(doc)
-      } else {
-        onExtractText(text, doc.file_name)
-      }
+      const text = await withTimeout(extractPdfText(file), 40_000, 'leitura demorou')
+      if (!hasExtractableText(text)) setOcrDoc(doc)
+      else onExtractText(text, doc.file_name)
     } catch (e) {
-      setError(`Falha ao ler o PDF: ${String(e)}`)
+      // Mostra o motivo exato de cada etapa para facilitar o diagnóstico.
+      const clientMsg = e instanceof Error ? e.message : String(e)
+      setOcrDoc(doc)
+      setError(`Leitura automática falhou — servidor: ${serverMsg || 'ok'} · navegador: ${clientMsg}. Use "Rodar OCR" abaixo ou preencha manualmente.`)
+    } finally {
+      setExtracting(null) // sempre para o spinner, aconteça o que acontecer
     }
-    setExtracting(null)
   }
 
   async function runOcr(doc: AthleteDocumentRow) {
@@ -96,7 +110,7 @@ export function DocsSection({ athleteId, area, onExtractText, extractLabel }: Pr
       if (dlErr || !data) throw new Error(dlErr?.message ?? 'download falhou')
       const file = new File([data], doc.file_name, { type: 'application/pdf' })
       const text = await ocrPdf(file, ({ page, totalPages, status }) =>
-        setOcrProgress(`Página ${page}/${totalPages} — ${status}`))
+        setOcrProgress(page > 0 ? `Página ${page}/${totalPages} — ${status}` : status))
       setOcrProgress(null)
       setOcrDoc(null)
       if (!hasExtractableText(text)) {

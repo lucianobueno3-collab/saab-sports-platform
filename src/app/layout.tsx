@@ -1,6 +1,7 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, Montserrat, Open_Sans } from 'next/font/google'
 import { AuthProvider } from '@/context/auth-context'
+import { ServiceWorkerRegister } from '@/components/pwa/sw-register'
 import './globals.css'
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' })
@@ -11,6 +12,19 @@ const openSans = Open_Sans({ subsets: ['latin'], variable: '--font-open-sans' })
 export const metadata: Metadata = {
   title: 'Saab Sports Platform',
   description: 'Sistema de Gestão de Performance Atlética',
+  applicationName: 'Saab Sports',
+  appleWebApp: {
+    capable: true,
+    title: 'Saab Sports',
+    statusBarStyle: 'black-translucent',
+  },
+}
+
+export const viewport: Viewport = {
+  themeColor: '#0a0a0f',
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -26,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <AuthProvider>
           {children}
         </AuthProvider>
+        {/* Permite abrir o app e ver o treino do dia sem internet */}
+        <ServiceWorkerRegister />
       </body>
     </html>
   )

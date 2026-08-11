@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
+import ws from 'ws'
+
+// Polyfill de WebSocket (nativo só no Node >= 22) para o supabase-js.
+if (!globalThis.WebSocket) globalThis.WebSocket = ws
 
 export default async (req) => {
   if (req.method !== 'POST') {

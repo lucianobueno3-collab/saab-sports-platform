@@ -1,0 +1,85 @@
+/**
+ * Os planos aplicáveis a um aluno: só os que o treinador cadastrou.
+ *
+ * O modal do calendário oferecia modelos embutidos no código, que o treinador
+ * nunca escreveu e não conseguia editar. Agora a lista vem do banco — o que
+ * está aqui é o que ele montou.
+ */
+
+import { PLAN_SPORT_LABEL } from '@/lib/training-plans'
+import { expandProgram, type ProgramWeek } from '@/lib/program-templates'
+import type { PlannedWorkoutInput, TrainingProgramRow } from '@/lib/supabase/queries'
+
+export type PlanoOpcao = {
+  chave: string
+  nome: string
+  resumo: string
+  sport: string
+  nivel: string | null
+  semanas: number
+  treinos: number
+  horas: number
+  tss: number
+  /** Quantas corridas o plano tem por semana — quantos dias o treinador escolhe. */
+  corridasPorSemana: number
+  /** Dias que o próprio plano usa (0=seg…6=dom), como ponto de partida. */
+  diasPadrao: number[]
+  /**
+   * Os treinos datados que serão criados no calendário do aluno.
+   *
+   * `dias` são os dias de corrida escolhidos; a força cai nos que sobram.
+   * Lista vazia mantém os dias do próprio plano.
+   */
+  linhas: (athleteId: string, inicio: Date, dias?: number[], diaDoLongao?: number | null) => PlannedWorkoutInput[]
+}
+
+/**
+ * Dias principais da primeira semana — o padrão que o plano já traz.
+ *
+ * A força normalmente é complemento e cai nos dias que sobram, então não conta.
+ * Mas num plano só de sala ela é o treino principal: aí valem os dias dela,
+ * senão o modal ofereceria "0 dias para escolher".
+ */
+function diasDoPlano(weeks: ProgramWeek[]): number[] {
+  const primeira = weeks[0]?.workouts ?? []
+  const principais = primeira.filter(x => x.sport !== 'strength')
+  const base = principais.length ? principais : primeira
+  return [...new Set(base.map(x => x.day))].sort((a, b) => a - b)
+}
+
+function somar(weeks: ProgramWeek[]) {
+  let treinos = 0, minutos = 0, tss = 0
+  for (const w of weeks) for (const x of w.workouts) {
+    treinos++; minutos += x.duration_min ?? 0; tss += x.tss ?? 0
+  }
+  return { treinos, horas: Math.round(minutos / 60), tss }
+}
+
+/** Um plano cadastrado pelo treinador vira opção aplicável. */
+export function opcaoDePlanoSalvo(p: TrainingProgramRow): PlanoOpcao {
+  const { treinos, horas, tss } = somar(p.weeks)
+  return {
+    chave: `salvo:${p.id}`,
+    nome: p.name,
+    resumo: p.description ?? '',
+    sport: p.sport,
+    nivel: p.level,
+    semanas: p.weeks.length,
+    treinos, horas, tss,
+    corridasPorSemana: diasDoPlano(p.weeks).length,
+    diasPadrao: diasDoPlano(p.weeks),
+    linhas: (athleteId, inicio, dias = [], diaDoLongao = null) =>
+      expandProgram(p.weeks, inicio, dias, diaDoLongao).map(x => ({
+        athlete_id: athleteId, date: x.date, sport: x.sport, title: x.title,
+        description: x.description, planned_duration_min: x.planned_duration_min,
+        planned_tss: x.planned_tss, structure: x.structure, exercises: x.exercises,
+      })),
+  }
+}
+
+/** Os planos ativos do treinador, prontos para aplicar. */
+export function opcoesDePlano(salvos: TrainingProgramRow[]): PlanoOpcao[] {
+  return salvos.filter(p => p.active !== false).map(opcaoDePlanoSalvo)
+}
+
+export { PLAN_SPORT_LABEL }

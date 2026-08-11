@@ -1,0 +1,61 @@
+name: Auto version bump
+
+# A cada merge na main, sobe a versao em package.json automaticamente.
+# Nivel: patch por padrao. Para minor/major, inclua o marcador entre
+# colchetes no TITULO do PR (vira o assunto do commit de squash):
+#   [bump-minor]  ou  [bump-major]
+# So o assunto (primeira linha) e inspecionado, para o texto do corpo do PR
+# nunca disparar um bump por engano. O carimbo de data/hora do deploy ja e
+# gerado no build (next.config.ts); aqui so cuidamos do numero da versao.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: version-bump
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    # Evita laço infinito: não roda no próprio commit de release.
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release):') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configurar git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Definir nivel do bump
+        id: level
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          # Só o assunto (primeira linha) conta — evita falso-positivo do corpo.
+          SUBJECT=$(printf '%s\n' "$MSG" | head -n1)
+          if printf '%s' "$SUBJECT" | grep -qiF '[bump-major]'; then
+            echo "level=major" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$SUBJECT" | grep -qiF '[bump-minor]'; then
+            echo "level=minor" >> "$GITHUB_OUTPUT"
+          else
+            echo "level=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Subir versão e commitar
+        run: |
+          npm version "${{ steps.level.outputs.level }}" --no-git-tag-version
+          VER=$(node -p "require('./package.json').version")
+          git add package.json package-lock.json
+          # [skip netlify]: o proprio merge ja gera 1 deploy; o commit de
+          # release nao precisa gerar um 2o (economiza minutos de build).
+          git commit -m "chore(release): v$VER [skip netlify]"
+          git push origin main

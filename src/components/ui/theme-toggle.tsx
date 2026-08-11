@@ -13,6 +13,8 @@ function getStoredTheme(): Theme {
 function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark')
   localStorage.setItem('theme', theme)
+  // barra do navegador/status do celular acompanha o tema
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0a0a0f' : '#f4f4f7')
 }
 
 export function ThemeToggle() {

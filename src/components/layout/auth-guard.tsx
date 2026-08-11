@@ -1,19 +1,28 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useAuth } from '@/context/auth-context'
+import { getMyAccess } from '@/lib/supabase/queries'
+import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
+  const [checkingRole, setCheckingRole] = useState(true)
 
   useEffect(() => {
-    if (!loading && !user) {
-      window.location.href = '/login'
-    }
+    if (loading) return
+    if (!user) { window.location.href = '/login'; return }
+    if (mustChangePassword(user)) { setCheckingRole(false); return }
+    // atleta puro não acessa o painel do treinador — redireciona para a área dele.
+    // Conta dupla (treinador/médico que também é atleta) permanece no painel.
+    getMyAccess().then(({ isCoach, athleteId, role }) => {
+      if (athleteId && !isCoach && role !== 'doctor') window.location.href = '/atleta'
+      else setCheckingRole(false)
+    }).catch(() => setCheckingRole(false))
   }, [user, loading])
 
-  if (loading) {
+  if (loading || (user && checkingRole)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="flex flex-col items-center gap-6">
@@ -32,6 +41,9 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null
+
+  // primeiro acesso: troca de senha obrigatória antes de usar o painel
+  if (mustChangePassword(user)) return <ForcePasswordChange />
 
   return <>{children}</>
 }

@@ -1,4 +1,7 @@
 import { createClient } from './client'
+import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
+import { todayLocalISO } from '@/lib/dates'
+import type { ProgramWeek, ProgramRouting } from '@/lib/program-templates'
 
 export type AthleteRow = {
   id: string
@@ -15,6 +18,7 @@ export type AthleteRow = {
   vo2max_ml_kg_min: number | null
   weight_kg: number | null
   height_cm: number | null
+  gender: 'M' | 'F' | 'other' | null
   active: boolean
   ctl: number | null
   atl: number | null
@@ -23,6 +27,8 @@ export type AthleteRow = {
   recovery_score: number | null
   sleep_hours: number | null
   status: string | null
+  avatar_url?: string | null
+  threshold_pace_sec_km?: number | null
   last_activity_at: string | null
   last_activity_sport: string | null
   last_activity_tss: number | null
@@ -57,6 +63,35 @@ export type ActivityRow = {
   normalized_power: number | null
   intensity_factor: number | null
   avg_hr_bpm: number | null
+  // métricas ampliadas (migração 025) — opcionais
+  max_hr_bpm?: number | null
+  avg_power_watts?: number | null
+  max_power_watts?: number | null
+  avg_cadence_rpm?: number | null
+  max_cadence_rpm?: number | null
+  velocity_avg_mps?: number | null
+  velocity_max_mps?: number | null
+  energy_kj?: number | null
+  avg_torque_nm?: number | null
+  max_torque_nm?: number | null
+  rpe?: number | null
+  feeling?: string | null
+  calories?: number | null
+  hr_zone_minutes?: number[] | null
+  pwr_zone_minutes?: number[] | null
+  workout_description?: string | null
+  coach_comments?: string | null
+  athlete_comments?: string | null
+  planned_duration_seconds?: number | null
+  planned_distance_meters?: number | null
+  laps?: ActivityLap[] | null
+}
+
+export type ActivityLap = {
+  i: number; duration_s: number; distance_m: number | null
+  avg_hr: number | null; max_hr: number | null
+  avg_power: number | null; max_power?: number | null
+  avg_speed_mps: number | null; avg_cadence: number | null
 }
 
 export type DailyMetricRow = {
@@ -79,15 +114,30 @@ export async function getAthletes(): Promise<AthleteRow[]> {
     .select('*')
     .order('full_name')
   if (error) throw error
-  return data ?? []
+  const rows = (data ?? []) as AthleteRow[]
+  // A foto vive em `athletes` — a view de resumo pode não expor a coluna,
+  // então buscamos à parte e juntamos (falha silenciosa: cai nas iniciais).
+  const { data: pics } = await sb.from('athletes').select('id, avatar_url')
+  if (pics) {
+    const byId = new Map((pics as { id: string; avatar_url: string | null }[]).map(p => [p.id, p.avatar_url]))
+    for (const r of rows) r.avatar_url = byId.get(r.id) ?? null
+  }
+  return rows
 }
 
 export async function getAthlete(id: string): Promise<AthleteRow | null> {
   const sb = createClient()
-  const [{ data: summary }, { data: extra }] = await Promise.all([
+  const [{ data: summary }, extraRes] = await Promise.all([
     sb.from('v_athlete_summary').select('*').eq('id', id).single(),
-    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, portal_token, portal_brand').eq('id', id).single(),
+    sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, portal_token, avatar_url, threshold_pace_sec_km, portal_brand').eq('id', id).single(),
   ])
+  let extra = extraRes.data
+  if (extraRes.error) {
+    // banco sem a migração 012 (portal_token não existe): repete sem a coluna
+    console.error('[queries]', extraRes.error.message)
+    const retry = await sb.from('athletes').select('phone, initial_ctl, initial_atl, initial_date, lthr_bike_bpm, lthr_run_bpm, lthr_swim_bpm, ftp_run_watts, height_cm, gender, avatar_url, threshold_pace_sec_km').eq('id', id).single()
+    extra = retry.data ? { ...retry.data, portal_token: null, portal_brand: null } : null
+  }
   if (!summary) return null
   return { ...summary, ...(extra ?? {}) } as AthleteRow
 }
@@ -106,16 +156,318 @@ export async function getAthletePMC(athleteId: string, days = 90): Promise<PMCRo
   return data ?? []
 }
 
+// ─── Treinos programados / calendário (migração 020) ────────────────────────
+
+export type PlannedWorkoutRow = {
+  id: string
+  athlete_id: string
+  date: string
+  sport: string
+  title: string
+  description: string | null
+  planned_duration_min: number | null
+  planned_tss: number | null
+  completed: boolean
+  structure: import('@/lib/workout-structure').WorkoutStructure | null
+  /** Exercícios, quando é treino de força (migração 045). */
+  exercises?: LibExercise[] | null
+  skipped?: boolean
+  skip_reason?: string | null
+  moved_from?: string | null
+  activity_id?: string | null
+}
+
+/** Treinos programados de um atleta num intervalo de datas (YYYY-MM-DD). */
+export async function getPlannedWorkouts(athleteId: string, from: string, to: string): Promise<PlannedWorkoutRow[]> {
+  const cols = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, exercises, activity_id'
+  try {
+    const sb = createClient()
+    const { data, error } = await sb.from('planned_workouts')
+      .select(cols)
+      .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
+    if (error) {
+      // banco sem a migração 027 (activity_id) ou 045 (exercises): repete sem elas
+      console.error('[queries]', error.message)
+      const retry = await sb.from('planned_workouts')
+        .select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure')
+        .eq('athlete_id', athleteId).gte('date', from).lte('date', to).order('date')
+      if (retry.error) throw new Error(retry.error.message)
+      return (retry.data ?? []) as PlannedWorkoutRow[]
+    }
+    return (data ?? []) as PlannedWorkoutRow[]
+  } catch (e) {
+    // Sem internet: recorta a cópia local do plano, guardada por getTrainingOverview.
+    console.error('[queries] calendário offline:', e)
+    const copia = readSnapshot<PlannedWorkoutRow[]>(offlineKey.planned(athleteId))
+    if (!copia) return []
+    return copia.data.filter(w => w.date >= from && w.date <= to)
+  }
+}
+
+/** Cruza treinos planejados com as atividades importadas (mesmo dia + modalidade). */
+export async function matchPlannedActivities(athleteId: string, from: string, to: string): Promise<number> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('match_planned_activities', { p_athlete: athleteId, p_from: from, p_to: to })
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return (data as number) ?? 0
+}
+
+export type PlannedWorkoutInput = {
+  athlete_id: string; date: string; sport: string; title: string
+  description?: string | null; planned_duration_min?: number | null; planned_tss?: number | null
+  structure?: import('@/lib/workout-structure').WorkoutStructure | null
+  exercises?: LibExercise[] | null
+}
+
+/** Tira `exercises` das linhas — resgate para banco sem a migração 045. */
+function semExercicios<T extends { exercises?: unknown }>(rows: T[]): Omit<T, 'exercises'>[] {
+  return rows.map(({ exercises: _ignorado, ...resto }) => resto)
+}
+
+export async function createPlannedWorkout(input: PlannedWorkoutInput): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const linha = { ...input, created_by: user?.id ?? null }
+  const { error } = await sb.from('planned_workouts').insert(linha)
+  if (!error) return true
+  // Banco sem a migração 045: grava o treino sem os exercícios em vez de perdê-lo.
+  if (/exercises/i.test(error.message)) {
+    const { error: e2 } = await sb.from('planned_workouts').insert(semExercicios([linha])[0])
+    if (!e2) return true
+    console.error('[queries]', e2.message); return false
+  }
+  console.error('[queries]', error.message); return false
+}
+
+export async function updatePlannedWorkout(id: string, patch: Partial<PlannedWorkoutInput> & { completed?: boolean }): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function deletePlannedWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export type BulkDeleteScope = {
+  /** Data inicial (inclusive), formato AAAA-MM-DD. Sem valor = desde sempre. */
+  from?: string | null
+  /** Data final (inclusive). Sem valor = até o fim do plano. */
+  to?: string | null
+  /** Apagar também o que o aluno já concluiu. Fora isso, o histórico fica. */
+  includeCompleted?: boolean
+}
+
+/**
+ * Quantos treinos seriam apagados — para mostrar o número ANTES de apagar.
+ *
+ * Sem isso o treinador confirmaria às cegas, e apagar o plano inteiro de um
+ * aluno não tem desfazer.
+ */
+export async function countPlannedWorkouts(athleteId: string, scope: BulkDeleteScope): Promise<number> {
+  const sb = createClient()
+  let q = sb.from('planned_workouts').select('id', { count: 'exact', head: true }).eq('athlete_id', athleteId)
+  if (scope.from) q = q.gte('date', scope.from)
+  if (scope.to) q = q.lte('date', scope.to)
+  if (!scope.includeCompleted) q = q.eq('completed', false)
+  const { count, error } = await q
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return count ?? 0
+}
+
+/**
+ * Apaga vários treinos programados de um aluno.
+ *
+ * Por padrão NÃO toca no que já foi concluído: o histórico do aluno é o registro
+ * do que ele fez, e apagar isso distorceria a carga e as conquistas dele.
+ */
+export async function bulkDeletePlannedWorkouts(
+  athleteId: string, scope: BulkDeleteScope,
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  const sb = createClient()
+  let q = sb.from('planned_workouts').delete().eq('athlete_id', athleteId)
+  if (scope.from) q = q.gte('date', scope.from)
+  if (scope.to) q = q.lte('date', scope.to)
+  if (!scope.includeCompleted) q = q.eq('completed', false)
+  const { data, error } = await q.select('id')
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: data?.length ?? 0 }
+}
+
+/** Insere vários treinos programados de uma vez (ao aplicar um plano). */
+export async function bulkCreatePlannedWorkouts(rows: PlannedWorkoutInput[]): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (rows.length === 0) return { ok: true, count: 0 }
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const payload = rows.map(r => ({ ...r, created_by: user?.id ?? null }))
+  const { data, error } = await sb.from('planned_workouts').insert(payload).select('id')
+  if (!error) return { ok: true, count: data?.length ?? rows.length }
+  // Banco sem a migração 045: aplica o plano sem os exercícios em vez de falhar
+  // inteiro — perder o plano do aluno é pior do que perder a lista de exercícios.
+  if (/exercises/i.test(error.message)) {
+    const r2 = await sb.from('planned_workouts').insert(semExercicios(payload)).select('id')
+    if (!r2.error) return { ok: true, count: r2.data?.length ?? rows.length }
+    console.error('[queries]', r2.error.message)
+    return { ok: false, count: 0, error: r2.error.message }
+  }
+  console.error('[queries]', error.message)
+  return { ok: false, count: 0, error: error.message }
+}
+
+// ─── Biblioteca de treinos do treinador (migração 021) ──────────────────────
+
+/**
+ * Um exercício de força.
+ *
+ * `sets` e `reps` são texto porque vêm de campo livre: `reps` aceita tanto "12"
+ * quanto a pirâmide "12/12/10/8", uma repetição por série. `rest_s` é o
+ * intervalo entre séries — sem ele o passo a passo não tem como cronometrar.
+ */
+export type LibExercise = {
+  name: string; sets: string; reps: string; load: string
+  /** Grupo muscular, só para leitura. */
+  muscle?: string
+  /** Intervalo entre séries, em segundos. */
+  rest_s?: number | null
+  note?: string
+}
+export type WorkoutLibraryRow = {
+  id: string; sport: string; title: string; description: string | null
+  duration_min: number | null; tss: number | null
+  /** Pasta livre da biblioteca (migração 044). Vazio = agrupa pela modalidade. */
+  group_name?: string | null
+  structure?: import('@/lib/workout-structure').WorkoutStructure | null
+  exercises?: LibExercise[] | null
+}
+
+export async function getWorkoutLibrary(): Promise<WorkoutLibraryRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_library')
+    .select('id, sport, title, description, duration_min, tss, group_name, structure, exercises').order('created_at', { ascending: false })
+  if (error) {
+    // banco sem a migração 023 (structure/exercises): repete sem essas colunas
+    console.error('[queries]', error.message)
+    const retry = await sb.from('workout_library').select('id, sport, title, description, duration_min, tss').order('created_at', { ascending: false })
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []) as WorkoutLibraryRow[]
+  }
+  return (data ?? []) as WorkoutLibraryRow[]
+}
+
+export async function createLibraryWorkout(w: Omit<WorkoutLibraryRow, 'id'>): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return false
+  const { error } = await sb.from('workout_library').insert({ ...w, coach_id: user.id })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/**
+ * Grava vários treinos na biblioteca.
+ *
+ * Devolve o erro em vez de engolir: quando a gravação falha, quem chamou
+ * precisa dizer isso ao treinador — antes o app afirmava que os treinos já
+ * estavam lá, o que era mentira e escondia o problema.
+ *
+ * Se o banco ainda não tem a coluna de grupo (migração 044), repete sem ela:
+ * é melhor gravar os treinos sem pasta do que não gravar nada.
+ */
+export async function bulkCreateLibraryWorkouts(
+  rows: Omit<WorkoutLibraryRow, 'id'>[],
+): Promise<{ count: number; error?: string; semGrupo?: boolean }> {
+  if (rows.length === 0) return { count: 0 }
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return { count: 0, error: 'Sessão expirada. Entre novamente.' }
+
+  const comCoach = rows.map(r => ({ ...r, coach_id: user.id }))
+  const { data, error } = await sb.from('workout_library').insert(comCoach).select('id')
+  if (!error) return { count: data?.length ?? rows.length }
+
+  console.error('[queries]', error.message)
+  // Banco sem a migração 044: tenta de novo sem o campo de grupo.
+  if (/group_name/i.test(error.message)) {
+    const semGrupo = comCoach.map(({ group_name: _g, ...r }) => r)  // eslint-disable-line @typescript-eslint/no-unused-vars
+    const retry = await sb.from('workout_library').insert(semGrupo).select('id')
+    if (retry.error) { console.error('[queries]', retry.error.message); return { count: 0, error: retry.error.message } }
+    return { count: retry.data?.length ?? rows.length, semGrupo: true }
+  }
+  return { count: 0, error: error.message }
+}
+
+/** Move vários treinos da biblioteca para uma pasta (ou tira da pasta). */
+export async function bulkSetLibraryGroup(ids: string[], grupo: string | null): Promise<number> {
+  if (ids.length === 0) return 0
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_library').update({ group_name: grupo }).in('id', ids).select('id')
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return data?.length ?? 0
+}
+
+export async function updateLibraryWorkout(id: string, patch: Partial<Omit<WorkoutLibraryRow, 'id'>>): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('workout_library').update(patch).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export async function deleteLibraryWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('workout_library').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+const ACTIVITY_FULL_COLS = 'id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm, max_hr_bpm, avg_power_watts, max_power_watts, avg_cadence_rpm, max_cadence_rpm, velocity_avg_mps, velocity_max_mps, energy_kj, avg_torque_nm, max_torque_nm, rpe, feeling, calories, hr_zone_minutes, pwr_zone_minutes, workout_description, coach_comments, athlete_comments, planned_duration_seconds, planned_distance_meters, laps'
+
+/** Atividades realizadas num intervalo de datas (para o calendário: planejado x realizado). */
+export async function getActivitiesRange(athleteId: string, fromISO: string, toISO: string): Promise<ActivityRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('activities')
+    .select(ACTIVITY_FULL_COLS)
+    .eq('athlete_id', athleteId).gte('started_at', fromISO).lte('started_at', toISO)
+    .order('started_at', { ascending: true })
+  if (error) {
+    // banco sem as migrações 011/025: repete com o conjunto mínimo
+    console.error('[queries]', error.message)
+    const retry = await sb.from('activities')
+      .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+      .eq('athlete_id', athleteId).gte('started_at', fromISO).lte('started_at', toISO)
+      .order('started_at', { ascending: true })
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+  }
+  return (data ?? []) as unknown as ActivityRow[]
+}
+
+
 export async function getAthleteActivities(athleteId: string, limit = 10): Promise<ActivityRow[]> {
   const sb = createClient()
   const { data, error } = await sb
     .from('activities')
-    .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, zone_data, normalized_power, intensity_factor, avg_hr_bpm')
+    .select(ACTIVITY_FULL_COLS)
     .eq('athlete_id', athleteId)
     .order('started_at', { ascending: false })
     .limit(limit)
-  if (error) { console.error("[queries]", error.message); return [] }
-  return data ?? []
+  if (error) {
+    // banco sem as migrações 011/025 (colunas não existem): repete com o
+    // conjunto mínimo para os treinos continuarem visíveis
+    console.error('[queries]', error.message)
+    const retry = await sb
+      .from('activities')
+      .select('id, name, sport, started_at, duration_seconds, distance_meters, tss, tss_method, normalized_power, intensity_factor, avg_hr_bpm')
+      .eq('athlete_id', athleteId)
+      .order('started_at', { ascending: false })
+      .limit(limit)
+    if (retry.error) { console.error('[queries]', retry.error.message); return [] }
+    return (retry.data ?? []).map(a => ({ ...a, zone_data: null })) as ActivityRow[]
+  }
+  return (data ?? []) as unknown as ActivityRow[]
 }
 
 export async function getAthleteHRV(athleteId: string, days = 30): Promise<DailyMetricRow[]> {
@@ -158,15 +510,18 @@ export type AthleteAlertRow = {
 
 export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
   const sb = createClient()
-  const { data: athletes } = await sb
+  // IMPORTANTE: a view v_athlete_summary NÃO expõe a coluna phone — pedir
+  // phone aqui fazia a consulta inteira falhar e a Central de Alertas zerar.
+  const { data: athletes, error: athletesError } = await sb
     .from('v_athlete_summary')
-    .select('id, full_name, primary_sport, phone, ctl, atl, tsb')
+    .select('id, full_name, primary_sport, ctl, atl, tsb')
     .order('full_name')
+  if (athletesError) console.error('[queries]', athletesError.message)
   if (!athletes?.length) return []
 
   const since = new Date(); since.setDate(since.getDate() - 7)
   const activitySince = new Date(); activitySince.setDate(activitySince.getDate() - 30)
-  const [{ data: metrics }, { data: recentActivities }] = await Promise.all([
+  const [{ data: metrics }, { data: recentActivities }, { data: phones }] = await Promise.all([
     sb.from('daily_metrics')
       .select('athlete_id, date, hrv_ms, body_battery, sleep_hours, rem_pct, resting_hr, stress_avg')
       .in('athlete_id', athletes.map(a => a.id))
@@ -177,19 +532,24 @@ export async function getAthletesForAlerts(): Promise<AthleteAlertRow[]> {
       .in('athlete_id', athletes.map(a => a.id))
       .gte('started_at', activitySince.toISOString())
       .order('started_at', { ascending: false }),
+    // phone vem direto da tabela athletes
+    sb.from('athletes')
+      .select('id, phone')
+      .in('id', athletes.map(a => a.id)),
   ])
 
   const lastActivityByAthlete = new Map<string, string>()
   for (const act of recentActivities ?? []) {
     if (!lastActivityByAthlete.has(act.athlete_id)) lastActivityByAthlete.set(act.athlete_id, act.started_at)
   }
+  const phoneById = new Map((phones ?? []).map(p => [p.id, p.phone]))
 
   return athletes.map(a => {
     const rows = (metrics ?? []).filter(m => m.athlete_id === a.id).sort((x, y) => y.date.localeCompare(x.date))
     const latest = rows[0] ?? null
     return {
       id: a.id, full_name: a.full_name, primary_sport: a.primary_sport,
-      phone: a.phone ?? null, ctl: a.ctl ?? null, atl: a.atl ?? null, tsb: a.tsb ?? null,
+      phone: phoneById.get(a.id) ?? null, ctl: a.ctl ?? null, atl: a.atl ?? null, tsb: a.tsb ?? null,
       latest_date: latest?.date ?? null,
       hrv_ms: latest?.hrv_ms ?? null, body_battery: latest?.body_battery ?? null,
       sleep_hours: latest?.sleep_hours ?? null, rem_pct: latest?.rem_pct ?? null,
@@ -296,6 +656,153 @@ export async function getAthleteMedicalExams(athleteId: string): Promise<Medical
   const sb = createClient()
   const { data } = await sb.from('medical_exams').select('*').eq('athlete_id', athleteId).order('exam_date', { ascending: false })
   return (data ?? []) as MedicalExamRow[]
+}
+
+// ─── Prontuário médico (migração 013) ───────────────────────────────────────
+
+export type MedicalRecordRow = {
+  id: string
+  athlete_id: string
+  record_type: string
+  title: string | null
+  performed_at: string
+  expires_at: string | null
+  doctor_name: string | null
+  lab_name: string | null
+  result: string | null
+  notes: string | null
+}
+
+export type MedicalProfileRow = {
+  athlete_id: string
+  blood_type: string | null
+  allergies: string | null
+  medications: string | null
+  surgeries: string | null
+  conditions: string | null
+  family_history: string | null
+  emergency_contact: string | null
+}
+
+/** Retorna null quando a tabela ainda não existe (migração 013 não aplicada) */
+export async function getMedicalRecords(athleteId: string): Promise<MedicalRecordRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_records').select('*').eq('athlete_id', athleteId).order('performed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as MedicalRecordRow[]
+}
+
+export async function getMedicalProfile(athleteId: string): Promise<MedicalProfileRow | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athlete_medical_profile').select('*').eq('athlete_id', athleteId).maybeSingle()
+  if (error) { console.error('[queries]', error.message); return null }
+  return data as MedicalProfileRow | null
+}
+
+// ─── Treino de força (migração 014) ─────────────────────────────────────────
+
+export type StrengthProgramRow = {
+  id: string
+  athlete_id: string
+  name: string
+  template_key: string | null
+  goal: string | null
+  phase: string | null
+  active: boolean
+  structure: import('@/lib/strength-templates').StrengthDay[]
+  notes: string | null
+  created_at: string
+}
+
+export type StrengthPRRow = {
+  id: string
+  athlete_id: string
+  exercise: string
+  measured_at: string
+  one_rm_kg: number
+  estimated: boolean
+  notes: string | null
+}
+
+/** null quando a tabela não existe (migração 014 não aplicada) */
+export async function getStrengthPrograms(athleteId: string): Promise<StrengthProgramRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_programs').select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as StrengthProgramRow[]
+}
+
+export async function getStrengthPRs(athleteId: string): Promise<StrengthPRRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_prs').select('*').eq('athlete_id', athleteId).order('measured_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as StrengthPRRow[]
+}
+
+/** Uma série executada: repetições feitas e carga usada (strings p/ aceitar "45s", "corporal", etc.) */
+export type StrengthSetLog = { reps: string; load: string; done: boolean }
+export type StrengthLogExercise = {
+  name: string
+  muscle?: string
+  done: boolean          // true se ao menos uma série foi concluída (compat. c/ visão do coach)
+  load?: string          // resumo legível das séries válidas, ex.: "12×40 · 10×42" (compat.)
+  reps?: string          // prescrição de reps do programa
+  sets?: StrengthSetLog[] // detalhe série-a-série (executor dinâmico)
+  notes?: string
+}
+export type StrengthLogRow = {
+  id: string
+  day_label: string | null
+  performed_at: string
+  rpe: number | null
+  completed: StrengthLogExercise[]
+  notes: string | null
+}
+
+/** Registros de força do atleta, lado do coach (migração 015). null se a tabela não existe. */
+export async function getStrengthLogs(athleteId: string): Promise<StrengthLogRow[] | null> {
+  const sb = createClient()
+  const { data, error } = await sb.from('strength_logs')
+    .select('id, day_label, performed_at, rpe, completed, notes')
+    .eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30)
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data ?? []) as StrengthLogRow[]
+}
+
+// ─── Portal do atleta: treino de força (RPCs da migração 015) ───────────────
+
+export type PortalStrengthProgram = {
+  id: string
+  name: string
+  goal: string | null
+  structure: import('@/lib/strength-templates').StrengthDay[]
+}
+
+export async function portalGetStrengthProgram(token: string): Promise<PortalStrengthProgram | null> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_strength_program', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return null }
+  return data as PortalStrengthProgram | null
+}
+
+export async function portalLogStrength(token: string, log: {
+  program_id: string | null; day_label: string | null; rpe: number | null
+  completed: StrengthLogExercise[]; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_log_strength', {
+    p_token: token, p_program_id: log.program_id, p_day_label: log.day_label,
+    p_rpe: log.rpe, p_completed: log.completed, p_notes: log.notes,
+  })
+  if (error) { console.error('[portal]', error.message); return false }
+  return data === true
+}
+
+export async function portalGetStrengthLogs(token: string): Promise<StrengthLogRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('portal_get_strength_logs', { p_token: token })
+  if (error) { console.error('[portal]', error.message); return [] }
+  return (data ?? []) as StrengthLogRow[]
 }
 
 export async function getAthleteBodyComposition(athleteId: string): Promise<BodyCompositionRow[]> {
@@ -424,11 +931,223 @@ export async function getCoachProfile(): Promise<{ full_name: string | null; pho
 }
 
 export async function getMyRole(): Promise<string | null> {
+  const chave = 'saab:off:role'
+  try {
+    const sb = createClient()
+    // Use security definer RPC to bypass RLS self-reference issue
+    const { data, error } = await sb.rpc('get_my_role')
+    if (error) throw new Error(error.message)
+    if (data === null) return null
+    saveSnapshot(chave, data as string)
+    return data as string
+  } catch (e) {
+    console.error('[queries] papel offline:', e)
+    return readSnapshot<string>(chave)?.data ?? null
+  }
+}
+
+// ─── Login do atleta (migração 016) ─────────────────────────────────────────
+
+/** id do atleta vinculado à conta logada; null se a conta for de treinador */
+export async function getMyAthleteId(): Promise<string | null> {
+  // Guardamos o vínculo: sem ele o portal nem abre offline, porque a página
+  // manda o usuário para o painel quando não descobre de qual atleta se trata.
+  const chave = 'saab:off:athlete-id'
+  try {
+    const sb = createClient()
+    const { data, error } = await sb.rpc('my_athlete_id')
+    if (error) throw new Error(error.message)
+    const id = (data as string | null) ?? null
+    if (id) saveSnapshot(chave, id)
+    return id
+  } catch (e) {
+    console.error('[queries] vínculo offline:', e)
+    return readSnapshot<string>(chave)?.data ?? null
+  }
+}
+
+/**
+ * Acesso da conta logada. `isCoach` = tem painel de treinador/admin;
+ * `athleteId` = vínculo de atleta (null se não for atleta). `dual` = ambos
+ * (treinador que também é atleta → o seletor do login decide a área).
+ */
+export async function getMyAccess(): Promise<{ isCoach: boolean; athleteId: string | null; role: string | null; dual: boolean }> {
+  const [role, athleteId] = await Promise.all([getMyRole(), getMyAthleteId()])
+  const isCoach = role === 'coach' || role === 'admin'
+  return { isCoach, athleteId, role, dual: isCoach && !!athleteId }
+}
+
+/** Exclui um aluno e (se aplicável) o login dele, via Netlify Function (service role). */
+export async function deleteAthlete(athleteId: string): Promise<{ ok: boolean; error?: string }> {
   const sb = createClient()
-  // Use security definer RPC to bypass RLS self-reference issue
-  const { data, error } = await sb.rpc('get_my_role')
-  if (error || data === null) return null
-  return data as string
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-delete-athlete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ athlete_id: athleteId }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao excluir o aluno' }
+  }
+}
+
+/** Vincula a conta logada a um atleta pelo código de acesso (portal_token) */
+export async function claimAthleteProfile(token: string): Promise<{ ok: boolean; error?: string; full_name?: string }> {
+  const sb = createClient()
+  const { data, error } = await sb.rpc('claim_athlete_profile', { p_token: token })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: 'falha' } }
+  return data as { ok: boolean; error?: string; full_name?: string }
+}
+
+// ─── Cadastro central de acesso (migração 017 + Netlify Function) ───────────
+
+export type AdminCreateUserInput = {
+  role: 'athlete' | 'coach' | 'admin' | 'doctor'
+  email: string
+  password: string
+  full_name: string
+  athlete_id?: string          // vincular a atleta existente
+  athlete?: {                  // criar atleta novo junto com o acesso
+    primary_sport?: string; phone?: string; weight_kg?: number
+    ftp_watts?: number; lthr_bpm?: number; vo2max_ml_kg_min?: number; goal?: string
+  }
+}
+
+/** Cria uma conta (atleta/treinador/admin) com senha temporária via Netlify Function. */
+export async function adminCreateUser(input: AdminCreateUserInput): Promise<{ ok: boolean; error?: string; userId?: string; athleteId?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-create-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(input),
+    })
+    const text = await res.text()
+    let data: { error?: string; userId?: string; athleteId?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON (ex.: erro 500 do runtime) */ }
+    if (!res.ok) {
+      return { ok: false, error: data.error ?? (text ? `Erro ${res.status}: ${text.slice(0, 140)}` : `Erro ${res.status}`) }
+    }
+    return { ok: true, userId: data.userId, athleteId: data.athleteId }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao criar cadastro' }
+  }
+}
+
+/** Extrai o texto de um PDF do storage no servidor (Node) — robusto em qualquer navegador. */
+export async function extractPdfViaServer(storagePath: string): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'sem sessão' }
+  // Timeout de 60s (cold start do Netlify + carga do pdf.js podem demorar).
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 60_000)
+  try {
+    const res = await fetch('/api/extract-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ storage_path: storagePath }),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` }
+    return { ok: true, text: data.text ?? '' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'timeout 60s' : 'rede/fetch' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Atletas do treinador/admin que ainda não têm acesso ao app (sem user_id). */
+export async function getAthletesWithoutAccess(): Promise<{ id: string; full_name: string; email: string | null }[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('id, full_name, email, user_id, active')
+    .is('user_id', null).eq('active', true).order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []).map(a => ({ id: a.id, full_name: a.full_name, email: a.email }))
+}
+
+/** Dados que o atleta logado vê de si mesmo (via RLS de autoacesso) */
+export async function getAthleteSelf(athleteId: string) {
+  const chave = offlineKey.self(athleteId)
+  try {
+    const dados = await fetchAthleteSelf(athleteId)
+    saveSnapshot(chave, dados)
+    return { ...dados, offlineAt: null as string | null }
+  } catch (e) {
+    // Sem internet: devolve a última cópia, avisando de quando ela é.
+    console.error('[queries] portal offline:', e)
+    const copia = readSnapshot<Awaited<ReturnType<typeof fetchAthleteSelf>>>(chave)
+    if (!copia) throw e
+    return { ...copia.data, offlineAt: copia.at }
+  }
+}
+
+async function fetchAthleteSelf(athleteId: string) {
+  const sb = createClient()
+  const since = new Date(); since.setDate(since.getDate() - 30)
+  const todayISO = new Date().toLocaleDateString('en-CA')
+  const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+  const [summary, metrics, activities, checkins, programs, logs, plans] = await Promise.all([
+    sb.from('v_athlete_summary').select('id, full_name, primary_sport, ctl, atl, tsb').eq('id', athleteId).maybeSingle(),
+    sb.from('daily_metrics').select('date, hrv_ms, body_battery, sleep_hours, resting_hr').eq('athlete_id', athleteId).order('date', { ascending: false }).limit(1),
+    sb.from('activities').select('name, sport, started_at, duration_seconds, distance_meters, tss').eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(5),
+    sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
+    sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
+    sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
+    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+  ])
+  return {
+    summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
+    latestMetrics: (metrics.data?.[0] ?? null) as { date: string; hrv_ms: number | null; body_battery: number | null; sleep_hours: number | null; resting_hr: number | null } | null,
+    activities: (activities.data ?? []) as { name: string | null; sport: string; started_at: string; duration_seconds: number; distance_meters: number | null; tss: number | null }[],
+    checkins: (checkins.data ?? []) as CheckinRow[],
+    program: (programs.data?.[0] ?? null) as PortalStrengthProgram | null,
+    strengthLogs: (logs.data ?? []) as StrengthLogRow[],
+    plannedWorkouts: (plans.data ?? []) as PlannedWorkoutRow[],
+  }
+}
+
+/** Check-in do atleta logado (substitui o de hoje) */
+export async function submitCheckinSelf(athleteId: string, c: {
+  rpe: number | null; soreness: number | null; sleep_quality: number | null
+  mood: number | null; pain_location: string | null; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  await sb.from('athlete_checkins').delete().eq('athlete_id', athleteId).eq('checkin_date', todayLocalISO()).eq('source', 'portal')
+  const { error } = await sb.from('athlete_checkins').insert({ athlete_id: athleteId, ...c, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Check-in simples ao concluir um treino: dificuldade (rpe) + relato livre. */
+export async function submitWorkoutCheckin(athleteId: string, c: { rpe: number | null; notes: string | null }): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athlete_checkins').insert({ athlete_id: athleteId, rpe: c.rpe, notes: c.notes, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Registro de treino de força do atleta logado */
+export async function logStrengthSelf(athleteId: string, log: {
+  program_id: string | null; day_label: string | null; rpe: number | null
+  completed: StrengthLogExercise[]; notes: string | null
+}): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('strength_logs').insert({ athlete_id: athleteId, ...log, source: 'portal' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
 }
 
 export type CoachRow = {
@@ -474,6 +1193,127 @@ export async function setCoachRole(coachId: string, role: 'coach' | 'admin'): Pr
   await sb.from('profiles').update({ role }).eq('id', coachId)
 }
 
+/** Vínculo treinador ⇄ atleta (admin — migração 019). */
+export type AthleteLinkRow = { id: string; full_name: string; coach_id: string; active: boolean }
+
+/** Todos os atletas com seu treinador atual (admin vê todos via RLS da 019). */
+export async function getAthletesForAdmin(): Promise<AthleteLinkRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').select('id, full_name, coach_id, active').order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as AthleteLinkRow[]
+}
+
+/** Reatribui um atleta a outro treinador (admin). */
+export async function updateAthleteCoach(athleteId: string, coachId: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athletes').update({ coach_id: coachId }).eq('id', athleteId)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/**
+ * Mapa user_id → athlete_id dos logins que já têm perfil de atleta.
+ * Usado no admin para saber quais treinadores também treinam (conta dupla).
+ */
+export async function getStaffAthleteMap(): Promise<Record<string, string>> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').select('id, user_id').not('user_id', 'is', null)
+  if (error) { console.error('[queries]', error.message); return {} }
+  const map: Record<string, string> = {}
+  for (const r of (data ?? []) as { id: string; user_id: string | null }[]) {
+    if (r.user_id) map[r.user_id] = r.id
+  }
+  return map
+}
+
+/**
+ * Cria um perfil de atleta para um treinador/admin existente (conta dupla:
+ * o mesmo login passa a treinar também). Usa a RLS "athletes: admin all",
+ * então só um admin consegue inserir. Por padrão o treinador é o próprio
+ * responsável (pode ser reatribuído depois no vínculo treinador ⇄ atleta).
+ */
+export async function createStaffAthleteProfile(
+  coach: { id: string; full_name: string | null; email: string },
+  primarySport: string,
+): Promise<{ ok: boolean; error?: string; athleteId?: string }> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes').insert({
+    coach_id: coach.id,
+    user_id: coach.id,
+    full_name: coach.full_name?.trim() || coach.email,
+    email: coach.email,
+    primary_sport: primarySport,
+  }).select('id').single()
+  if (error) {
+    console.error('[queries]', error.message)
+    const dup = /duplicate|uq_athlete_email/i.test(error.message)
+    return { ok: false, error: dup ? 'Este treinador já tem perfil de atleta.' : error.message }
+  }
+  return { ok: true, athleteId: data.id }
+}
+
+/** Admin edita o nome de um treinador/admin (RLS: admin atualiza qualquer profile). */
+export async function updateCoachName(coachId: string, fullName: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('profiles').update({ full_name: fullName }).eq('id', coachId)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Redefine a senha de um usuário (via Netlify Function, service role). */
+export async function adminResetPassword(userId: string, password: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ user_id: userId, password }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao redefinir senha' }
+  }
+}
+
+/** Exclui um treinador/admin e o login dele, via Netlify Function (service role). */
+export async function deleteStaff(userId: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/admin-delete-staff', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ user_id: userId }),
+    })
+    const text = await res.text()
+    let data: { error?: string } = {}
+    try { data = JSON.parse(text) } catch { /* não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}: ${text.slice(0, 140)}` }
+    return { ok: true }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao excluir o treinador' }
+  }
+}
+
+/** Sobe uma foto de perfil para o bucket avatars e devolve a URL pública. */
+export async function uploadAvatar(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${userId}/avatar-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
 export async function getDashboardSummary() {
   const sb = createClient()
   const { data: athletes } = await sb
@@ -492,4 +1332,1004 @@ export async function getDashboardSummary() {
     athletes: athletes ?? [],
     weeklyActivities: weeklyActivities ?? 0,
   }
+}
+
+// ─── Matrícula pública + anamnese (funil "Meus primeiros 5 km") ─────────────
+
+export type EnrollmentRow = {
+  id: string
+  created_at: string
+  athlete_id: string | null
+  user_id: string | null
+  package_key: string
+  status: 'pending' | 'active' | 'rejected'
+  full_name: string | null
+  email: string | null
+  phone: string | null
+  age: number | null
+  height_cm: number | null
+  weight_kg: number | null
+  currently_running: boolean | null
+  running_level: string | null
+  activity_level: string | null
+  days_running: string | null
+  weekly_distance: string | null
+  goal: string | null
+  preferred_days: number[] | null
+  long_run_day: number | null
+  coach_notes: string | null
+  plan_applied_at: string | null
+  paid_at: string | null
+  payment_status: 'approved' | 'refunded' | 'canceled' | null
+  payment_ref: string | null
+  payment_source: string | null
+}
+
+export type PublicEnrollInput = {
+  full_name: string; email: string; phone?: string; password: string
+  package_key?: string
+  age?: number | null; height_cm?: number | null; weight_kg?: number | null
+  currently_running?: boolean | null
+  running_level?: string | null; activity_level?: string | null
+  days_running?: string | null; weekly_distance?: string | null
+  goal?: string | null; preferred_days?: number[] | null; long_run_day?: number | null
+  website?: string // honeypot
+}
+
+/** Matrícula pública (sem login): cria conta + atleta + anamnese via Function. */
+export async function publicEnroll(input: PublicEnrollInput): Promise<{ ok: boolean; error?: string; userId?: string; athleteId?: string }> {
+  try {
+    const res = await fetch('/api/public-enroll', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    const text = await res.text()
+    let data: { error?: string; userId?: string; athleteId?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? (text ? `Erro ${res.status}` : `Erro ${res.status}`) }
+    return { ok: true, userId: data.userId, athleteId: data.athleteId }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao concluir a matrícula.' }
+  }
+}
+
+/** Lista as anamneses/matrículas (staff). Opcionalmente filtra por status. */
+export async function getEnrollments(status?: 'pending' | 'active' | 'rejected'): Promise<EnrollmentRow[]> {
+  const sb = createClient()
+  let q = sb.from('anamneses').select('*').order('created_at', { ascending: false })
+  if (status) q = q.eq('status', status)
+  const { data, error } = await q
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as EnrollmentRow[]
+}
+
+/** Atualiza status e/ou observações do treinador numa matrícula. */
+export async function updateEnrollment(id: string, patch: Partial<Pick<EnrollmentRow, 'status' | 'coach_notes'>>): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('anamneses').update(patch).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Marca a matrícula como ativa (plano aplicado). */
+export async function markEnrollmentPlanApplied(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('anamneses').update({ status: 'active', plan_applied_at: new Date().toISOString() }).eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Status da matrícula do próprio aluno (portão de aprovação no portal).
+ *  Retorna null quando não há anamnese — ex.: aluno cadastrado direto pelo
+ *  treinador, que tem acesso liberado normalmente. */
+export async function getMyEnrollmentStatus(): Promise<{ status: 'pending' | 'active' | 'rejected'; full_name: string | null; package_key: string } | null> {
+  const sb = createClient()
+  const { data: u } = await sb.auth.getUser()
+  const uid = u.user?.id
+  if (!uid) return null
+  const { data, error } = await sb.from('anamneses')
+    .select('status, full_name, package_key')
+    .eq('user_id', uid)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) { console.error('[queries]', error.message); return null }
+  return (data as { status: 'pending' | 'active' | 'rejected'; full_name: string | null; package_key: string } | null) ?? null
+}
+
+/** Envia o e-mail de "plano pronto" ao aluno (staff). Não bloqueia a aprovação:
+ *  retorna skipped quando o provedor de e-mail ainda não está configurado. */
+export async function notifyEnrollmentApproved(athleteId: string): Promise<{ ok: boolean; sent?: boolean; skipped?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada.' }
+  try {
+    const res = await fetch('/api/notify-enrollment-approved', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ athlete_id: athleteId }),
+    })
+    const text = await res.text()
+    let data: { error?: string; sent?: boolean; skipped?: string } = {}
+    try { data = JSON.parse(text) } catch { /* resposta não-JSON */ }
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, sent: data.sent, skipped: data.skipped }
+  } catch {
+    return { ok: false, error: 'Falha de rede ao enviar o e-mail.' }
+  }
+}
+
+// ─── Métricas do atleta (exames/laudos → métricas, migração 030) ────────────
+
+export type AthleteMetricRow = {
+  id: string
+  athlete_id: string
+  measured_at: string
+  category: string
+  metric_key: string
+  label: string
+  value: number
+  unit: string | null
+  source: string | null
+}
+
+export type AthleteMetricInput = {
+  measured_at: string
+  category: string
+  metric_key: string
+  label: string
+  value: number
+  unit: string | null
+}
+
+/** Salva (upsert por chave+data) um conjunto de métricas do atleta. */
+export async function saveAthleteMetrics(athleteId: string, rows: AthleteMetricInput[], source?: string): Promise<{ ok: boolean; count: number; error?: string }> {
+  const sb = createClient()
+  const payload = rows.map(r => ({ athlete_id: athleteId, source: source ?? null, ...r }))
+  const { error } = await sb.from('athlete_metrics').upsert(payload, { onConflict: 'athlete_id,metric_key,measured_at' })
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: payload.length }
+}
+
+/** Todas as métricas do atleta (mais recentes primeiro). */
+export async function getAthleteMetrics(athleteId: string): Promise<AthleteMetricRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athlete_metrics')
+    .select('*').eq('athlete_id', athleteId)
+    .order('measured_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as AthleteMetricRow[]
+}
+
+/** Remove uma métrica específica. */
+export async function deleteAthleteMetric(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('athlete_metrics').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+// ─── Programas de treino (compositor, migração 031) ─────────────────────────
+
+export type TrainingProgramRow = {
+  id: string
+  name: string
+  description: string | null
+  sport: string
+  goal: string | null
+  level: string | null
+  weeks: ProgramWeek[]
+  routing: ProgramRouting | null
+  package_key: string | null
+  active: boolean
+}
+
+export type TrainingProgramInput = Omit<TrainingProgramRow, 'id'> & { id?: string }
+
+export async function getTrainingPrograms(): Promise<TrainingProgramRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('training_programs')
+    .select('id, name, description, sport, goal, level, weeks, routing, package_key, active')
+    .order('created_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as TrainingProgramRow[]
+}
+
+export async function saveTrainingProgram(p: TrainingProgramInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const payload = {
+    name: p.name, description: p.description, sport: p.sport, goal: p.goal, level: p.level,
+    weeks: p.weeks, routing: p.routing, package_key: p.package_key, active: p.active,
+    updated_at: new Date().toISOString(),
+  }
+  if (p.id) {
+    const { error } = await sb.from('training_programs').update(payload).eq('id', p.id)
+    if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+    return { ok: true, id: p.id }
+  }
+  const { data, error } = await sb.from('training_programs').insert({ ...payload, created_by: user?.id ?? null }).select('id').single()
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true, id: data.id }
+}
+
+export async function deleteTrainingProgram(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('training_programs').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+// ─── Parceiros (portal do aluno, migração 034) ──────────────────────────────
+
+export type PartnerRow = {
+  id: string
+  name: string
+  url: string | null
+  logo_url: string | null
+  description: string | null
+  sort: number
+  active: boolean
+}
+
+export async function getPartners(onlyActive = true): Promise<PartnerRow[]> {
+  const sb = createClient()
+  let q = sb.from('partners').select('id, name, url, logo_url, description, sort, active').order('sort').order('created_at')
+  if (onlyActive) q = q.eq('active', true)
+  const { data, error } = await q
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as PartnerRow[]
+}
+
+export async function savePartner(p: Partial<PartnerRow> & { name: string }): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const payload = { name: p.name, url: p.url ?? null, logo_url: p.logo_url ?? null, description: p.description ?? null, sort: p.sort ?? 0, active: p.active ?? true }
+  const { error } = p.id
+    ? await sb.from('partners').update(payload).eq('id', p.id)
+    : await sb.from('partners').insert(payload)
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deletePartner(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('partners').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Sobe a imagem do logo de um parceiro (bucket avatars, pasta do admin). */
+export async function uploadPartnerLogo(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'png').toLowerCase()
+  const path = `${userId}/partner-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/png' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
+// ─── Exames de sangue (migração 036) ────────────────────────────────────────
+
+export type BloodExamValue = { marker_key: string; value: number | null; unit: string | null }
+export type BloodExamRow = {
+  id: string; athlete_id: string; exam_date: string
+  lab: string | null; notes: string | null; created_at: string
+  values: BloodExamValue[]
+}
+export type BloodExamInput = {
+  athlete_id: string; exam_date: string; lab?: string | null; notes?: string | null
+  values: BloodExamValue[]
+}
+
+/** Lista os exames de sangue do atleta (mais recentes primeiro), com seus valores. */
+export async function getBloodExams(athleteId: string): Promise<BloodExamRow[]> {
+  const sb = createClient()
+  const { data: exams, error } = await sb.from('blood_exams')
+    .select('id, athlete_id, exam_date, lab, notes, created_at')
+    .eq('athlete_id', athleteId).order('exam_date', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  const ids = (exams ?? []).map(e => e.id)
+  let vals: { exam_id: string; marker_key: string; value: number | null; unit: string | null }[] = []
+  if (ids.length) {
+    const { data: vd } = await sb.from('blood_exam_values').select('exam_id, marker_key, value, unit').in('exam_id', ids)
+    vals = vd ?? []
+  }
+  return (exams ?? []).map(e => ({
+    ...e,
+    values: vals.filter(v => v.exam_id === e.id).map(v => ({ marker_key: v.marker_key, value: v.value, unit: v.unit })),
+  })) as BloodExamRow[]
+}
+
+/** Cria um exame de sangue com seus valores (ignora marcadores sem valor). */
+export async function saveBloodExam(input: BloodExamInput): Promise<{ ok: boolean; id?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const { data: exam, error } = await sb.from('blood_exams')
+    .insert({ athlete_id: input.athlete_id, exam_date: input.exam_date, lab: input.lab ?? null, notes: input.notes ?? null, created_by: user?.id ?? null })
+    .select('id').single()
+  if (error || !exam) { console.error('[queries]', error?.message); return { ok: false, error: error?.message } }
+  const rows = input.values.filter(v => v.value != null && !Number.isNaN(v.value))
+    .map(v => ({ exam_id: exam.id, marker_key: v.marker_key, value: v.value, unit: v.unit ?? null }))
+  if (rows.length) {
+    const { error: vErr } = await sb.from('blood_exam_values').insert(rows)
+    if (vErr) { console.error('[queries]', vErr.message); return { ok: false, error: vErr.message } }
+  }
+  return { ok: true, id: exam.id }
+}
+
+/** Substitui os valores de um exame existente (edição). */
+export async function updateBloodExamValues(examId: string, values: BloodExamValue[]): Promise<boolean> {
+  const sb = createClient()
+  await sb.from('blood_exam_values').delete().eq('exam_id', examId)
+  const rows = values.filter(v => v.value != null && !Number.isNaN(v.value))
+    .map(v => ({ exam_id: examId, marker_key: v.marker_key, value: v.value, unit: v.unit ?? null }))
+  if (rows.length) {
+    const { error } = await sb.from('blood_exam_values').insert(rows)
+    if (error) { console.error('[queries]', error.message); return false }
+  }
+  return true
+}
+
+export async function deleteBloodExam(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('blood_exams').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+// ─── Leitura de PDF no servidor (robusto em qualquer navegador/mobile) ───────
+// Envia os bytes do PDF (base64) para a Function e recebe o texto extraído.
+export async function readPdfViaServer(file: File): Promise<{ ok: boolean; text?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  // arrayBuffer → base64 (em blocos, para não estourar a pilha)
+  let b64 = ''
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    let bin = ''
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)))
+    b64 = btoa(bin)
+  } catch { return { ok: false, error: 'Falha ao ler o arquivo.' } }
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 90_000)
+  try {
+    const res = await fetch('/api/read-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ pdf_base64: b64 }),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` }
+    return { ok: true, text: data.text ?? '' }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao ler o PDF (90s).' : 'Falha de rede ao ler o PDF.' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ─── Liberação médica (migração 037) ────────────────────────────────────────
+
+export type ClearanceStatus = 'apto' | 'apto_restricao' | 'inapto'
+export type MedicalClearanceRow = {
+  id: string
+  athlete_id: string
+  doctor_id: string | null
+  doctor_name: string | null
+  doctor_crm: string | null
+  status: ClearanceStatus
+  assessed_at: string
+  valid_until: string | null
+  restrictions: string | null
+  notes: string | null
+  created_at: string
+}
+export type MedicalClearanceInput = {
+  athlete_id: string
+  status: ClearanceStatus
+  assessed_at: string
+  valid_until?: string | null
+  restrictions?: string | null
+  notes?: string | null
+  doctor_crm?: string | null
+}
+
+/** Histórico de pareceres do atleta (mais recente primeiro). */
+export async function getMedicalClearances(athleteId: string): Promise<MedicalClearanceRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_clearances')
+    .select('*').eq('athlete_id', athleteId).order('assessed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as MedicalClearanceRow[]
+}
+
+/** Parecer vigente (o mais recente) de vários atletas de uma vez. */
+export async function getCurrentClearances(athleteIds: string[]): Promise<Record<string, MedicalClearanceRow>> {
+  if (athleteIds.length === 0) return {}
+  const sb = createClient()
+  const { data, error } = await sb.from('medical_clearances')
+    .select('*').in('athlete_id', athleteIds).order('assessed_at', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return {} }
+  const out: Record<string, MedicalClearanceRow> = {}
+  for (const r of (data ?? []) as MedicalClearanceRow[]) if (!out[r.athlete_id]) out[r.athlete_id] = r
+  return out
+}
+
+/** Emite um novo parecer (médico/admin). Carimba nome do avaliador. */
+export async function saveMedicalClearance(input: MedicalClearanceInput): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const doctorName = (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? null
+  const { error } = await sb.from('medical_clearances').insert({
+    athlete_id: input.athlete_id,
+    doctor_id: user?.id ?? null,
+    doctor_name: doctorName,
+    doctor_crm: input.doctor_crm ?? null,
+    status: input.status,
+    assessed_at: input.assessed_at,
+    valid_until: input.valid_until ?? null,
+    restrictions: input.restrictions ?? null,
+    notes: input.notes ?? null,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteMedicalClearance(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('medical_clearances').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Situação efetiva do parecer: considera vencimento. */
+export function clearanceState(c: MedicalClearanceRow | null | undefined):
+  { key: 'apto' | 'apto_restricao' | 'inapto' | 'vencido' | 'sem_avaliacao'; label: string; color: string } {
+  if (!c) return { key: 'sem_avaliacao', label: 'Sem avaliação', color: '#94a3b8' }
+  const today = new Date().toLocaleDateString('en-CA')
+  if (c.valid_until && c.valid_until < today) return { key: 'vencido', label: 'Liberação vencida', color: '#f59e0b' }
+  if (c.status === 'apto') return { key: 'apto', label: 'Apto', color: '#00d084' }
+  if (c.status === 'apto_restricao') return { key: 'apto_restricao', label: 'Apto com restrição', color: '#f59e0b' }
+  return { key: 'inapto', label: 'Inapto', color: '#ef4444' }
+}
+
+// ─── Prontuário clínico — evolução SOAP (migração 038) ──────────────────────
+
+export type ClinicalNoteRow = {
+  id: string
+  athlete_id: string
+  author_id: string | null
+  author_name: string | null
+  author_role: string | null
+  note_date: string
+  chief_complaint: string | null
+  findings: string | null
+  assessment: string | null
+  plan: string | null
+  follow_up_at: string | null
+  private: boolean
+  created_at: string
+}
+export type ClinicalNoteInput = {
+  athlete_id: string
+  note_date: string
+  chief_complaint?: string | null
+  findings?: string | null
+  assessment?: string | null
+  plan?: string | null
+  follow_up_at?: string | null
+  private?: boolean
+}
+
+export async function getClinicalNotes(athleteId: string): Promise<ClinicalNoteRow[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('clinical_notes')
+    .select('*').eq('athlete_id', athleteId).order('note_date', { ascending: false })
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as ClinicalNoteRow[]
+}
+
+export async function saveClinicalNote(input: ClinicalNoteInput): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  const { error } = await sb.from('clinical_notes').insert({
+    athlete_id: input.athlete_id,
+    author_id: user?.id ?? null,
+    author_name: (user?.user_metadata?.full_name as string | undefined) ?? user?.email ?? null,
+    author_role: role,
+    note_date: input.note_date,
+    chief_complaint: input.chief_complaint ?? null,
+    findings: input.findings ?? null,
+    assessment: input.assessment ?? null,
+    plan: input.plan ?? null,
+    follow_up_at: input.follow_up_at ?? null,
+    private: input.private ?? false,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteClinicalNote(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('clinical_notes').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+// ─── Análise do relatório semanal com IA (Gemini, via Netlify Function) ──────
+
+export type AiReportInput = {
+  firstName?: string; sport?: string
+  ctl?: number | null; atl?: number | null; tsb?: number | null; tsbTrend?: string | null
+  hrv?: number | null; hrvAvg?: number | null
+  sleep?: number | null; sleepAvg?: number | null
+  bodyBattery?: number | null; stress?: number | null; restingHr?: number | null
+  readiness?: string | null
+  workoutsDone?: number | null; workoutsPlanned?: number | null; weekHours?: number | null
+}
+export type AiReport = { titulo: string; resumo: string; destaques: string[]; recomendacao: string }
+
+/** Gera a leitura da semana (texto) a partir dos números do atleta. */
+export async function generateAiReport(input: AiReportInput): Promise<{ ok: boolean; report?: AiReport; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 45_000)
+  try {
+    const res = await fetch('/api/ai-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(input),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, report: data as AiReport }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao gerar a análise.' : 'Falha de rede ao gerar a análise.' }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ─── Visão geral de treinos do aluno (portal) ───────────────────────────────
+
+export type TrainingOverview = {
+  all: PlannedWorkoutRow[]        // todo o plano (para progresso)
+  today: PlannedWorkoutRow[]      // treinos de hoje
+  next: PlannedWorkoutRow[]       // próximos (a partir de amanhã)
+  week: { date: string; planned: PlannedWorkoutRow[] }[]  // seg→dom da semana atual
+  progress: { total: number; done: number; weekIndex: number; weeks: number } | null
+  adherence: { planned: number; done: number; pct: number } | null  // últimos 28 dias
+  offlineAt: string | null        // preenchido quando veio da cópia local, sem internet
+}
+
+/** Carrega o plano do aluno e calcula progresso, semana atual e constância. */
+export async function getTrainingOverview(athleteId: string): Promise<TrainingOverview> {
+  const COLS = 'id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure'
+  const chave = offlineKey.planned(athleteId)
+
+  // Busca o plano. Sem internet, usa a cópia guardada na última visita.
+  let rows: PlannedWorkoutRow[] | null = null
+  let offlineAt: string | null = null
+  try {
+    const sb = createClient()
+    const first = await sb.from('planned_workouts')
+      .select(COLS + ', skipped, skip_reason, moved_from')
+      .eq('athlete_id', athleteId).order('date').limit(400)
+    rows = first.data as unknown as PlannedWorkoutRow[] | null
+    if (first.error) {
+      // banco sem a migração 040: repete sem as colunas novas
+      console.error('[queries]', first.error.message)
+      const retry = await sb.from('planned_workouts').select(COLS).eq('athlete_id', athleteId).order('date').limit(400)
+      if (retry.error) throw new Error(retry.error.message)
+      rows = retry.data as unknown as PlannedWorkoutRow[] | null
+    }
+    if (rows) saveSnapshot(chave, rows)
+  } catch (e) {
+    console.error('[queries] plano offline:', e)
+    const copia = readSnapshot<PlannedWorkoutRow[]>(chave)
+    if (!copia) throw e
+    rows = copia.data
+    offlineAt = copia.at
+  }
+  const all = rows ?? []
+
+  const todayISO = new Date().toLocaleDateString('en-CA')
+  const today = all.filter(w => w.date === todayISO)
+  const next = all.filter(w => w.date > todayISO).slice(0, 8)
+
+  // Semana corrente (segunda → domingo)
+  const now = new Date(); now.setHours(12, 0, 0, 0)
+  const monday = new Date(now); monday.setDate(now.getDate() - ((now.getDay() + 6) % 7))
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday); d.setDate(monday.getDate() + i)
+    const iso = d.toLocaleDateString('en-CA')
+    return { date: iso, planned: all.filter(w => w.date === iso) }
+  })
+
+  // Progresso no plano inteiro
+  let progress: TrainingOverview['progress'] = null
+  if (all.length > 0) {
+    const first = new Date(all[0].date + 'T12:00:00')
+    const last = new Date(all[all.length - 1].date + 'T12:00:00')
+    const spanDays = Math.max(1, Math.round((last.getTime() - first.getTime()) / 86400000) + 1)
+    const weeks = Math.max(1, Math.ceil(spanDays / 7))
+    const elapsed = Math.round((now.getTime() - first.getTime()) / 86400000)
+    const weekIndex = Math.min(weeks, Math.max(1, Math.floor(elapsed / 7) + 1))
+    progress = { total: all.length, done: all.filter(w => w.completed).length, weekIndex, weeks }
+  }
+
+  // Constância: treinos já vencidos nos últimos 28 dias
+  const from = new Date(now); from.setDate(now.getDate() - 28)
+  const fromISO = from.toLocaleDateString('en-CA')
+  const past = all.filter(w => w.date >= fromISO && w.date <= todayISO)
+  const adherence = past.length
+    ? { planned: past.length, done: past.filter(w => w.completed).length, pct: Math.round((past.filter(w => w.completed).length / past.length) * 100) }
+    : null
+
+  return { all, today, next, week, progress, adherence, offlineAt }
+}
+
+// ─── Treinar junto — encontros de treino (migração 039) ─────────────────────
+
+export type MeetupRow = {
+  id: string
+  created_by: string | null
+  creator_name: string | null
+  creator_role: string | null
+  athlete_id: string | null
+  title: string
+  sport: string
+  workout_type: string | null
+  meetup_date: string
+  meetup_time: string
+  location_name: string
+  location_notes: string | null
+  location_url: string | null
+  location_photo_url: string | null
+  pace_min_sec: number | null
+  pace_max_sec: number | null
+  distance_km: number | null
+  max_people: number | null
+  no_one_left_behind: boolean
+  notes: string | null
+  status: 'open' | 'cancelled'
+  created_at: string
+}
+export type MeetupParticipant = {
+  id: string; meetup_id: string; athlete_id: string | null
+  user_id: string | null; display_name: string | null; status: 'going' | 'maybe'
+}
+export type MeetupInput = Omit<MeetupRow, 'id' | 'created_by' | 'creator_name' | 'creator_role' | 'created_at' | 'status'>
+  & { status?: 'open' | 'cancelled' }
+
+/** Encontros a partir de hoje, com quem já confirmou. */
+export async function getMeetups(): Promise<{ meetups: MeetupRow[]; participants: MeetupParticipant[]; myUserId: string | null }> {
+  const sb = createClient()
+  const today = new Date().toLocaleDateString('en-CA')
+  const { data: { user } } = await sb.auth.getUser()
+  const { data, error } = await sb.from('training_meetups')
+    .select('*').gte('meetup_date', today).order('meetup_date').order('meetup_time').limit(60)
+  if (error) { console.error('[queries]', error.message); return { meetups: [], participants: [], myUserId: user?.id ?? null } }
+  const meetups = (data ?? []) as MeetupRow[]
+  let participants: MeetupParticipant[] = []
+  if (meetups.length) {
+    const { data: p } = await sb.from('meetup_participants').select('*').in('meetup_id', meetups.map(m => m.id))
+    participants = (p ?? []) as MeetupParticipant[]
+  }
+  return { meetups, participants, myUserId: user?.id ?? null }
+}
+
+export async function saveMeetup(input: MeetupInput, id?: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  if (id) {
+    const { error } = await sb.from('training_meetups').update(input).eq('id', id)
+    if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+    return { ok: true }
+  }
+  const { error } = await sb.from('training_meetups').insert({
+    ...input,
+    created_by: user?.id ?? null,
+    creator_name: (user?.user_metadata?.full_name as string | undefined) ?? user?.email?.split('@')[0] ?? null,
+    creator_role: role,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+export async function deleteMeetup(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('training_meetups').delete().eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Confirma ou cancela a presença do usuário logado num encontro. */
+export async function toggleMeetupPresence(meetupId: string, going: boolean, athleteId: string | null, displayName: string | null): Promise<boolean> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  if (!user) return false
+  if (!going) {
+    const { error } = await sb.from('meetup_participants').delete().eq('meetup_id', meetupId).eq('user_id', user.id)
+    if (error) { console.error('[queries]', error.message); return false }
+    return true
+  }
+  const { error } = await sb.from('meetup_participants')
+    .upsert({ meetup_id: meetupId, user_id: user.id, athlete_id: athleteId, display_name: displayName, status: 'going' }, { onConflict: 'meetup_id,user_id' })
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Foto do ponto de encontro (reaproveita o bucket de avatares). */
+export async function uploadMeetupPhoto(userId: string, file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase()
+  const path = `${userId}/meetup-${Date.now()}.${ext}`
+  const { error: upErr } = await sb.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' })
+  if (upErr) { console.error('[queries]', upErr.message); return { ok: false, error: upErr.message } }
+  const { data } = sb.storage.from('avatars').getPublicUrl(path)
+  return { ok: true, url: data.publicUrl }
+}
+
+/** Match automático: colegas com treino parecido no mesmo dia.
+ *  Base do "3 pessoas têm um treino parecido com o seu no sábado". */
+export type MeetupSuggestion = { date: string; sport: string; title: string; count: number; names: string[]; durationMin: number | null }
+
+export async function getMeetupSuggestions(athleteId: string): Promise<MeetupSuggestion[]> {
+  const sb = createClient()
+  const today = new Date().toLocaleDateString('en-CA')
+  const in14 = new Date(); in14.setDate(in14.getDate() + 14)
+  // Treinos meus e dos colegas na janela — compara por dia + modalidade + duração próxima.
+  const { data, error } = await sb.from('planned_workouts')
+    .select('athlete_id, date, sport, title, planned_duration_min')
+    .gte('date', today).lte('date', in14.toLocaleDateString('en-CA')).limit(600)
+  if (error) { console.error('[queries]', error.message); return [] }
+  const rows = (data ?? []) as { athlete_id: string; date: string; sport: string; title: string; planned_duration_min: number | null }[]
+  const mine = rows.filter(r => r.athlete_id === athleteId && r.sport !== 'strength')
+  if (mine.length === 0) return []
+
+  const others = rows.filter(r => r.athlete_id !== athleteId && r.sport !== 'strength')
+  const ids = [...new Set(others.map(r => r.athlete_id))]
+  const names = new Map<string, string>()
+  if (ids.length) {
+    const { data: ath } = await sb.from('athletes').select('id, full_name').in('id', ids)
+    for (const a of (ath ?? []) as { id: string; full_name: string }[]) names.set(a.id, a.full_name.split(' ')[0])
+  }
+
+  const out: MeetupSuggestion[] = []
+  for (const m of mine) {
+    const dur = m.planned_duration_min ?? 0
+    const matches = others.filter(o =>
+      o.date === m.date && o.sport === m.sport &&
+      // duração parecida: até 40% de diferença (ou ambos sem duração)
+      (!dur || !o.planned_duration_min || Math.abs(o.planned_duration_min - dur) / dur <= 0.4))
+    const uniq = [...new Set(matches.map(o => o.athlete_id))]
+    if (uniq.length > 0) {
+      out.push({
+        date: m.date, sport: m.sport, title: m.title, count: uniq.length,
+        names: uniq.map(id => names.get(id) ?? 'colega').slice(0, 4),
+        durationMin: m.planned_duration_min,
+      })
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1)).slice(0, 4)
+}
+
+// ─── Experiência do aluno: "não deu hoje" + recado no treino (migração 040) ─
+
+/** Remarca o treino para outro dia (sem deixar rastro de "falhou"). */
+export async function rescheduleWorkout(id: string, fromDate: string, toDate: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ date: toDate, moved_from: fromDate, skipped: false, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Marca o treino como pulado assumidamente (não é falha, é decisão). */
+export async function skipWorkout(id: string, reason: string | null): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ skipped: true, skip_reason: reason, completed: false, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+/** Desfaz o "pulei" (o aluno mudou de ideia). */
+export async function unskipWorkout(id: string): Promise<boolean> {
+  const sb = createClient()
+  const { error } = await sb.from('planned_workouts')
+    .update({ skipped: false, skip_reason: null, updated_at: new Date().toISOString() })
+    .eq('id', id)
+  if (error) { console.error('[queries]', error.message); return false }
+  return true
+}
+
+export type WorkoutComment = {
+  id: string; workout_id: string; athlete_id: string | null
+  author_id: string | null; author_name: string | null; author_role: string | null
+  body: string; created_at: string
+  read_by_staff?: boolean; read_by_athlete?: boolean
+}
+
+export async function getWorkoutComments(workoutId: string): Promise<WorkoutComment[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_comments')
+    .select('*').eq('workout_id', workoutId).order('created_at')
+  if (error) { console.error('[queries]', error.message); return [] }
+  return (data ?? []) as WorkoutComment[]
+}
+
+export async function addWorkoutComment(workoutId: string, athleteId: string | null, body: string): Promise<{ ok: boolean; error?: string }> {
+  const sb = createClient()
+  const { data: { user } } = await sb.auth.getUser()
+  const role = await getMyRole().catch(() => null)
+  const staff = role === 'coach' || role === 'admin' || role === 'doctor'
+  const { error } = await sb.from('workout_comments').insert({
+    workout_id: workoutId, athlete_id: athleteId,
+    author_id: user?.id ?? null,
+    author_name: (user?.user_metadata?.full_name as string | undefined)?.split(' ')[0] ?? user?.email?.split('@')[0] ?? null,
+    author_role: role, body: body.trim(),
+    // quem escreve já leu a própria mensagem
+    read_by_staff: staff, read_by_athlete: !staff,
+  })
+  if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+  return { ok: true }
+}
+
+/** Atividades e treinos do aluno para calcular conquistas e a narrativa. */
+export async function getAchievementData(athleteId: string): Promise<{
+  activities: { started_at: string; duration_seconds: number; distance_meters: number | null }[]
+  planned: { date: string; completed: boolean; skipped?: boolean }[]
+}> {
+  const sb = createClient()
+  const [actRes, planRes] = await Promise.all([
+    sb.from('activities').select('started_at, duration_seconds, distance_meters')
+      .eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(400),
+    sb.from('planned_workouts').select('date, completed').eq('athlete_id', athleteId).limit(400),
+  ])
+  return {
+    activities: (actRes.data ?? []) as { started_at: string; duration_seconds: number; distance_meters: number | null }[],
+    planned: (planRes.data ?? []) as { date: string; completed: boolean }[],
+  }
+}
+
+// ─── Caixa de entrada de recados (treinador) ────────────────────────────────
+
+export type InboxThread = {
+  workout_id: string
+  athlete_id: string | null
+  athlete_name: string
+  workout_title: string
+  workout_date: string
+  last_body: string
+  last_at: string
+  last_from_athlete: boolean
+  unread: number
+}
+
+/** Conversas de todos os alunos, mais recentes primeiro, com não lidas. */
+export async function getCoachInbox(): Promise<InboxThread[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_comments')
+    .select('*').order('created_at', { ascending: false }).limit(500)
+  if (error) { console.error('[queries]', error.message); return [] }
+  const rows = (data ?? []) as WorkoutComment[]
+  if (rows.length === 0) return []
+
+  const workoutIds = [...new Set(rows.map(r => r.workout_id))]
+  const athleteIds = [...new Set(rows.map(r => r.athlete_id).filter((x): x is string => !!x))]
+  const [wRes, aRes] = await Promise.all([
+    sb.from('planned_workouts').select('id, title, date').in('id', workoutIds),
+    athleteIds.length ? sb.from('athletes').select('id, full_name').in('id', athleteIds) : Promise.resolve({ data: [] }),
+  ])
+  const wMap = new Map(((wRes.data ?? []) as { id: string; title: string; date: string }[]).map(w => [w.id, w]))
+  const aMap = new Map(((aRes.data ?? []) as { id: string; full_name: string }[]).map(a => [a.id, a.full_name]))
+
+  const threads = new Map<string, InboxThread>()
+  for (const r of rows) {           // já vem do mais novo para o mais antigo
+    const w = wMap.get(r.workout_id)
+    const isAthlete = r.author_role === 'athlete' || r.author_role == null
+    const cur = threads.get(r.workout_id)
+    if (!cur) {
+      threads.set(r.workout_id, {
+        workout_id: r.workout_id,
+        athlete_id: r.athlete_id,
+        athlete_name: (r.athlete_id ? aMap.get(r.athlete_id) : null) ?? 'Aluno',
+        workout_title: w?.title ?? 'Treino',
+        workout_date: w?.date ?? '',
+        last_body: r.body,
+        last_at: r.created_at,
+        last_from_athlete: isAthlete,
+        unread: !r.read_by_staff && isAthlete ? 1 : 0,
+      })
+    } else if (!r.read_by_staff && isAthlete) {
+      cur.unread++
+    }
+  }
+  return [...threads.values()].sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+}
+
+/** Marca como lidas as mensagens de uma conversa (lado staff ou aluno). */
+export async function markThreadRead(workoutId: string, side: 'staff' | 'athlete'): Promise<void> {
+  const sb = createClient()
+  const patch = side === 'staff' ? { read_by_staff: true } : { read_by_athlete: true }
+  const col = side === 'staff' ? 'read_by_staff' : 'read_by_athlete'
+  const { error } = await sb.from('workout_comments').update(patch).eq('workout_id', workoutId).eq(col, false)
+  if (error) console.error('[queries]', error.message)
+}
+
+/** Quantas respostas do treinador o aluno ainda não leu. */
+export async function getAthleteUnreadCount(athleteId: string): Promise<number> {
+  const sb = createClient()
+  const { count, error } = await sb.from('workout_comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('athlete_id', athleteId).eq('read_by_athlete', false)
+  if (error) { console.error('[queries]', error.message); return 0 }
+  return count ?? 0
+}
+
+// ─── Integração com o Strava (migração 043) ─────────────────────────────────
+
+export type StravaStatus = { connected: boolean; lastSyncAt: string | null; connectedAt: string | null }
+
+/** Status da conexão do atleta (sem nunca tocar em token). */
+export async function getStravaStatus(athleteId: string): Promise<StravaStatus> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('strava_athlete_id, strava_connected_at, strava_last_sync_at').eq('id', athleteId).maybeSingle()
+  if (error || !data) return { connected: false, lastSyncAt: null, connectedAt: null }
+  const a = data as { strava_athlete_id: number | null; strava_connected_at: string | null; strava_last_sync_at: string | null }
+  return { connected: !!a.strava_athlete_id, lastSyncAt: a.strava_last_sync_at, connectedAt: a.strava_connected_at }
+}
+
+/** Devolve a URL de autorização do Strava para redirecionar o aluno. */
+export async function startStravaConnect(): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  try {
+    const res = await fetch('/api/strava-connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, url: data.url }
+  } catch { return { ok: false, error: 'Falha de rede.' } }
+}
+
+/** Puxa as atividades novas do Strava para o app. */
+export async function syncStrava(athleteId?: string): Promise<{ ok: boolean; imported?: number; found?: number; error?: string }> {
+  const sb = createClient()
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) return { ok: false, error: 'Sessão expirada. Entre novamente.' }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 60_000)
+  try {
+    const res = await fetch('/api/strava-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(athleteId ? { athlete_id: athleteId } : {}),
+      signal: ctrl.signal,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) return { ok: false, error: data.error ?? `Erro ${res.status}` }
+    return { ok: true, imported: data.imported, found: data.found }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error && e.name === 'AbortError' ? 'Tempo esgotado ao sincronizar.' : 'Falha de rede.' }
+  } finally { clearTimeout(timer) }
 }

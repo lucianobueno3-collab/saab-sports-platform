@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useState, Suspense } from 'react'
+import { createPortal } from 'react-dom'
 import { useSearchParams } from 'next/navigation'
 import { Topbar } from '@/components/layout/topbar'
 import { KpiCard } from '@/components/dashboard/kpi-card'
@@ -8,20 +9,22 @@ import { StatusBadge } from '@/components/dashboard/status-badge'
 import { PMCChart } from '@/components/charts/pmc-chart'
 import { HRVChart } from '@/components/charts/hrv-chart'
 import { hrTss, lthrForSport } from '@/lib/calculations/tss'
-import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, MessageCircle, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Utensils, Trophy, Target, Share2 } from 'lucide-react'
+import { ArrowLeft, Zap, Heart, TrendingUp, Activity, Loader2, Pencil, X, Save, FileText, ChevronDown, ChevronRight, RefreshCw, AlertTriangle, Trophy, Target, Share2, Dumbbell, CalendarDays, Trash2, Ruler } from 'lucide-react'
+import { WhatsappIcon } from '@/components/ui/whatsapp-icon'
 import { GlossaryLegend } from '@/components/ui/glossary-legend'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV, getAthleteCheckins,
+  getAthlete, getAthletePMC, getAthleteActivities, getAthleteHRV, getAthleteCheckins, deleteAthlete,
   type AthleteRow, type PMCRow, type ActivityRow, type DailyMetricRow, type CheckinRow,
 } from '@/lib/supabase/queries'
 import { trainingReadiness } from '@/lib/readiness'
-import { SaudeTab } from '@/components/athlete/saude-tab'
-import { NutricaoTab } from '@/components/athlete/nutricao-tab'
+import { SaudeNutricaoTab } from '@/components/athlete/saude-nutricao-tab'
 import { ProvasTab } from '@/components/athlete/provas-tab'
 import { EvolucaoTab } from '@/components/athlete/evolucao-tab'
+import { ForcaTab } from '@/components/athlete/forca-tab'
+import { CalendarioTab } from '@/components/athlete/calendario-tab'
 import { ActivityZones } from '@/components/athlete/activity-zones'
 
 function sportLabel(sport: string) {
@@ -38,6 +41,31 @@ function formatDuration(seconds: number) {
   return h > 0 ? `${h}h ${m}min` : `${m}min`
 }
 
+const ZONE_COLORS = ['#3b82f6', '#22c55e', '#84cc16', '#eab308', '#f97316', '#ef4444', '#dc2626', '#b91c1c', '#991b1b', '#7f1d1d']
+
+// Distribuição de minutos por zona (FC ou potência) importada do TP
+function ZoneMinutesBar({ label, minutes }: { label: string; minutes: number[] }) {
+  const total = minutes.reduce((s, v) => s + v, 0)
+  if (total <= 0) return null
+  return (
+    <div>
+      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
+      <div className="flex h-3.5 rounded overflow-hidden">
+        {minutes.map((m, i) => m > 0
+          ? <div key={i} title={`Z${i + 1}: ${m} min`} style={{ width: `${(m / total) * 100}%`, background: ZONE_COLORS[i] }} />
+          : null)}
+      </div>
+      <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-1">
+        {minutes.map((m, i) => m > 0
+          ? <span key={i} className="text-[9px] text-muted-foreground flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: ZONE_COLORS[i] }} />Z{i + 1} {m}min
+            </span>
+          : null)}
+      </div>
+    </div>
+  )
+}
+
 function AthleteDetailContent() {
   const params = useSearchParams()
   const id = params.get('id')
@@ -48,15 +76,17 @@ function AthleteDetailContent() {
   const [hrv, setHrv] = useState<DailyMetricRow[]>([])
   const [loading, setLoading] = useState(true)
   const [editOpen, setEditOpen] = useState(false)
-  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '', portal_brand: 'saab' })
+  const [editValues, setEditValues] = useState({ ftp_watts: '', ftp_run_watts: '', lthr_bpm: '', lthr_bike_bpm: '', lthr_run_bpm: '', lthr_swim_bpm: '', vo2max_ml_kg_min: '', weight_kg: '', primary_sport: '', phone: '', initial_ctl: '', initial_atl: '', initial_date: '', portal_brand: 'saab', threshold_pace: '' })
   const [recalculating, setRecalculating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   const [latestMetrics, setLatestMetrics] = useState<DailyMetricRow | null>(null)
   const [metricDetail, setMetricDetail] = useState<{ key: MetricKey; value?: string | number | null; ctx?: Record<string, number | string | null> } | null>(null)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [recalcTss, setRecalcTss] = useState(false)
-  const [activeTab, setActiveTab] = useState<'performance' | 'saude' | 'nutricao' | 'provas' | 'evolucao'>('performance')
-  const [portalCopied, setPortalCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<'performance' | 'calendario' | 'saude' | 'forca' | 'nutricao' | 'metricas' | 'provas' | 'evolucao'>('performance')
   const [checkins, setCheckins] = useState<CheckinRow[]>([])
 
   useEffect(() => {
@@ -86,6 +116,9 @@ function AthleteDetailContent() {
         initial_atl: a.initial_atl?.toString() ?? '',
         initial_date: a.initial_date ?? '',
         portal_brand: a.portal_brand ?? 'saab',
+        threshold_pace: a.threshold_pace_sec_km
+          ? `${Math.floor(a.threshold_pace_sec_km / 60)}:${String(a.threshold_pace_sec_km % 60).padStart(2, '0')}`
+          : '',
       })
       setPmc(p)
       setActivities(acts)
@@ -132,6 +165,10 @@ function AthleteDetailContent() {
       lthr_bpm: editValues.lthr_bpm ? parseInt(editValues.lthr_bpm) : null,
       lthr_bike_bpm: editValues.lthr_bike_bpm ? parseInt(editValues.lthr_bike_bpm) : null,
       lthr_run_bpm: editValues.lthr_run_bpm ? parseInt(editValues.lthr_run_bpm) : null,
+      threshold_pace_sec_km: (() => {
+        const m = editValues.threshold_pace.trim().match(/^(\d{1,2}):(\d{2})$/)
+        return m ? parseInt(m[1]) * 60 + parseInt(m[2]) : null
+      })(),
       lthr_swim_bpm: editValues.lthr_swim_bpm ? parseInt(editValues.lthr_swim_bpm) : null,
       vo2max_ml_kg_min: editValues.vo2max_ml_kg_min ? parseFloat(editValues.vo2max_ml_kg_min) : null,
       weight_kg: editValues.weight_kg ? parseFloat(editValues.weight_kg) : null,
@@ -163,13 +200,17 @@ function AthleteDetailContent() {
     setEditOpen(false)
   }
 
-  function handleSharePortal() {
-    if (!athlete?.portal_token) { window.alert('Token do portal não encontrado. Rode a migration 012.'); return }
-    const url = `${window.location.origin}/portal?token=${athlete.portal_token}`
-    navigator.clipboard.writeText(url).then(() => {
-      setPortalCopied(true)
-      setTimeout(() => setPortalCopied(false), 2500)
-    }).catch(() => window.prompt('Copie o link do portal do aluno:', url))
+  async function handleDelete() {
+    if (!athlete) return
+    setDeleting(true)
+    setDeleteError(null)
+    const res = await deleteAthlete(athlete.id)
+    if (!res.ok) {
+      setDeleting(false)
+      setDeleteError(res.error ?? 'Falha ao excluir o aluno')
+      return
+    }
+    window.location.href = '/athletes'
   }
 
   function handleWhatsApp() {
@@ -278,51 +319,58 @@ function AthleteDetailContent() {
 
   return (
     <div>
-      <Topbar title={athlete.full_name} subtitle={`${sportLabel(athlete.primary_sport)}`} />
+      {/* No celular a barra da marca (topo) já serve de cabeçalho e o nome
+          aparece no corpo — evita duplicar o nome. No desktop mantém a Topbar. */}
+      <div className="hidden md:block">
+        <Topbar title={athlete.full_name} subtitle={`${sportLabel(athlete.primary_sport)}`} />
+      </div>
 
-      <div className="p-6 space-y-5">
-        <div className="flex items-center gap-4">
-          <Link href="/athletes" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Voltar
-          </Link>
-          <div className="flex items-center gap-3 ml-2 flex-1">
-            <div className="w-10 h-10 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-sm font-bold text-primary">
-              {initials}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-foreground">{athlete.full_name}</h2>
+      <div className="p-4 md:p-6 space-y-5">
+        <Link href="/athletes" className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Voltar
+        </Link>
+
+        <div className="flex flex-col md:flex-row md:items-center gap-4">
+          {/* Identidade */}
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            {athlete.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={athlete.avatar_url} alt={athlete.full_name}
+                className="w-12 h-12 rounded-full object-cover flex-shrink-0"
+                style={{ border: '1px solid var(--primary)4d' }} />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-base font-bold text-primary flex-shrink-0">
+                {initials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setEditOpen(true)} title="Editar perfil"
+                  className="group flex items-center gap-1.5 text-lg font-bold text-foreground leading-tight hover:text-primary transition-colors">
+                  {athlete.full_name}
+                  <Pencil className="w-3.5 h-3.5 opacity-0 group-hover:opacity-70 transition-opacity" />
+                </button>
                 <StatusBadge status={status} />
               </div>
-              <p className="text-xs text-muted-foreground">{athlete.email ?? sportLabel(athlete.primary_sport)}</p>
+              <p className="text-xs text-muted-foreground truncate">{athlete.email ?? sportLabel(athlete.primary_sport)}</p>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Link
-                href={`/report?id=${id}`}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
-              >
-                <FileText className="w-3.5 h-3.5" /> Ver Relatório
-              </Link>
-              <button
-                onClick={handleWhatsApp}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
-              >
-                <MessageCircle className="w-3.5 h-3.5" /> Enviar Relatório
-              </button>
-              <button
-                onClick={handleSharePortal}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#a78bfa] border border-[#a78bfa]/30 bg-[#a78bfa]/10 rounded-lg hover:bg-[#a78bfa]/20 transition-colors"
-              >
-                <Share2 className="w-3.5 h-3.5" /> {portalCopied ? 'Link copiado!' : 'Portal do Aluno'}
-              </button>
-              <button
-                onClick={() => setEditOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground border border-border rounded-lg hover:bg-secondary hover:text-foreground transition-colors"
-              >
-                <Pencil className="w-3.5 h-3.5" /> Editar Perfil
-              </button>
-            </div>
+          </div>
+
+          {/* Ações */}
+          <div className="grid grid-cols-2 md:flex md:items-center gap-2 md:flex-shrink-0">
+            <Link
+              href={`/report?id=${id}`}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-primary border border-primary/30 bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
+            >
+              <FileText className="w-3.5 h-3.5" /> Ver Relatório
+            </Link>
+            <button
+              onClick={handleWhatsApp}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 md:py-1.5 text-xs font-medium text-[#25d366] border border-[#25d366]/30 bg-[#25d366]/10 rounded-lg hover:bg-[#25d366]/20 transition-colors"
+            >
+              <WhatsappIcon className="w-3.5 h-3.5" /> Enviar Relatório
+            </button>
           </div>
         </div>
 
@@ -330,8 +378,9 @@ function AthleteDetailContent() {
         <div className="flex gap-1 p-1 rounded-xl" style={{ background: 'var(--sidebar)', border: '1px solid var(--panel-border)' }}>
           {([
             { key: 'performance', label: 'Performance', icon: TrendingUp },
+            { key: 'calendario', label: 'Calendário', icon: CalendarDays },
             { key: 'saude', label: 'Saúde', icon: AlertTriangle },
-            { key: 'nutricao', label: 'Nutrição', icon: Utensils },
+            { key: 'forca', label: 'Força', icon: Dumbbell },
             { key: 'provas', label: 'Provas', icon: Trophy },
             { key: 'evolucao', label: 'Evolução', icon: Target },
           ] as { key: typeof activeTab; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
@@ -486,21 +535,43 @@ function AthleteDetailContent() {
 
                       {isExpanded && (
                         <div className="px-5 pb-4 pt-0 ml-8 space-y-3" style={{ background: 'var(--background)' }}>
-                          <div className="grid grid-cols-2 gap-2 pt-3">
-                            {[
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-3">
+                            {([
                               { label: 'Duração', value: formatDuration(act.duration_seconds) },
-                              { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : '—' },
-                              { label: `TSS${act.tss_method === 'hr' ? ' (via FC)' : act.tss_method === 'power' ? ' (via potência)' : ''}`, value: act.tss?.toFixed(0) ?? '—', highlight: true },
-                              { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : '—' },
-                              { label: 'NP', value: act.normalized_power ? `${act.normalized_power}W` : '—' },
-                              { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? '—' },
-                            ].map(({ label, value, highlight }) => (
+                              { label: 'Distância', value: hasDist ? `${((act.distance_meters ?? 0) / 1000).toFixed(2)} km` : null },
+                              { label: `TSS${act.tss_method === 'hr' ? ' (via FC)' : act.tss_method === 'power' ? ' (via potência)' : ''}`, value: act.tss?.toFixed(0) ?? null, highlight: true },
+                              { label: 'IF', value: act.intensity_factor?.toFixed(3) ?? null },
+                              { label: 'FC Média', value: act.avg_hr_bpm ? `${act.avg_hr_bpm} bpm` : null },
+                              { label: 'FC Máx', value: act.max_hr_bpm ? `${act.max_hr_bpm} bpm` : null },
+                              { label: 'Pot. Média', value: act.avg_power_watts ? `${act.avg_power_watts} W` : null },
+                              { label: 'Pot. Máx', value: act.max_power_watts ? `${act.max_power_watts} W` : null },
+                              { label: 'NP', value: act.normalized_power ? `${act.normalized_power} W` : null },
+                              { label: 'Cadência', value: act.avg_cadence_rpm ? `${act.avg_cadence_rpm}${act.max_cadence_rpm ? ` / ${act.max_cadence_rpm}` : ''} rpm` : null },
+                              { label: 'Velocidade', value: act.velocity_avg_mps ? `${(act.velocity_avg_mps * 3.6).toFixed(1)} km/h` : null },
+                              { label: 'Torque', value: act.avg_torque_nm ? `${act.avg_torque_nm} Nm` : null },
+                              { label: 'Energia', value: act.energy_kj ? `${act.energy_kj} kJ` : null },
+                              { label: 'RPE', value: act.rpe != null ? `${act.rpe}` : null },
+                              { label: 'Sensação', value: act.feeling ?? null },
+                            ].filter(t => t.value != null) as { label: string; value: string; highlight?: boolean }[]).map(({ label, value, highlight }) => (
                               <div key={label} className="rounded-lg px-3 py-2" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                                 <p className="text-[9px] font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
                                 <p className={`text-sm font-bold mt-0.5 ${highlight ? 'text-[#ffa800]' : 'text-foreground'}`}>{value}</p>
                               </div>
                             ))}
                           </div>
+                          {act.hr_zone_minutes && act.hr_zone_minutes.some(m => m > 0) && (
+                            <ZoneMinutesBar label="Tempo por zona de FC" minutes={act.hr_zone_minutes} />
+                          )}
+                          {act.pwr_zone_minutes && act.pwr_zone_minutes.some(m => m > 0) && (
+                            <ZoneMinutesBar label="Tempo por zona de potência" minutes={act.pwr_zone_minutes} />
+                          )}
+                          {(act.workout_description || act.coach_comments || act.athlete_comments) && (
+                            <div className="space-y-1.5">
+                              {act.workout_description && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Treino:</span> {act.workout_description}</p>}
+                              {act.coach_comments && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Coach:</span> {act.coach_comments}</p>}
+                              {act.athlete_comments && <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-foreground">Atleta:</span> {act.athlete_comments}</p>}
+                            </div>
+                          )}
                           {act.zone_data && act.zone_data.seconds?.length > 0 && (
                             <ActivityZones
                               zoneData={act.zone_data}
@@ -579,16 +650,17 @@ function AthleteDetailContent() {
           </>
         )}
 
-        {activeTab === 'saude' && <SaudeTab athleteId={id} />}
-        {activeTab === 'nutricao' && <NutricaoTab athleteId={id} />}
+        {activeTab === 'calendario' && <CalendarioTab athleteId={id} defaultSport={athlete.primary_sport} />}
+        {activeTab === 'saude' && <SaudeNutricaoTab athleteId={id} sex={athlete.gender === 'M' || athlete.gender === 'F' ? athlete.gender : null} />}
+        {activeTab === 'forca' && <ForcaTab athleteId={id} weightKg={athlete.weight_kg} />}
         {activeTab === 'provas' && <ProvasTab athleteId={id} />}
         {activeTab === 'evolucao' && <EvolucaoTab athleteId={id} />}
       </div>
 
       {/* Edit modal */}
-      {editOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      {editOpen && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-card border border-border rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-sm font-bold text-foreground">Editar Perfil do Atleta</h3>
               <button onClick={() => setEditOpen(false)} className="p-1 hover:bg-secondary rounded transition-colors">
@@ -671,6 +743,16 @@ function AthleteDetailContent() {
                     ))}
                   </div>
                 </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-muted-foreground mb-1.5">
+                    Ritmo de limiar — corrida <span className="font-normal">(min:seg por km)</span>
+                  </label>
+                  <input value={editValues.threshold_pace} onChange={e => setEditValues(v => ({ ...v, threshold_pace: e.target.value }))}
+                    placeholder="ex: 5:30" className="w-full px-3 py-2.5 bg-background border border-border rounded-lg text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary" />
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Com este ritmo, o aluno passa a ver cada zona em min/km (ex.: &quot;Z2 = 7:00–7:40/km&quot;) em vez de só batimentos.
+                  </p>
+                </div>
                 <div>
                   <label className="block text-xs font-medium text-muted-foreground mb-1.5">VO2max (ml/kg/min)</label>
                   <input type="number" step="0.1" value={editValues.vo2max_ml_kg_min} onChange={e => setEditValues(v => ({ ...v, vo2max_ml_kg_min: e.target.value }))}
@@ -724,8 +806,38 @@ function AthleteDetailContent() {
                 Cancelar
               </button>
             </div>
+
+            {/* Zona de perigo: excluir aluno */}
+            <div className="mt-5 pt-4 border-t border-border">
+              {!confirmDelete ? (
+                <button onClick={() => { setConfirmDelete(true); setDeleteError(null) }}
+                  className="flex items-center gap-2 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir aluno
+                </button>
+              ) : (
+                <div className="rounded-lg border border-red-400/30 bg-red-400/10 p-3">
+                  <p className="text-xs font-bold text-red-300 mb-1">Excluir {athlete.full_name}?</p>
+                  <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+                    Esta ação é permanente e apaga todos os dados do aluno (treinos, métricas, check-ins, exames e o login dele). Não pode ser desfeita.
+                  </p>
+                  {deleteError && <p className="text-[11px] text-red-400 mb-2">{deleteError}</p>}
+                  <div className="flex gap-2">
+                    <button onClick={handleDelete} disabled={deleting}
+                      className="flex items-center justify-center gap-1.5 px-3 py-2 bg-red-500 hover:bg-red-600 disabled:opacity-60 text-white text-xs font-bold rounded-lg transition-colors">
+                      {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      {deleting ? 'Excluindo...' : 'Confirmar exclusão'}
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)} disabled={deleting}
+                      className="px-3 py-2 border border-border text-xs font-medium text-muted-foreground rounded-lg hover:bg-secondary transition-colors">
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       <div className="p-6 pt-0">

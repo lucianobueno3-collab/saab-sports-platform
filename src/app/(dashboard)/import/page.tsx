@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { parseFitFile } from '@/lib/parsers/fit-parser'
 import { parseTPCSV } from '@/lib/parsers/csv-parser'
+import { matchPlannedActivities } from '@/lib/supabase/queries'
 import JSZip from 'jszip'
 
 type FileStatus = 'idle' | 'parsing' | 'success' | 'error'
@@ -339,76 +340,181 @@ export default function ImportPage() {
     let totalImported = 0, totalSkipped = 0, totalFailed = 0
     const details: string[] = []
 
+    // ── Reúne FIT + CSV numa lista única de candidatos ────────────────────
+    type Candidate = {
+      date: string; sport: string; duration: number; source: 'fit' | 'csv'
+      label: string; payload: Record<string, unknown>; base?: Record<string, unknown>
+    }
+    const candidates: Candidate[] = []
+
     for (const uf of readyFiles) {
       if (uf.ext === 'fit') {
         try {
           const act = await parseFitFile(uf.buffer!, athleteThresholds(athlete))
-          const { error } = await sb.from('activities').insert({
-            athlete_id: selectedAthlete,
-            name: act.name,
-            sport: sportToDb(act.sport),
-            started_at: act.date,
-            duration_seconds: act.duration_seconds,
-            distance_meters: act.distance_meters ?? null,
-            avg_power_watts: act.avg_power_watts ?? null,
-            normalized_power: act.normalized_power ?? null,
-            intensity_factor: act.intensity_factor ?? null,
-            tss: act.tss ?? null,
-            tss_method: act.tss_method,
-            zone_data: act.zone_data,
-            avg_hr_bpm: act.avg_hr ?? null,
-            max_hr_bpm: act.max_hr ?? null,
-            avg_cadence_rpm: act.avg_cadence ?? null,
-            elevation_gain_m: act.elevation_gain_m ?? null,
-            calories: act.calories ?? null,
-            source: 'fit' as const,
-            external_id: uf.name,
-            ftp_used: athlete.ftp_watts ?? null,
+          candidates.push({
+            date: act.date, sport: sportToDb(act.sport), duration: act.duration_seconds,
+            source: 'fit', label: uf.name,
+            payload: {
+              athlete_id: selectedAthlete, name: act.name, sport: sportToDb(act.sport),
+              started_at: act.date, duration_seconds: act.duration_seconds,
+              distance_meters: act.distance_meters ?? null,
+              avg_power_watts: act.avg_power_watts ?? null, normalized_power: act.normalized_power ?? null,
+              intensity_factor: act.intensity_factor ?? null, tss: act.tss ?? null, tss_method: act.tss_method,
+              zone_data: act.zone_data, avg_hr_bpm: act.avg_hr ?? null, max_hr_bpm: act.max_hr ?? null,
+              avg_cadence_rpm: act.avg_cadence ?? null, elevation_gain_m: act.elevation_gain_m ?? null,
+              calories: act.calories ?? null, laps: act.laps ?? null,
+              source: 'fit', external_id: uf.name, ftp_used: athlete.ftp_watts ?? null,
+            },
           })
-          if (error) {
-            const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
-            if (isDuplicate) { totalSkipped++; details.push(`⏭ Duplicata: ${uf.name}`) }
-            else { totalFailed++; details.push(`✗ Falhou: ${uf.name} — ${error.message} (${error.code})`) }
-          } else { totalImported++; details.push(`✓ ${uf.name}`) }
         } catch (err) { totalFailed++; details.push(`✗ ${uf.name} — ${String(err)}`) }
 
       } else if (uf.ext === 'csv' && uf.rawFile) {
         try {
           const acts = await parseTPCSV(uf.rawFile)
-          let csvSkipped = 0
           for (const act of acts) {
-            const { error } = await sb.from('activities').insert({
-              athlete_id: selectedAthlete,
-              name: act.title || sportLabel(act.sport),
-              sport: sportToDb(act.sport),
-              started_at: act.date,
-              duration_seconds: act.duration_seconds,
-              distance_meters: act.distance_meters ?? null,
-              tss: act.tss ?? null,
-              normalized_power: act.np ?? null,
-              intensity_factor: act.if_ ?? null,
-              avg_hr_bpm: act.avg_hr ?? null,
-              avg_power_watts: act.avg_power ?? null,
-              calories: act.calories ?? null,
-              source: 'csv' as const,
-              external_id: `${act.date}-${act.title}`,
-              ftp_used: athlete.ftp_watts ?? null,
+            const base = {
+              athlete_id: selectedAthlete, name: act.title || sportLabel(act.sport), sport: sportToDb(act.sport),
+              started_at: act.date, duration_seconds: act.duration_seconds, distance_meters: act.distance_meters ?? null,
+              tss: act.tss ?? null, normalized_power: act.np ?? null, intensity_factor: act.if_ ?? null,
+              avg_hr_bpm: act.avg_hr ?? null, max_hr_bpm: act.hr_max ?? null,
+              avg_power_watts: act.avg_power ?? null, max_power_watts: act.power_max ?? null,
+              avg_cadence_rpm: act.cadence_avg ?? null, calories: act.calories ?? null,
+              source: 'csv', external_id: `${act.date}-${act.title}`, ftp_used: athlete.ftp_watts ?? null,
+            }
+            const extra = {
+              max_cadence_rpm: act.cadence_max ?? null, velocity_avg_mps: act.velocity_avg ?? null,
+              velocity_max_mps: act.velocity_max ?? null, energy_kj: act.energy_kj ?? null,
+              avg_torque_nm: act.torque_avg ?? null, max_torque_nm: act.torque_max ?? null,
+              rpe: act.rpe ?? null, feeling: act.feeling ?? null,
+              hr_zone_minutes: act.hr_zone_minutes ?? null, pwr_zone_minutes: act.pwr_zone_minutes ?? null,
+              workout_description: act.workout_description ?? null, coach_comments: act.coach_comments ?? null,
+              athlete_comments: act.athlete_comments ?? null, planned_duration_seconds: act.planned_duration_seconds ?? null,
+              planned_distance_meters: act.planned_distance_meters ?? null,
+            }
+            candidates.push({
+              date: act.date, sport: sportToDb(act.sport), duration: act.duration_seconds,
+              source: 'csv', label: act.title || sportLabel(act.sport),
+              payload: { ...base, ...extra }, base,
             })
-            if (error) {
-              const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
-              if (isDuplicate) { totalSkipped++; csvSkipped++ }
-              else { totalFailed++; details.push(`✗ CSV: ${act.title} — ${error.message}`) }
-            } else { totalImported++ }
           }
-          if (csvSkipped > 0) details.push(`⏭ ${csvSkipped} atividades CSV já existiam`)
         } catch (err) { totalFailed++; details.push(`✗ CSV ${uf.name} — ${String(err)}`) }
       }
     }
 
-    if (totalImported > 0) {
+    // Prefere o CSV (métricas ricas do TP) quando FIT e CSV coincidem
+    candidates.sort((a, b) => (a.source === b.source ? 0 : a.source === 'csv' ? -1 : 1))
+
+    // ── Dedup entre fontes: mesmo dia + modalidade + duração próxima ──────
+    // Só desduplicamos entre fontes DIFERENTES (FIT vs CSV) — assim treinos
+    // duplos no mesmo dia (mesma fonte) continuam sendo importados.
+    const dayKey = (iso: string) => iso.slice(0, 10)
+    const durTol = (d: number) => Math.max(300, d * 0.05) // 5 min ou 5%
+    type Sig = { day: string; sport: string; dur: number; source: string; id?: string; hasLaps?: boolean; row?: Record<string, unknown> }
+    // Campos "ricos" que um .FIT pode preencher num treino que já existe (ex.:
+    // resumo importado antes por CSV). Só completamos o que estiver vazio.
+    const ENRICH_FIELDS = ['laps', 'zone_data', 'avg_power_watts', 'normalized_power', 'intensity_factor', 'tss', 'avg_hr_bpm', 'max_hr_bpm', 'avg_cadence_rpm', 'elevation_gain_m', 'calories', 'distance_meters']
+    const RICH_COLS = `id, started_at, duration_seconds, sport, source, ${ENRICH_FIELDS.join(', ')}`
+    const seen: Sig[] = []
+    if (candidates.length > 0) {
+      const times = candidates.map(c => new Date(c.date).getTime()).filter(t => !isNaN(t))
+      const minISO = new Date(Math.min(...times) - 86400000).toISOString()
+      const maxISO = new Date(Math.max(...times) + 2 * 86400000).toISOString()
+      // Tenta trazer as colunas ricas; se o banco for antigo, cai no mínimo.
+      let existing = (await sb.from('activities').select(RICH_COLS)
+        .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO))
+        .data as unknown as Record<string, unknown>[] | null
+      if (!existing) {
+        existing = (await sb.from('activities').select('id, started_at, duration_seconds, sport, source, laps')
+          .eq('athlete_id', selectedAthlete).gte('started_at', minISO).lte('started_at', maxISO))
+          .data as unknown as Record<string, unknown>[] | null
+      }
+      for (const e of existing ?? []) {
+        const row = e as Record<string, unknown>
+        seen.push({ id: row.id as string, day: dayKey(row.started_at as string), sport: sportToDb((row.sport as string) ?? ''), dur: (row.duration_seconds as number) ?? 0, source: (row.source as string) ?? '', hasLaps: Array.isArray(row.laps), row })
+      }
+    }
+    const crossMatch = (c: Candidate): Sig | undefined => {
+      const day = dayKey(c.date)
+      return seen.find(s => s.source !== c.source && s.day === day && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
+    }
+
+    // ── Inserção com dedup ────────────────────────────────────────────────
+    const isEmpty = (v: unknown) => v === null || v === undefined || (Array.isArray(v) && v.length === 0)
+    let dedupSkipped = 0, enriched = 0, fitCoveredNoGain = 0
+    // Completa, num treino que já existe, os campos ricos que estiverem vazios
+    // usando os dados do .FIT (laps, zonas, potência, IF, TSS, elevação...).
+    // Vale tanto para dedup entre fontes (FIT x CSV) quanto para re-import do
+    // mesmo arquivo (FIT x FIT) — importante quando o import antigo foi feito
+    // antes do recurso de laps. Devolve true se algo foi preenchido.
+    const enrichExisting = async (c: Candidate, sig: Sig): Promise<boolean> => {
+      if (c.source !== 'fit' || !sig.id) return false
+      const upd: Record<string, unknown> = {}
+      for (const f of ENRICH_FIELDS) {
+        const val = (c.payload as Record<string, unknown>)[f]
+        const cur = sig.row ? sig.row[f] : undefined
+        // Sem a linha atual (banco antigo), só dá pra completar os laps.
+        const curEmpty = sig.row ? isEmpty(cur) : (f === 'laps' ? !sig.hasLaps : false)
+        if (curEmpty && !isEmpty(val)) upd[f] = val
+      }
+      if (!Object.keys(upd).length) return false
+      const { error } = await sb.from('activities').update(upd).eq('id', sig.id)
+      if (error) return false
+      enriched++
+      if ('laps' in upd) sig.hasLaps = true
+      if (sig.row) Object.assign(sig.row, upd)
+      return true
+    }
+    // Acha um treino já existente no mesmo dia+modalidade+duração (qualquer fonte).
+    const sameSlot = (c: Candidate): Sig | undefined => seen.find(s =>
+      s.id && s.day === dayKey(c.date) && s.sport === c.sport && Math.abs(s.dur - c.duration) <= durTol(c.duration))
+    for (const c of candidates) {
+      const match = crossMatch(c)
+      if (match) {
+        // FIT cobre um treino já existente (ex.: resumo do CSV): não duplica,
+        // mas completa os campos ricos que ainda estiverem vazios.
+        if (c.source === 'fit' && !(await enrichExisting(c, match))) fitCoveredNoGain++
+        totalSkipped++; dedupSkipped++; continue
+      }
+      let { data: ins, error } = await sb.from('activities').insert(c.payload).select('id').single()
+      if (error && (error.code === '42703' || /column .* does not exist/i.test(error.message ?? '') || error.message?.includes('zone_data'))) {
+        // banco sem migração 011/025/028: tenta a versão reduzida
+        if (c.base) { ({ data: ins, error } = await sb.from('activities').insert(c.base).select('id').single()) }
+        else {
+          const { zone_data: _z, laps: _l, ...withoutExtra } = c.payload
+          void _z; void _l
+          ;({ data: ins, error } = await sb.from('activities').insert(withoutExtra).select('id').single())
+        }
+      }
+      if (error) {
+        const isDuplicate = error.message?.includes('uq_activity') || error.code === '23505'
+        if (isDuplicate) {
+          // Mesmo arquivo/fonte já importado (ex.: re-import do mesmo .FIT):
+          // não insere de novo, mas ainda completa o que faltar no treino atual.
+          totalSkipped++
+          const sig = sameSlot(c)
+          if (sig) { if (!(await enrichExisting(c, sig)) && c.source === 'fit') fitCoveredNoGain++ }
+        } else { totalFailed++; details.push(`✗ ${c.label} — ${error.message} (${error.code ?? ''})`) }
+      } else {
+        totalImported++
+        seen.push({ id: ins?.id as string | undefined, day: dayKey(c.date), sport: c.sport, dur: c.duration, source: c.source, hasLaps: Array.isArray((c.payload as { laps?: unknown[] }).laps) })
+      }
+    }
+    if (dedupSkipped > 0) details.push(`⏭ ${dedupSkipped} treino(s) já cobertos por outra fonte — não duplicados`)
+    if (enriched > 0) details.push(`✓ detalhes (tiro a tiro / zonas / potência) adicionados a ${enriched} treino(s)`)
+    if (fitCoveredNoGain > 0) details.push(`ℹ ${fitCoveredNoGain} arquivo(s) .FIT já cobertos e sem novos detalhes (ex.: corrida contínua, sem voltas registradas no arquivo)`)
+
+    if (totalImported > 0 || enriched > 0) {
       const { error: rpcErr } = await sb.rpc('recalculate_pmc', { p_athlete_id: selectedAthlete })
       if (rpcErr) details.push(`⚠ PMC: ${rpcErr.message}`)
       else details.push(`✓ PMC recalculado`)
+      // cruza os treinos importados com o que estava planejado no calendário
+      try {
+        const days = candidates.map(c => c.date.slice(0, 10)).sort()
+        if (days.length) {
+          const matched = await matchPlannedActivities(selectedAthlete, days[0], days[days.length - 1])
+          if (matched > 0) details.push(`✓ ${matched} treino(s) cruzado(s) com o planejado`)
+        }
+      } catch { /* não crítico */ }
     }
 
     try {
@@ -483,6 +589,7 @@ export default function ImportPage() {
             <ul className="text-xs text-muted-foreground space-y-0.5">
               <li><strong>Treinos em lote (ZIP):</strong> Settings → Export → WorkoutFileExport → Download ZIP</li>
               <li><strong>Métricas (ZIP):</strong> Settings → Export → Metrics Export → Download ZIP</li>
+              <li><strong>Planilha de treinos (CSV):</strong> importa potência, FC, cadência, velocidade, torque, energia, zonas de FC/potência, RPE e sensação</li>
               <li><strong>Individual:</strong> Calendário → selecione atividade → Exportar → .FIT</li>
             </ul>
           </div>
