@@ -1373,6 +1373,8 @@ export type PublicEnrollInput = {
   running_level?: string | null; activity_level?: string | null
   days_running?: string | null; weekly_distance?: string | null
   goal?: string | null; preferred_days?: number[] | null; long_run_day?: number | null
+  /** Esforço cronometrado recente — vira o ritmo de limiar do aluno. */
+  recent_distance_km?: number | null; recent_time_sec?: number | null
   website?: string // honeypot
 }
 
@@ -2257,6 +2259,50 @@ export async function getCoachInbox(): Promise<InboxThread[]> {
         unread: !r.read_by_staff && isAthlete ? 1 : 0,
       })
     } else if (!r.read_by_staff && isAthlete) {
+      cur.unread++
+    }
+  }
+  return [...threads.values()].sort((a, b) => (a.last_at < b.last_at ? 1 : -1))
+}
+
+/**
+ * As conversas de UM aluno, para a caixa de recados dele.
+ *
+ * O aluno já podia perguntar dentro do treino, mas não tinha onde ver as
+ * respostas: o aviso de "o treinador respondeu" vivia numa aba que nem é a que
+ * abre. Quem entrava pelo calendário nunca ficava sabendo.
+ */
+export async function getAthleteInbox(athleteId: string): Promise<InboxThread[]> {
+  const sb = createClient()
+  const { data, error } = await sb.from('workout_comments')
+    .select('*').eq('athlete_id', athleteId).order('created_at', { ascending: false }).limit(300)
+  if (error) { console.error('[queries]', error.message); return [] }
+  const rows = (data ?? []) as WorkoutComment[]
+  if (rows.length === 0) return []
+
+  const workoutIds = [...new Set(rows.map(r => r.workout_id))]
+  const wRes = await sb.from('planned_workouts').select('id, title, date').in('id', workoutIds)
+  const wMap = new Map(((wRes.data ?? []) as { id: string; title: string; date: string }[]).map(w => [w.id, w]))
+
+  const threads = new Map<string, InboxThread>()
+  for (const r of rows) {           // já vem do mais novo para o mais antigo
+    const w = wMap.get(r.workout_id)
+    const doAluno = r.author_role === 'athlete' || r.author_role == null
+    const cur = threads.get(r.workout_id)
+    if (!cur) {
+      threads.set(r.workout_id, {
+        workout_id: r.workout_id,
+        athlete_id: r.athlete_id,
+        athlete_name: '',
+        workout_title: w?.title ?? 'Treino',
+        workout_date: w?.date ?? '',
+        last_body: r.body,
+        last_at: r.created_at,
+        last_from_athlete: doAluno,
+        // Do lado do aluno, não lida é a mensagem do TREINADOR que ele não viu.
+        unread: !r.read_by_athlete && !doAluno ? 1 : 0,
+      })
+    } else if (!r.read_by_athlete && !doAluno) {
       cur.unread++
     }
   }

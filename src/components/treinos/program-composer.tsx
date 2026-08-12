@@ -7,14 +7,14 @@ import {
   type TrainingProgramRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { programWorkoutsToLibrary, apenasNovos, paraMoverDeGrupo } from '@/lib/program-to-library'
-import { progressao5kIniciantes, fase1Forca, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
+import { fase1Forca, type ProgramWeek, type ProgramWorkout } from '@/lib/program-templates'
 import { createPortal } from 'react-dom'
 import {
-  Loader2, Plus, Trash2, Copy, Sparkles, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays, Library,
+  Loader2, Plus, Trash2, Copy, ChevronLeft, Save, X, Footprints, Bike, Waves, Dumbbell, Activity, CalendarDays, Library,
 } from 'lucide-react'
 
-/** Um modelo pronto de plano — o que os botões "Carregar …" gravam. */
-type ModeloPronto = ReturnType<typeof progressao5kIniciantes> | ReturnType<typeof fase1Forca>
+/** Um modelo pronto de plano — o que o botão "Carregar …" grava. */
+type ModeloPronto = ReturnType<typeof fase1Forca>
 
 const RED = '#e8001c'
 const SPORTS = [
@@ -50,12 +50,12 @@ export function ProgramComposer() {
    * outro. Sem isso, cada clique deixava um duplicado para trás e o treinador
    * não sabia qual dos dois estava sendo aplicado aos alunos.
    */
-  async function sincronizarModelo(modelo: () => ModeloPronto, packageKey: string | null = null) {
+  async function sincronizarModelo(modelo: () => ModeloPronto) {
     setBusy(true); setAviso(null)
     const ex = modelo()
     const existente = programs.find(p => p.name.trim().toLowerCase() === ex.name.trim().toLowerCase())
     const res = await saveTrainingProgram({
-      ...ex, id: existente?.id, package_key: existente?.package_key ?? packageKey, active: true,
+      ...ex, id: existente?.id, package_key: existente?.package_key ?? null, active: true,
     })
     setBusy(false)
     if (!res.ok) { setAviso({ texto: res.error ?? 'Não foi possível gravar o plano.', ok: false }); return }
@@ -123,9 +123,6 @@ export function ProgramComposer() {
     }
   }
 
-  // A PROGRESSÃO 5K é o plano do pacote "primeiros_5k": é por essa chave que a
-  // matrícula sabe qual plano aplicar. A FASE 1 FORÇA não vende pacote.
-  const criarProgressao5k = () => sincronizarModelo(progressao5kIniciantes, 'primeiros_5k')
   const criarFase1Forca = () => sincronizarModelo(fase1Forca)
 
   if (editing) return <ProgramEditor program={editing === 'new' ? null : editing} onClose={() => { setEditing(null); load() }} />
@@ -138,9 +135,6 @@ export function ProgramComposer() {
           <p className="text-xs text-muted-foreground">Semanas × treinos, reutilizáveis e aplicáveis aos alunos. Os treinos podem ir para a biblioteca e ser usados soltos.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={criarProgressao5k} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Carregar PROGRESSÃO 5K INICIANTES
-          </button>
           <button onClick={criarFase1Forca} disabled={busy} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg border border-border text-foreground hover:bg-secondary disabled:opacity-60">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Dumbbell className="w-4 h-4" />} Carregar FASE 1 FORÇA
           </button>
@@ -163,9 +157,9 @@ export function ProgramComposer() {
         <div className="rounded-2xl p-10 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
           <CalendarDays className="w-9 h-9 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-sm font-semibold text-foreground">Nenhum plano de treinamento ainda</p>
-          <p className="text-xs text-muted-foreground mt-1 mb-4">Comece por um modelo pronto ou monte do zero.</p>
-          <button onClick={criarProgressao5k} disabled={busy} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />} Criar &quot;PROGRESSÃO 5K INICIANTES&quot;
+          <p className="text-xs text-muted-foreground mt-1 mb-4">Monte o seu, ou comece pela FASE 1 FORÇA.</p>
+          <button onClick={() => setEditing('new')} className="px-4 py-2 bg-primary text-white text-sm font-bold rounded-lg inline-flex items-center gap-2">
+            <Plus className="w-4 h-4" /> Criar plano
           </button>
         </div>
       ) : (
