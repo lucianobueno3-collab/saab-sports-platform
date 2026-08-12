@@ -28,6 +28,7 @@ import { RecadosTab } from '@/components/athlete/recados-tab'
 import { MarcaDoAluno } from '@/components/athlete/marca-do-aluno'
 import { getBrand } from '@/lib/portal-brands'
 import { MarcaLogo } from '@/components/athlete/marca-logo'
+import { NotificacoesCard } from '@/components/athlete/notificacoes-card'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users, MessageCircle } from 'lucide-react'
 
@@ -279,6 +280,9 @@ export default function AtletaPage() {
       )}
       {/* Convite para deixar o app na tela de início (some quando já instalado) */}
       <InstallAppCard />
+
+      {/* Avisos: some sozinho quando já ligado ou quando o recurso não existe. */}
+      {athleteId && <NotificacoesCard athleteId={athleteId} />}
 
       {/* Aparece sozinho uma vez: instala num toque no Android, passo a passo no iPhone */}
       <InstallCoach />

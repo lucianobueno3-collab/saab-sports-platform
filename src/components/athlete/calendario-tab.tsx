@@ -5,10 +5,11 @@ import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
-  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms, restaurarPlannedWorkouts,
+  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms, restaurarPlannedWorkouts, enviarPush,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { structureForTitle } from '@/lib/training-plans'
+import { avisoDePlanoNovo } from '@/lib/push-mensagens'
 import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-options'
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
@@ -1151,7 +1152,11 @@ function ApplyPlanModal({ athleteId, defaultSport, onClose, onApplied }: {
     const rows = selected.linhas(athleteId, new Date(start + 'T12:00:00'), dias, longao)
     const res = await bulkCreatePlannedWorkouts(rows)
     setApplying(false)
-    if (res.ok) onApplied(); else setError(res.error ?? 'Falha ao aplicar o plano')
+    if (!res.ok) { setError(res.error ?? 'Falha ao aplicar o plano'); return }
+    // O aluno é avisado de que tem treino novo — senão ele só descobre na
+    // próxima vez que abrir o app por conta própria.
+    if (res.count > 0) enviarPush(athleteId, avisoDePlanoNovo({ quantos: res.count }))
+    onApplied()
   }
 
   if (!mounted) return null

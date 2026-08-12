@@ -13,7 +13,7 @@
  * dados do treino são guardados à parte, em src/lib/offline-cache.ts.
  */
 
-const VERSAO = 'v1'
+const VERSAO = 'v2'
 const CASCO = `saab-casco-${VERSAO}`
 const PAGINAS = `saab-paginas-${VERSAO}`
 const OFFLINE = '/offline.html'
@@ -123,5 +123,59 @@ self.addEventListener('fetch', (event) => {
       if (guardado) return guardado
       throw new Error('sem conexão e sem cópia local')
     }
+  })())
+})
+
+
+/* ─── Notificações ──────────────────────────────────────────────────────────
+ *
+ * O aluno instalava o app e depois esquecia dele: o recado do treinador ficava
+ * esperando alguém abrir a tela. Aqui o aviso chega mesmo com o app fechado.
+ *
+ * No iPhone isto só funciona com o app INSTALADO na tela de início — o Safari
+ * não entrega push para site aberto na aba. É por isso que a tela de permissão
+ * pede a instalação primeiro.
+ */
+
+self.addEventListener('push', (event) => {
+  // Push sem corpo acontece (teste do navegador, payload perdido): melhor um
+  // aviso genérico do que uma notificação vazia — em alguns sistemas, não
+  // mostrar nada depois de receber um push revoga a permissão.
+  let dados = { titulo: 'SAAB Sports', corpo: 'Você tem uma novidade no app.', url: '/atleta', tag: 'saab' }
+  try {
+    if (event.data) dados = { ...dados, ...event.data.json() }
+  } catch { /* payload não-JSON: fica o genérico */ }
+
+  event.waitUntil(
+    self.registration.showNotification(dados.titulo, {
+      body: dados.corpo,
+      icon: '/icon-192.png',
+      // Sem `badge`: o Android exige um PNG monocromático com transparência, e
+      // usar o ícone colorido no lugar vira uma mancha branca na barra. Sem
+      // ele, o sistema usa o ícone padrão do navegador, que fica melhor.
+      tag: dados.tag,
+      // Substitui em silêncio: o aluno não leva dois toques pelo mesmo assunto.
+      renotify: false,
+      data: { url: dados.url },
+    }),
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const destino = (event.notification.data && event.notification.data.url) || '/atleta'
+
+  event.waitUntil((async () => {
+    const abas = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    // Se o app já está aberto, foca a aba existente em vez de abrir outra —
+    // abrir uma segunda cópia do portal confunde e perde o que estava na tela.
+    for (const aba of abas) {
+      if (new URL(aba.url).origin === self.location.origin) {
+        await aba.focus()
+        if ('navigate' in aba) await aba.navigate(destino).catch(() => {})
+        return
+      }
+    }
+    await self.clients.openWindow(destino)
   })())
 })

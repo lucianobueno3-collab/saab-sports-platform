@@ -2,6 +2,7 @@ import { createClient } from './client'
 import { offlineKey, readSnapshot, saveSnapshot } from '@/lib/offline-cache'
 import { todayLocalISO } from '@/lib/dates'
 import type { ProgramWeek, ProgramRouting } from '@/lib/program-templates'
+import { avisoDeRecado, type Aviso } from '@/lib/push-mensagens'
 
 export type AthleteRow = {
   id: string
@@ -2371,7 +2372,33 @@ export async function addWorkoutComment(workoutId: string, athleteId: string | n
     read_by_staff: staff, read_by_athlete: !staff,
   })
   if (error) { console.error('[queries]', error.message); return { ok: false, error: error.message } }
+
+  // Resposta do treinador acorda o aluno no celular. Só do staff para o aluno:
+  // o caminho contrário já tem o contador de não lidos no painel.
+  if (staff && athleteId) {
+    const { data: w } = await sb.from('planned_workouts').select('title').eq('id', workoutId).maybeSingle()
+    void enviarPush(athleteId, avisoDeRecado({
+      treino: (w as { title?: string } | null)?.title ?? 'Seu treino',
+      corpo: body,
+      workoutId,
+      nomeDoTreinador: (user?.user_metadata?.full_name as string | undefined) ?? null,
+    }))
+  }
   return { ok: true }
+}
+
+/**
+ * Dispara uma notificação, sem travar quem chamou.
+ *
+ * De propósito não devolve nada e engole o erro: o recado já foi gravado, e
+ * falha no aviso não pode fazer parecer que a mensagem não foi enviada.
+ */
+export function enviarPush(athleteId: string, aviso: Aviso): void {
+  fetch('/api/send-push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ athleteId, aviso }),
+  }).catch(e => console.error('[push]', e))
 }
 
 /** Atividades e treinos do aluno para calcular conquistas e a narrativa. */
