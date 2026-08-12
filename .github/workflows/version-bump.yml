@@ -7,6 +7,9 @@ name: Auto version bump
 # So o assunto (primeira linha) e inspecionado, para o texto do corpo do PR
 # nunca disparar um bump por engano. O carimbo de data/hora do deploy ja e
 # gerado no build (next.config.ts); aqui so cuidamos do numero da versao.
+#
+# O commit de release e o topo da main e PRECISA gerar deploy — veja o comentario
+# no passo abaixo antes de pensar em pular o build dele.
 
 on:
   push:
@@ -55,7 +58,16 @@ jobs:
           npm version "${{ steps.level.outputs.level }}" --no-git-tag-version
           VER=$(node -p "require('./package.json').version")
           git add package.json package-lock.json
-          # [skip netlify]: o proprio merge ja gera 1 deploy; o commit de
-          # release nao precisa gerar um 2o (economiza minutos de build).
-          git commit -m "chore(release): v$VER [skip netlify]"
+          # NÃO ponha [skip netlify] aqui. Este commit é o TOPO da main, e é ele
+          # que precisa ir para o ar.
+          #
+          # Com a marca de pular, o resultado era nenhum deploy: o Netlify
+          # cancela o build de um commit quando chega outro mais novo na mesma
+          # branch, então o build do merge morria ao ver este commit — e este
+          # commit era pulado. A main andava e o site ficava parado.
+          #
+          # Sem a marca, o build do merge é cancelado e o deste roda: um deploy
+          # só, e com o número de versão certo. Antes o site ficava sempre uma
+          # versão atrás, porque o bump só existia no commit que não subia.
+          git commit -m "chore(release): v$VER"
           git push origin main
