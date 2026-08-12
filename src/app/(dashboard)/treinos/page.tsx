@@ -513,7 +513,7 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
               {structured && structure.length > 0 && (
                 <div className="rounded-lg p-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                   <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-2">Passos (para o relógio)</p>
-                  <WorkoutSteps title={title || 'Treino'} sport={sport} structure={structure} compact />
+                  <WorkoutSteps title={title || 'Treino'} sport={sport} structure={structure} compact tecnico />
                 </div>
               )}
             </>

@@ -13,6 +13,8 @@ import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-opt
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
+import { CargaChip } from '@/components/athlete/carga-chip'
+import { textoDeCarga, cargaDe } from '@/lib/carga'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import { LibraryPanel } from '@/components/athlete/library-panel'
 import type { Thresholds } from '@/lib/workout-export'
@@ -128,7 +130,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     return m
   }, [planned])
   // atividades já vinculadas a um treino planejado (mostradas junto do planejado)
-  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.avg_hr_bpm ? `${a.avg_hr_bpm} bpm` : null, a.tss != null ? `${a.tss.toFixed(0)} TSS` : null].filter(Boolean).join(' · ')
+  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.avg_hr_bpm ? `${a.avg_hr_bpm} bpm` : null, textoDeCarga(a.tss)?.toLowerCase() ?? null].filter(Boolean).join(' · ')
   const doneByDay = useMemo(() => {
     const m: Record<string, ActivityRow[]> = {}
     for (const a of done) { const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
@@ -321,7 +323,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                         : <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>Ver</span>}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
+                      <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{textoDeCarga(p.planned_tss) ? ` · ${textoDeCarga(p.planned_tss)!.toLowerCase()}` : ''}
                     </p>
                     {act && (
                       <p className="text-[11px] mt-0.5 font-semibold" style={{ color: '#00d084' }}>Realizado: {realizedLine(act)} <span className="opacity-70 font-normal">· toque p/ detalhes</span></p>
@@ -578,7 +580,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           onReopen={() => toggleDone(detail)} />
       )}
 
-      {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} />}
+      {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} tecnico />}
 
       {showRemove && (
         <RemoveWorkoutsModal athleteId={athleteId} onClose={() => setShowRemove(false)}
@@ -707,7 +709,11 @@ function ZoneBar({ label, minutes }: { label: string; minutes: number[] }) {
 }
 
 // Detalhe do treino REALIZADO (importado): KM, FC, potência, pace, zonas...
-function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; onClose: () => void }) {
+function ActivityDetailModal({ activity: a, onClose, tecnico = false }: {
+  activity: ActivityRow; onClose: () => void
+  /** Treinador vê TSS e IF; o aluno vê a carga em palavras. */
+  tecnico?: boolean
+}) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   const info = sportInfo(a.sport)
@@ -722,8 +728,13 @@ function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; 
     dist > 0 ? { label: 'Distância', value: `${(dist / 1000).toFixed(2)} km` } : null,
     { label: 'Duração', value: fmtDur(Math.round((a.duration_seconds || 0) / 60)) ?? '—' },
     pace ? { label: 'Pace', value: fmtPace(pace) } : null,
-    a.tss != null ? { label: 'TSS', value: a.tss.toFixed(0), hi: true } : null,
-    a.intensity_factor != null ? { label: 'IF', value: a.intensity_factor.toFixed(3) } : null,
+    a.tss != null
+      ? (tecnico
+        ? { label: 'TSS', value: a.tss.toFixed(0), hi: true }
+        : { label: 'Carga', value: cargaDe(a.tss)?.rotulo ?? '—', hi: true })
+      : null,
+    // IF é razão de intensidade sobre o limiar: número de treinador, não de aluno.
+    tecnico && a.intensity_factor != null ? { label: 'IF', value: a.intensity_factor.toFixed(3) } : null,
     a.avg_hr_bpm ? { label: 'FC média', value: `${a.avg_hr_bpm} bpm` } : null,
     a.max_hr_bpm ? { label: 'FC máx', value: `${a.max_hr_bpm} bpm` } : null,
     a.avg_power_watts ? { label: 'Pot. média', value: `${a.avg_power_watts} W` } : null,
@@ -834,7 +845,7 @@ function WorkoutDetailModal({ workout, thresholds, onClose, onComplete, onReopen
           </div>
           <div className="flex gap-2 mt-3">
             {workout.planned_duration_min ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>{fmtDur(workout.planned_duration_min)}</span> : null}
-            {workout.planned_tss ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: '#0088ff18', color: '#0088ff' }}>{workout.planned_tss} TSS</span> : null}
+            <CargaChip tss={workout.planned_tss} className="py-1" />
           </div>
         </div>
         <div className="p-5 space-y-4">

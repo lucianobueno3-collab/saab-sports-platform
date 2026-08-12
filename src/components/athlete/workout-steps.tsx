@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import {
   type WorkoutStructure, type Step, ZONES, KIND_LABEL,
   flattenSteps, estimateStructure, dominantZone,
@@ -10,6 +11,8 @@ import {
 } from '@/lib/workout-export'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { ZoneTime, ZONE_FEEL, ZONE_PURPOSE } from '@/components/athlete/zone-time'
+import { textoDeCarga } from '@/lib/carga'
+import { GlossarioAluno } from '@/components/athlete/carga-chip'
 import { Watch, Download } from 'lucide-react'
 
 function fmtMin(min: number) {
@@ -68,12 +71,16 @@ function StepLine({ step, sport, th, index }: { step: Step; sport: string; th?: 
 }
 
 /** Visão "Passos" estilo TrainingPeaks + botão de exportar para o relógio (.TCX). */
-export function WorkoutSteps({ title, sport, structure, thresholds, compact, plannedTss }: {
+export function WorkoutSteps({ title, sport, structure, thresholds, compact, plannedTss, tecnico = false }: {
   title: string; sport: string; structure: WorkoutStructure; thresholds?: Thresholds; compact?: boolean
   /** Carga que o treinador gravou. Tem prioridade sobre a estimativa, senão o
    *  aluno veria um TSS no card do treino e outro aqui embaixo. */
   plannedTss?: number | null
+  /** Nas telas do treinador, mostra "47 TSS"; nas do aluno, "carga moderada". */
+  tecnico?: boolean
 }) {
+  // O hook vem antes do retorno vazio: a ordem dos hooks não pode variar.
+  const [glossario, setGlossario] = useState(false)
   if (!structure || structure.length === 0) return null
 
   const passos = flattenSteps(structure)
@@ -86,8 +93,10 @@ export function WorkoutSteps({ title, sport, structure, thresholds, compact, pla
     downloadFile(`${slugify(title)}.tcx`, buildWorkoutTCX(title, sport, structure))
   }
 
-  // Os números do treino inteiro, numa linha só.
-  const resumo = [fmtMin(min), km != null ? fmtKm(km) : null, `${tss} TSS`].filter(Boolean).join(' · ')
+  // Os números do treino inteiro, numa linha só. Para o aluno, a carga sai em
+  // palavras: "47 TSS" não diz nada para quem está começando.
+  const carga = tecnico ? `${tss} TSS` : textoDeCarga(tss)?.toLowerCase() ?? null
+  const resumo = [fmtMin(min), km != null ? fmtKm(km) : null, carga].filter(Boolean).join(' · ')
 
   let n = 0
   return (
@@ -104,7 +113,7 @@ export function WorkoutSteps({ title, sport, structure, thresholds, compact, pla
 
       {!compact && <StructureBar structure={structure} height={10} />}
 
-      <ZoneTime structure={structure} />
+      <ZoneTime structure={structure} tecnico={tecnico} />
 
       <div className="space-y-3">
         {structure.map((seg, i) => {
@@ -137,6 +146,14 @@ export function WorkoutSteps({ title, sport, structure, thresholds, compact, pla
           passa a mostrar o ritmo e o batimento certos para você, em vez de só a zona.
         </p>
       )}
+
+      {!tecnico && (
+        <button type="button" onClick={() => setGlossario(true)}
+          className="w-full text-[11px] font-semibold text-muted-foreground hover:text-foreground underline underline-offset-2">
+          O que significam esses números?
+        </button>
+      )}
+      {glossario && <GlossarioAluno tss={tss} onClose={() => setGlossario(false)} />}
 
       <button type="button" onClick={exportTcx}
         className="w-full py-2.5 rounded-lg border border-border text-[13px] font-semibold text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center justify-center gap-2">

@@ -10,6 +10,7 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { CargaChip } from '@/components/athlete/carga-chip'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { structureForTitle } from '@/lib/training-plans'
@@ -267,7 +268,7 @@ function HeroCard({ w, th, busy, onToggle, onNotDone, onChat, extra }: {
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>{fmtDur(w.planned_duration_min)}</span>
               )}
               {w.planned_tss != null && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: '#0088ff18', color: '#0088ff' }}>{w.planned_tss} TSS</span>
+                <CargaChip tss={w.planned_tss} />
               )}
               {extra > 0 && <span className="text-[11px] text-muted-foreground">+{extra} treino{extra > 1 ? 's' : ''} hoje</span>}
             </div>
