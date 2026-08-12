@@ -15,7 +15,7 @@ import {
   Stethoscope, FlaskConical, ShieldCheck, Bandage, ClipboardList,
 } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const LEVEL: Record<RiskLevel, { c: string; t: string }> = {
   alto: { c: '#ef4444', t: 'Alto' },
   medio: { c: '#f59e0b', t: 'Atenção' },
@@ -326,7 +326,7 @@ function NoteModal({ athleteId, onClose, onSaved }: { athleteId: string; onClose
     onSaved()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">

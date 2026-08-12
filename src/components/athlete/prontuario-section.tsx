@@ -27,7 +27,7 @@ const RECORD_TYPES: { key: string; label: string; defaultMonths: number | null }
 const RESULT_LABEL: Record<string, { label: string; color: string }> = {
   apto:            { label: 'Apto',                color: '#00d084' },
   apto_restricoes: { label: 'Apto c/ restrições',  color: '#ffa800' },
-  inapto:          { label: 'Inapto',              color: '#e8001c' },
+  inapto:          { label: 'Inapto',              color: 'var(--marca)' },
 }
 
 type Validity = { status: 'valid' | 'expiring' | 'expired' | 'none'; days: number | null }
@@ -43,7 +43,7 @@ function validity(expiresAt: string | null): Validity {
 const VALIDITY_STYLE: Record<Validity['status'], { label: (d: number | null) => string; color: string }> = {
   valid:    { label: () => 'Válido',                                        color: '#00d084' },
   expiring: { label: d => (d === 0 ? 'Vence hoje' : `Vence em ${d}d`),      color: '#ffa800' },
-  expired:  { label: d => `Vencido há ${Math.abs(d ?? 0)}d`,                color: '#e8001c' },
+  expired:  { label: d => `Vencido há ${Math.abs(d ?? 0)}d`,                color: 'var(--marca)' },
   none:     { label: () => 'Sem validade',                                  color: 'var(--muted-foreground)' },
 }
 
@@ -101,7 +101,7 @@ function ExamComparison({ exams }: { exams: MedicalExamRow[] }) {
           <span className="text-[10px] text-muted-foreground">últimas {dates.length} coletas</span>
         </div>
         <label className="flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer select-none">
-          <input type="checkbox" checked={onlyChanged} onChange={e => setOnlyChanged(e.target.checked)} className="accent-[#e8001c]" />
+          <input type="checkbox" checked={onlyChanged} onChange={e => setOnlyChanged(e.target.checked)} className="accent-[var(--marca)]" />
           Somente marcadores que mudaram
         </label>
       </div>
@@ -142,7 +142,7 @@ function ExamComparison({ exams }: { exams: MedicalExamRow[] }) {
                     <td key={i} className="text-right px-4 py-2.5 whitespace-nowrap">
                       {c?.value == null
                         ? <span className="text-muted-foreground/40">—</span>
-                        : <span className="font-bold" style={{ color: outOfRange(c) ? '#e8001c' : 'var(--foreground)' }}>
+                        : <span className="font-bold" style={{ color: outOfRange(c) ? 'var(--marca)' : 'var(--foreground)' }}>
                             {c.value}
                             {outOfRange(c) && <span className="ml-0.5" title="Fora da referência">⚠</span>}
                           </span>}
@@ -311,7 +311,7 @@ export function ProntuarioSection({ athleteId, exams }: Props) {
   }
   const profileFilled = profile && [profile.allergies, profile.medications, profile.conditions, profile.surgeries, profile.blood_type].some(Boolean)
 
-  const inputCls = 'w-full px-3 py-2 text-xs rounded-lg bg-background border border-border text-foreground outline-none focus:border-[#e8001c]'
+  const inputCls = 'w-full px-3 py-2 text-xs rounded-lg bg-background border border-border text-foreground outline-none focus:border-[var(--marca)]'
   const labelCls = 'block text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1'
 
   return (
@@ -323,7 +323,7 @@ export function ProntuarioSection({ athleteId, exams }: Props) {
           <div className="flex items-center gap-2 mb-2">
             {latestAtestado && atestadoValidity?.status !== 'expired' && latestAtestado.result !== 'inapto'
               ? <ShieldCheck className="w-4 h-4 text-[#00d084]" />
-              : <ShieldAlert className="w-4 h-4 text-[#e8001c]" />}
+              : <ShieldAlert className="w-4 h-4 text-[var(--marca)]" />}
             <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Aptidão médica</p>
           </div>
           {latestAtestado ? (
@@ -349,13 +349,13 @@ export function ProntuarioSection({ athleteId, exams }: Props) {
           <div className="flex items-center gap-3 text-xs font-bold">
             <span style={{ color: '#00d084' }}>{counts.valid} válido{counts.valid !== 1 ? 's' : ''}</span>
             <span style={{ color: '#ffa800' }}>{counts.expiring} a vencer</span>
-            <span style={{ color: '#e8001c' }}>{counts.expired} vencido{counts.expired !== 1 ? 's' : ''}</span>
+            <span style={{ color: 'var(--marca)' }}>{counts.expired} vencido{counts.expired !== 1 ? 's' : ''}</span>
           </div>
           <p className="text-[10px] text-muted-foreground mt-1">A vencer = próximos 30 dias</p>
         </div>
 
         {/* Anamnese */}
-        <button onClick={openProfile} className="rounded-xl p-4 bg-card border border-border text-left transition-all hover:border-[#e8001c]/50">
+        <button onClick={openProfile} className="rounded-xl p-4 bg-card border border-border text-left transition-all hover:border-[var(--marca)]/50">
           <div className="flex items-center gap-2 mb-2">
             <ClipboardList className="w-4 h-4 text-[#0088ff]" />
             <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Anamnese</p>
@@ -422,7 +422,7 @@ export function ProntuarioSection({ athleteId, exams }: Props) {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button onClick={() => openEditRecord(r)} title="Editar"><Pencil className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-[#00d084]" /></button>
-                    <button onClick={() => deleteRecord(r.id)} title="Excluir"><X className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-[#e8001c]" /></button>
+                    <button onClick={() => deleteRecord(r.id)} title="Excluir"><X className="w-3.5 h-3.5 text-muted-foreground/40 hover:text-[var(--marca)]" /></button>
                   </div>
                 </div>
               )

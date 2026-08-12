@@ -9,7 +9,7 @@ import { ClinicalPanel } from './clinical-panel'
 import { MetricasTab } from './metricas-tab'
 import { Heart, Utensils, FlaskConical, Stethoscope, Scale } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 
 /** Área unificada de Saúde + Nutrição + Exames (mesma ficha, com sub-abas).
  *  Usada tanto no portal do aluno quanto na ficha do treinador. */

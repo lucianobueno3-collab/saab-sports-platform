@@ -10,7 +10,7 @@ import {
 const SPORT: Record<string, { label: string; color: string }> = {
   running: { label: 'Corrida', color: '#ff6b00' }, cycling: { label: 'Ciclismo', color: '#0088ff' },
   swimming: { label: 'Natação', color: '#00b4d8' }, triathlon: { label: 'Triathlon', color: '#8b5cf6' },
-  duathlon: { label: 'Duathlon', color: '#ffa800' }, strength: { label: 'Força', color: '#e8001c' },
+  duathlon: { label: 'Duathlon', color: '#ffa800' }, strength: { label: 'Força', color: 'var(--marca)' },
   other: { label: 'Outro', color: '#64748b' },
 }
 const sInfo = (s: string) => SPORT[s] ?? SPORT.other
@@ -113,10 +113,10 @@ export function EvolutionShowcase({ athleteId, athleteName }: { athleteId: strin
     const ctx = c.getContext('2d'); if (!ctx) return
     const g = ctx.createLinearGradient(0, 0, 0, 1350); g.addColorStop(0, '#0b0b14'); g.addColorStop(1, '#1c0410')
     ctx.fillStyle = g; ctx.fillRect(0, 0, 1080, 1350)
-    ctx.fillStyle = '#e8001c'; ctx.fillRect(0, 0, 1080, 14)
+    ctx.fillStyle = 'var(--marca)'; ctx.fillRect(0, 0, 1080, 14)
     ctx.textAlign = 'center'
     ctx.fillStyle = '#ffffff'; ctx.font = 'bold 58px sans-serif'; ctx.fillText(athleteName, 540, 180)
-    ctx.fillStyle = '#e8001c'; ctx.font = 'bold 30px sans-serif'; ctx.fillText('MINHA EVOLUÇÃO · ' + periodLabel.toUpperCase(), 540, 232)
+    ctx.fillStyle = 'var(--marca)'; ctx.font = 'bold 30px sans-serif'; ctx.fillText('MINHA EVOLUÇÃO · ' + periodLabel.toUpperCase(), 540, 232)
     const rows: [string, string][] = [
       ['TREINOS', String(t.count)], ['DISTÂNCIA', fmtKm(t.dist) + ' km'],
       ['TEMPO', fmtH(t.time)], ['CARGA (TSS)', String(Math.round(t.tss))],
@@ -149,15 +149,15 @@ export function EvolutionShowcase({ athleteId, athleteName }: { athleteId: strin
         <div className="flex gap-0.5 p-0.5 rounded-lg bg-background border border-border">
           {PERIODS.map(p => (
             <button key={p.key} onClick={() => setPeriod(p.key)} className="px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors"
-              style={period === p.key ? { background: '#e8001c', color: '#fff' } : { color: 'var(--muted-foreground)' }}>{p.short}</button>
+              style={period === p.key ? { background: 'var(--marca)', color: '#fff' } : { color: 'var(--muted-foreground)' }}>{p.short}</button>
           ))}
         </div>
       </div>
 
       {/* Card compartilhável */}
-      <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#12121c 0%,#26060f 100%)', border: '1px solid #e8001c33' }}>
-        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: '#e8001c' }} />
-        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: '#e8001c' }}>Minha evolução · {periodLabel}</p>
+      <div className="rounded-2xl p-5 relative overflow-hidden" style={{ background: 'linear-gradient(135deg,#12121c 0%,#26060f 100%)', border: '1px solid var(--marca-33)' }}>
+        <div className="absolute top-0 left-0 right-0 h-1" style={{ background: 'var(--marca)' }} />
+        <p className="text-[10px] font-black uppercase tracking-widest" style={{ color: 'var(--marca)' }}>Minha evolução · {periodLabel}</p>
         <p className="text-lg font-black text-white mt-0.5">{athleteName}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           {[
@@ -167,14 +167,14 @@ export function EvolutionShowcase({ athleteId, athleteName }: { athleteId: strin
             { label: 'Carga (TSS)', value: String(Math.round(stats.totals.tss)), icon: Zap },
           ].map(({ label, value, icon: Icon }) => (
             <div key={label}>
-              <Icon className="w-4 h-4 mb-1" style={{ color: '#e8001c' }} />
+              <Icon className="w-4 h-4 mb-1" style={{ color: 'var(--marca)' }} />
               <p className="text-2xl font-black text-white leading-none">{value}</p>
               <p className="text-[10px] uppercase tracking-wider mt-1" style={{ color: '#8a9ab0' }}>{label}</p>
             </div>
           ))}
         </div>
         <div className="flex gap-2 mt-5">
-          <button onClick={share} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white" style={{ background: '#e8001c' }}>
+          <button onClick={share} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white" style={{ background: 'var(--marca)' }}>
             <Share2 className="w-3.5 h-3.5" /> {copied ? 'Copiado!' : 'Compartilhar'}
           </button>
           <button onClick={downloadImage} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-white" style={{ background: '#ffffff1a', border: '1px solid #ffffff33' }}>
@@ -219,7 +219,7 @@ export function EvolutionShowcase({ athleteId, athleteName }: { athleteId: strin
             stats.longestTime ? { icon: Timer, label: 'Maior duração', value: fmtH(stats.longestTime.duration_seconds || 0), sub: sInfo(stats.longestTime.sport).label, color: '#8b5cf6' } : null,
             stats.bestPace ? { icon: Flame, label: 'Melhor pace', value: fmtPace(stats.bestPace.pace), sub: 'Corrida', color: '#ff6b00' } : null,
             stats.bestWeek > 0 ? { icon: Trophy, label: 'Semana mais forte', value: `${Math.round(stats.bestWeek)} TSS`, sub: 'em 12 semanas', color: '#ffa800' } : null,
-            stats.bigTss && (stats.bigTss.tss ?? 0) > 0 ? { icon: Zap, label: 'Treino mais duro', value: `${Math.round(stats.bigTss.tss ?? 0)} TSS`, sub: sInfo(stats.bigTss.sport).label, color: '#e8001c' } : null,
+            stats.bigTss && (stats.bigTss.tss ?? 0) > 0 ? { icon: Zap, label: 'Treino mais duro', value: `${Math.round(stats.bigTss.tss ?? 0)} TSS`, sub: sInfo(stats.bigTss.sport).label, color: 'var(--marca)' } : null,
             { icon: CheckCircle2, label: 'Sequência', value: `${stats.streak} sem`, sub: 'semanas seguidas', color: '#00d084' },
           ].filter(Boolean).map((r, i) => {
             const rec = r as { icon: typeof Route; label: string; value: string; sub: string; color: string }
@@ -269,7 +269,7 @@ export function EvolutionShowcase({ athleteId, athleteName }: { athleteId: strin
           <div className="flex items-end gap-1 h-28">
             {stats.weekTss.map((t, i) => (
               <div key={i} className="flex-1 flex flex-col justify-end" title={`${Math.round(t)} TSS`}>
-                <div className="rounded-t" style={{ height: `${(t / maxWeek) * 100}%`, minHeight: t > 0 ? 4 : 0, background: i === stats.weekTss.length - 1 ? '#e8001c' : '#0088ff' }} />
+                <div className="rounded-t" style={{ height: `${(t / maxWeek) * 100}%`, minHeight: t > 0 ? 4 : 0, background: i === stats.weekTss.length - 1 ? 'var(--marca)' : '#0088ff' }} />
               </div>
             ))}
           </div>

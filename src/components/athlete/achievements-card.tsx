@@ -5,7 +5,7 @@ import { getAchievementData } from '@/lib/supabase/queries'
 import { computeAchievements, evolutionStory, type Achievement } from '@/lib/achievements'
 import { Trophy, Flame, Clock, Route, CalendarCheck, Sparkles, ChevronDown } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const ICONS = {
   trophy: Trophy, flame: Flame, clock: Clock,
   route: Route, calendar: CalendarCheck, sparkles: Sparkles,
@@ -37,7 +37,7 @@ export function AchievementsCard({ athleteId }: { athleteId: string }) {
 
       {/* Narrativa de evolução — o texto que segura quem está começando */}
       {story && (
-        <div className="px-5 py-3.5" style={{ background: `linear-gradient(135deg, ${RED}12, transparent 70%)` }}>
+        <div className="px-5 py-3.5" style={{ background: `linear-gradient(135deg, var(--marca-12), transparent 70%)` }}>
           <p className="text-sm text-foreground leading-relaxed">{story}</p>
         </div>
       )}
@@ -48,7 +48,7 @@ export function AchievementsCard({ athleteId }: { athleteId: string }) {
             const Icon = ICONS[a.icon]
             return (
               <div key={a.key} className="flex items-start gap-3 rounded-xl px-3.5 py-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
-                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: RED + '1f' }}>
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--marca-1f)' }}>
                   <Icon className="w-4.5 h-4.5" style={{ color: RED, width: 18, height: 18 }} />
                 </span>
                 <div className="min-w-0">

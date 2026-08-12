@@ -1116,14 +1116,17 @@ async function fetchAthleteSelf(athleteId: string) {
   const since = new Date(); since.setDate(since.getDate() - 30)
   const todayISO = new Date().toLocaleDateString('en-CA')
   const in14 = new Date(); in14.setDate(in14.getDate() + 14)
-  const [summary, metrics, activities, checkins, programs, logs, plans] = await Promise.all([
+  const [summary, metrics, activities, checkins, programs, logs, plans, marca] = await Promise.all([
     sb.from('v_athlete_summary').select('id, full_name, primary_sport, ctl, atl, tsb').eq('id', athleteId).maybeSingle(),
     sb.from('daily_metrics').select('date, hrv_ms, body_battery, sleep_hours, resting_hr').eq('athlete_id', athleteId).order('date', { ascending: false }).limit(1),
     sb.from('activities').select('name, sport, started_at, duration_seconds, distance_meters, tss').eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(5),
     sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
     sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
     sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
-    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, exercises').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+    // A marca vem junto e entra no cache offline: sem isso o portal da Caqui
+    // piscaria vermelho SAAB a cada abertura antes de se corrigir.
+    sb.from('athletes').select('portal_brand').eq('id', athleteId).maybeSingle(),
   ])
   return {
     summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
@@ -1133,6 +1136,7 @@ async function fetchAthleteSelf(athleteId: string) {
     program: (programs.data?.[0] ?? null) as PortalStrengthProgram | null,
     strengthLogs: (logs.data ?? []) as StrengthLogRow[],
     plannedWorkouts: (plans.data ?? []) as PlannedWorkoutRow[],
+    portalBrand: ((marca.data as { portal_brand?: string | null } | null)?.portal_brand ?? 'saab') as string,
   }
 }
 

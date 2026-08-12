@@ -31,6 +31,14 @@ export interface Brand {
   headerBg: string
   /** caminho do logo em imagem (em /public); null = usa wordmark tipográfico */
   logoSrc: string | null
+  /**
+   * Cor de destaque do portal do aluno, por tema.
+   *
+   * São duas porque a mesma cor não serve nos dois fundos: o laranja da Caqui
+   * fica bonito no escuro, mas como texto sobre branco não alcança o contraste
+   * mínimo de leitura. No claro entra uma versão mais fechada.
+   */
+  accent: { light: string; dark: string }
 }
 
 export const BRANDS: Record<BrandId, Brand> = {
@@ -50,6 +58,8 @@ export const BRANDS: Record<BrandId, Brand> = {
     diagonalMotif: false,
     headerBg: '#111118',
     logoSrc: null,
+    // O vermelho SAAB já passa no contraste nos dois fundos: fica igual.
+    accent: { light: '#e8001c', dark: '#e8001c' },
   },
   caqui: {
     id: 'caqui',
@@ -67,9 +77,34 @@ export const BRANDS: Record<BrandId, Brand> = {
     diagonalMotif: true,
     headerBg: '#ffffff',   // Branco Ágil — combina com o fundo claro do logo
     logoSrc: '/logo-caqui.png',
+    accent: { light: '#c2451a', dark: '#e8551f' },
   },
 }
 
 export function getBrand(id: string | null | undefined): Brand {
   return BRANDS[(id as BrandId)] ?? BRANDS.saab
+}
+
+/** Sufixos de transparência usados nos destaques do portal. */
+const ALFAS = ['12', '14', '15', '18', '1f', '22', '33', '3d', '40', '44', '55'] as const
+
+/**
+ * As variáveis CSS de uma marca, para o portal do aluno.
+ *
+ * Tudo no portal aponta para `--marca` em vez do vermelho fixo, então trocar a
+ * marca é trocar estas variáveis. O padrão em `globals.css` é o SAAB, o que faz
+ * as telas do treinador — e qualquer componente compartilhado — continuarem
+ * exatamente como estavam.
+ */
+export function varsDaMarca(b: Brand, escuro: boolean): Record<string, string> {
+  const cor = escuro ? b.accent.dark : b.accent.light
+  const vars: Record<string, string> = { '--marca': cor }
+  for (const a of ALFAS) vars[`--marca-${a}`] = cor + a
+  vars['--marca-fonte-titulo'] = b.headingFont
+  return vars
+}
+
+/** Nomes das variáveis, para limpar ao sair do portal. */
+export function nomesDasVars(): string[] {
+  return ['--marca', ...ALFAS.map(a => `--marca-${a}`), '--marca-fonte-titulo']
 }

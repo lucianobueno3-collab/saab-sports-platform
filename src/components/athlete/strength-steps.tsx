@@ -4,7 +4,7 @@ import type { LibExercise } from '@/lib/supabase/queries'
 import { repsPorSerie, seriesDe, ehPorTempo, estimarForca } from '@/lib/fase-1-forca'
 import { Dumbbell, Timer, Repeat } from 'lucide-react'
 
-const VERMELHO = '#e8001c'
+const VERMELHO = 'var(--marca)'
 
 /** "45s" vira "45s"; "12" vira "12 reps". */
 function rotuloSerie(valor: number, porTempo: boolean) {
@@ -65,7 +65,7 @@ export function StrengthSteps({ exercises, compact = false }: {
           return (
             <li key={i} className="px-3.5 py-2.5 flex gap-3" style={i ? { borderTop: '1px solid var(--panel-border)' } : undefined}>
               <span className="w-5 h-5 rounded-md flex items-center justify-center shrink-0 text-[10px] font-black tabular-nums mt-0.5"
-                style={{ background: VERMELHO + '1f', color: VERMELHO }}>{i + 1}</span>
+                style={{ background: 'var(--marca-1f)', color: VERMELHO }}>{i + 1}</span>
 
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-baseline gap-x-2">

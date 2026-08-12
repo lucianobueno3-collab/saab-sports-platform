@@ -13,7 +13,7 @@ const SPORTS: Record<string, { color: string; icon: typeof Footprints }> = {
   running: { color: '#ff6b00', icon: Footprints },
   cycling: { color: '#0088ff', icon: Bike },
   swimming: { color: '#00b4d8', icon: Waves },
-  strength: { color: '#e8001c', icon: Dumbbell },
+  strength: { color: 'var(--marca)', icon: Dumbbell },
   triathlon: { color: '#8b5cf6', icon: ActIcon },
 }
 const infoDe = (s: string) => SPORTS[s] ?? { color: '#64748b', icon: ActIcon }

@@ -35,7 +35,7 @@ const SPORTS = [
   { key: 'swimming', label: 'Natação', color: '#00b4d8', icon: Waves },
   { key: 'triathlon', label: 'Triathlon', color: '#8b5cf6', icon: ActIcon },
   { key: 'duathlon', label: 'Duathlon', color: '#ffa800', icon: ActIcon },
-  { key: 'strength', label: 'Força', color: '#e8001c', icon: Dumbbell },
+  { key: 'strength', label: 'Força', color: 'var(--marca)', icon: Dumbbell },
   { key: 'other', label: 'Outro', color: '#64748b', icon: ActIcon },
 ]
 const sportInfo = (s: string) => SPORTS.find(x => x.key === s) ?? SPORTS[6]
@@ -277,8 +277,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                 <button key={key} onClick={() => setSelectedDay(key)}
                   className="flex flex-col items-center lg:items-stretch justify-start rounded-xl transition-colors p-1 lg:p-1.5 min-h-[44px] aspect-square lg:aspect-auto"
                   style={{
-                    background: isSel ? '#e8001c18' : 'transparent',
-                    border: isSel ? '1.5px solid #e8001c' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
+                    background: isSel ? 'var(--marca-18)' : 'transparent',
+                    border: isSel ? '1.5px solid var(--marca)' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
                     opacity: inMonth ? 1 : 0.4,
                   }}>
                   <span className={`text-xs lg:text-sm font-bold lg:self-start ${isToday ? 'text-primary' : 'text-foreground'}`}>{d.getDate()}</span>
@@ -667,7 +667,7 @@ function DaySheet({ date, planned, library, onClose, onNew, onEdit, onDelete, on
           )}
 
           {/* Ações */}
-          <button onClick={onNew} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white" style={{ background: '#e8001c' }}>
+          <button onClick={onNew} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white" style={{ background: 'var(--marca)' }}>
             <Plus className="w-4 h-4" /> Novo treino
           </button>
 
@@ -675,7 +675,7 @@ function DaySheet({ date, planned, library, onClose, onNew, onEdit, onDelete, on
           {library.length > 0 && (
             <div>
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Da biblioteca</p>
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar treino…" className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2 focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar treino…" className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2 focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]" />
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {lib.map(w => {
                   const info = sportInfo(w.sport)

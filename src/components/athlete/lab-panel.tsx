@@ -74,7 +74,7 @@ export function LabPanel({ exams, sex, onEdit, onDelete }: Props) {
     <div className="space-y-4">
       {/* Resumo clínico */}
       <div className="flex items-center gap-3 flex-wrap text-xs px-1">
-        <span className="font-bold" style={{ color: '#e8001c' }}>{summary.low} abaixo</span>
+        <span className="font-bold" style={{ color: 'var(--marca)' }}>{summary.low} abaixo</span>
         <span className="font-bold" style={{ color: '#ffa800' }}>{summary.high} acima</span>
         <span className="font-bold" style={{ color: '#0088ff' }}>{summary.subopt} subótimo{summary.subopt !== 1 ? 's' : ''}</span>
         <span className="text-muted-foreground">· referências {sex === 'F' ? 'femininas' : sex === 'M' ? 'masculinas' : 'padrão'}</span>
@@ -179,7 +179,7 @@ function MarkerCard({ name, rows, sex, open, onToggle, onEdit, onDelete }: {
           </button>
         )}
         <button onClick={() => onEdit(latest)} className="text-[9px] text-muted-foreground/40 hover:text-foreground flex items-center gap-0.5 ml-auto"><Pencil className="w-2.5 h-2.5" /> editar</button>
-        <button onClick={() => onDelete(latest.id)} className="text-[9px] text-muted-foreground/40 hover:text-[#e8001c]"><X className="w-2.5 h-2.5" /></button>
+        <button onClick={() => onDelete(latest.id)} className="text-[9px] text-muted-foreground/40 hover:text-[var(--marca)]"><X className="w-2.5 h-2.5" /></button>
       </div>
 
       {open && rows.length > 1 && (

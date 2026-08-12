@@ -8,7 +8,7 @@ import {
 } from '@/lib/supabase/queries'
 import { Trash2, X, Loader2, AlertTriangle } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const ymd = (d: Date) => d.toLocaleDateString('en-CA')
 
 type Alcance = 'futuros' | 'periodo' | 'tudo'
@@ -133,7 +133,7 @@ export function RemoveWorkoutsModal({ athleteId, athleteName, onClose, onRemoved
           </label>
 
           {/* O número, antes de confirmar */}
-          <div className="rounded-xl px-4 py-3.5 text-center" style={{ background: nada || periodoInvalido ? 'var(--panel)' : RED + '14', border: `1px solid ${nada || periodoInvalido ? 'var(--panel-border)' : RED + '44'}` }}>
+          <div className="rounded-xl px-4 py-3.5 text-center" style={{ background: nada || periodoInvalido ? 'var(--panel)' : 'var(--marca-14)', border: `1px solid ${nada || periodoInvalido ? 'var(--panel-border)' : 'var(--marca-44)'}` }}>
             {periodoInvalido ? (
               <span className="text-sm font-bold text-foreground">A data inicial é depois da final.</span>
             ) : contando ? (

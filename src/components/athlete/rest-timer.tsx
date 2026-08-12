@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { fmtSegundos } from '@/lib/strength-metrics'
 import { Timer, Plus, X } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const VERDE = '#00d084'
 
 /**

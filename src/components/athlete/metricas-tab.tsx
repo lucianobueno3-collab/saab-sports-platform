@@ -12,7 +12,7 @@ import {
 import { extractAnthropometryMetrics, extractBodyCompFromText, extractDateFromText, hasExtractableText } from '@/lib/parsers/pdf-parser'
 import { Scale, Upload, Loader2, Trash2, Plus, X, Check, TrendingUp } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const CATS: BodyCategory[] = ['composicao', 'circunferencia', 'dobra']
 const todayISO = () => new Date().toLocaleDateString('en-CA')
 const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
@@ -263,7 +263,7 @@ function ManualModal({ athleteId, onClose, onSaved }: { athleteId: string; onClo
     onSaved()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   return (
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
       <div className="bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-lg shadow-2xl max-h-[92vh] flex flex-col safe-bottom">
@@ -298,7 +298,7 @@ function ManualModal({ athleteId, onClose, onSaved }: { athleteId: string; onClo
                           <p className="text-[10px] text-muted-foreground">{m.unit || '—'}</p>
                         </div>
                         <input inputMode="decimal" value={vals[m.key] ?? ''} onChange={e => setVals(v => ({ ...v, [m.key]: e.target.value }))}
-                          placeholder="—" className="w-[80px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+                          placeholder="—" className="w-[80px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]" />
                       </label>
                     ))}
                   </div>

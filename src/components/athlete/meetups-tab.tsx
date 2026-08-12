@@ -13,7 +13,7 @@ import {
   Sparkles, ShieldCheck, ExternalLink, CalendarDays, Pencil,
 } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const TYPES = [
   { v: 'leve', t: 'Leve / regenerativo' }, { v: 'longao', t: 'Longão' },
   { v: 'intervalado', t: 'Intervalado / tiros' }, { v: 'forca', t: 'Força' }, { v: 'livre', t: 'Livre' },
@@ -90,9 +90,9 @@ export function MeetupsTab({ athleteId, athleteName }: { athleteId: string | nul
           {suggestions.map((s, i) => (
             <button key={i} onClick={() => setModal({ prefill: s })}
               className="w-full text-left rounded-2xl p-4 transition-colors hover:brightness-105"
-              style={{ background: `linear-gradient(135deg, ${RED}14, transparent 65%)`, border: `1px solid ${RED}3d` }}>
+              style={{ background: `linear-gradient(135deg, var(--marca-14), transparent 65%)`, border: `1px solid var(--marca-3d)` }}>
               <div className="flex items-start gap-3">
-                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: RED + '22' }}>
+                <span className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'var(--marca-22)' }}>
                   <Sparkles className="w-5 h-5" style={{ color: RED }} />
                 </span>
                 <div className="min-w-0">
@@ -270,7 +270,7 @@ function MeetupModal({ athleteId, edit, prefill, onClose, onSaved }: {
     onSaved()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
@@ -282,7 +282,7 @@ function MeetupModal({ athleteId, edit, prefill, onClose, onSaved }: {
 
         <div className="overflow-y-auto px-5 py-4 space-y-3.5">
           {prefill && (
-            <p className="text-[11px] rounded-lg px-3 py-2" style={{ background: RED + '14', color: RED }}>
+            <p className="text-[11px] rounded-lg px-3 py-2" style={{ background: 'var(--marca-14)', color: RED }}>
               Pré-preenchido a partir do seu treino — {prefill.names.join(', ')} {prefill.count === 1 ? 'tem' : 'têm'} algo parecido nesse dia.
             </p>
           )}
