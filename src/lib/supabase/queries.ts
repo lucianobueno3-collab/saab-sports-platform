@@ -287,15 +287,32 @@ export async function countPlannedWorkouts(athleteId: string, scope: BulkDeleteS
  */
 export async function bulkDeletePlannedWorkouts(
   athleteId: string, scope: BulkDeleteScope,
-): Promise<{ ok: boolean; count: number; error?: string }> {
+): Promise<{ ok: boolean; count: number; error?: string; apagados?: PlannedWorkoutRow[] }> {
   const sb = createClient()
   let q = sb.from('planned_workouts').delete().eq('athlete_id', athleteId)
   if (scope.from) q = q.gte('date', scope.from)
   if (scope.to) q = q.lte('date', scope.to)
   if (!scope.includeCompleted) q = q.eq('completed', false)
-  const { data, error } = await q.select('id')
+  // Devolve as linhas inteiras, não só os ids: é com elas que o "Desfazer"
+  // recria os treinos. Apagar o plano de um aluno não tinha volta.
+  const { data, error } = await q.select('*')
   if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
-  return { ok: true, count: data?.length ?? 0 }
+  const apagados = (data ?? []) as PlannedWorkoutRow[]
+  return { ok: true, count: apagados.length, apagados }
+}
+
+/**
+ * Recria treinos que acabaram de ser apagados — o "Desfazer".
+ *
+ * Recoloca com o mesmo id, para que qualquer coisa que apontasse para o treino
+ * (um recado, por exemplo) continue apontando para ele.
+ */
+export async function restaurarPlannedWorkouts(linhas: PlannedWorkoutRow[]): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (linhas.length === 0) return { ok: true, count: 0 }
+  const sb = createClient()
+  const { data, error } = await sb.from('planned_workouts').insert(linhas).select('id')
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: data?.length ?? linhas.length }
 }
 
 /** Insere vários treinos programados de uma vez (ao aplicar um plano). */

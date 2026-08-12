@@ -8,25 +8,42 @@ import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/auth-context'
 import {
   LayoutDashboard, Users, Upload, Settings,
-  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2, MessageCircle
+  TrendingUp, Heart, LogOut, BellDot, ShieldCheck, Dumbbell, UserRound, ClipboardList, Users2, MessageCircle,
+  MoreHorizontal, ChevronDown,
 } from 'lucide-react'
 import { getAthletesForAlerts, getMyAccess, getEnrollments, getCoachInbox } from '@/lib/supabase/queries'
 import { setViewMode } from '@/lib/view-mode'
 import { VersionTag } from '@/components/ui/version-tag'
+import { BuscaAluno } from '@/components/layout/busca-aluno'
 import { trainingReadiness, type DailyMetrics } from '@/lib/readiness'
 import { useAutoRefresh } from '@/lib/use-auto-refresh'
 
-const navItems = [
-  { href: '/dashboard', label: 'Visão Geral', icon: LayoutDashboard },
+// Onze itens com o mesmo peso não são um menu, são uma lista. Estes cinco são
+// o trabalho de todo dia; o resto é visitado de vez em quando e fica atrás de
+// "Mais", que abre sozinho quando você está numa dessas telas.
+type ItemDeMenu = {
+  href: string
+  label: string
+  icon: typeof LayoutDashboard
+  alertBadge?: boolean
+  msgBadge?: boolean
+  enrollBadge?: boolean
+}
+
+const navItems: ItemDeMenu[] = [
+  { href: '/dashboard', label: 'Hoje', icon: LayoutDashboard },
   { href: '/athletes', label: 'Alunos', icon: Users },
-  { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
   { href: '/treinos', label: 'Treinos', icon: Dumbbell },
   { href: '/recados', label: 'Recados', icon: MessageCircle, msgBadge: true },
-  { href: '/encontros', label: 'Treinar junto', icon: Users2 },
+  { href: '/matriculas', label: 'Matrículas', icon: ClipboardList, enrollBadge: true },
+]
+
+const navSecundario: ItemDeMenu[] = [
   { href: '/alerts', label: 'Alertas', icon: BellDot, alertBadge: true },
-  { href: '/import', label: 'Importar Dados', icon: Upload },
+  { href: '/encontros', label: 'Treinar junto', icon: Users2 },
   { href: '/analytics', label: 'Analytics', icon: TrendingUp },
   { href: '/recovery', label: 'Recuperação', icon: Heart },
+  { href: '/import', label: 'Importar Dados', icon: Upload },
   { href: '/settings', label: 'Configurações', icon: Settings },
 ]
 
@@ -45,6 +62,12 @@ export function Sidebar() {
   const isDoctor = role === 'doctor'
   const roleLabel = role === 'admin' ? 'Admin' : role === 'doctor' ? 'Médico' : 'Treinador'
   const visibleNav = isDoctor ? navItems.filter(i => DOCTOR_HREFS.includes(i.href)) : navItems
+  const visibleSec = isDoctor ? navSecundario.filter(i => DOCTOR_HREFS.includes(i.href)) : navSecundario
+  // "Mais" já abre quando você está numa das telas de dentro — senão o item
+  // ativo fica escondido e a navegação parece ter perdido você.
+  const secAtivo = visibleSec.some(i => pathname === i.href || pathname.startsWith(i.href + '/'))
+  const [maisAberto, setMaisAberto] = useState(false)
+  const mostrarMais = maisAberto || secAtivo
 
   function switchToAthlete() {
     setViewMode('athlete')
@@ -84,6 +107,29 @@ export function Sidebar() {
   }, [])
   useAutoRefresh(refreshCriticalCount)
 
+  function NavLink({ item }: { item: ItemDeMenu }) {
+    const Icon = item.icon
+    const active = pathname === item.href || pathname.startsWith(item.href + '/')
+    const badge = item.alertBadge ? criticalCount : item.msgBadge ? unreadMsgs : item.enrollBadge ? pendingEnrolls : 0
+    return (
+      <Link href={item.href}
+        className={cn(
+          'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+          active
+            ? 'bg-primary/15 text-primary border border-primary/25'
+            : 'text-muted-foreground hover:text-foreground hover:bg-secondary',
+        )}>
+        <Icon className="w-4 h-4 flex-shrink-0" />
+        <span className="flex-1">{item.label}</span>
+        {badge > 0 && (
+          <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
+            {badge}
+          </span>
+        )}
+      </Link>
+    )
+  }
+
   return (
     <aside className="hidden md:flex flex-col w-64 shrink-0 overflow-y-auto bg-sidebar border-r border-border">
       {/* Logo */}
@@ -93,41 +139,24 @@ export function Sidebar() {
       </div>
 
       {/* Nav */}
+      {/* Achar um aluno exigia rolar a lista — agora é o primeiro campo do menu. */}
+      {!isDoctor && <BuscaAluno />}
+
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {visibleNav.map((item) => {
-          const Icon = item.icon
-          const active = pathname === item.href || pathname.startsWith(item.href + '/')
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                active
-                  ? 'bg-primary/15 text-primary border border-primary/25'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary'
-              )}
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              <span className="flex-1">{item.label}</span>
-              {item.alertBadge && criticalCount > 0 && (
-                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
-                  {criticalCount}
-                </span>
-              )}
-              {item.msgBadge && unreadMsgs > 0 && (
-                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
-                  {unreadMsgs}
-                </span>
-              )}
-              {item.enrollBadge && pendingEnrolls > 0 && (
-                <span className="flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-[#e8001c] text-white text-[9px] font-black px-1">
-                  {pendingEnrolls}
-                </span>
-              )}
-            </Link>
-          )
-        })}
+        {visibleNav.map(item => <NavLink key={item.href} item={item} />)}
+
+        {visibleSec.length > 0 && (
+          <>
+            <button onClick={() => setMaisAberto(v => !v)}
+              aria-expanded={mostrarMais}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
+              <MoreHorizontal className="w-4 h-4 flex-shrink-0" />
+              <span className="flex-1 text-left">Mais</span>
+              <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', mostrarMais && 'rotate-180')} />
+            </button>
+            {mostrarMais && visibleSec.map(item => <NavLink key={item.href} item={item} />)}
+          </>
+        )}
 
         {/* Admin-only link */}
         {isAdmin && (

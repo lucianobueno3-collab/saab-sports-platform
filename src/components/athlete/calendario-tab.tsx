@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
-  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms,
+  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms, restaurarPlannedWorkouts,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { structureForTitle } from '@/lib/training-plans'
@@ -14,6 +14,7 @@ import { StructuredBuilder, StructureBar } from '@/components/athlete/structured
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { CargaChip } from '@/components/athlete/carga-chip'
+import { DesfazerToast } from '@/components/ui/desfazer-toast'
 import { textoDeCarga, cargaDe } from '@/lib/carga'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import { LibraryPanel } from '@/components/athlete/library-panel'
@@ -66,7 +67,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
   const [showRemove, setShowRemove] = useState(false)
-  const [removidos, setRemovidos] = useState<number | null>(null)
+  // Guarda as linhas apagadas junto com o número: é com elas que o "Desfazer"
+  // recoloca os treinos.
+  const [removidos, setRemovidos] = useState<{ n: number; linhas: PlannedWorkoutRow[] } | null>(null)
   const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
@@ -407,12 +410,6 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
       </div>
 
 
-      {removidos != null && (
-        <p className="text-xs font-semibold rounded-lg px-3 py-2.5 mb-3" style={{ background: '#00d08414', color: '#00d084' }}>
-          {removidos === 0 ? 'Nenhum treino foi removido.' : `${removidos} treino${removidos > 1 ? 's' : ''} removido${removidos > 1 ? 's' : ''} do calendário.`}
-        </p>
-      )}
-
       <div className="flex gap-3 items-start">
       <div className="flex-1 min-w-0">
       {loading ? (
@@ -582,9 +579,20 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
 
       {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} tecnico />}
 
+      {removidos && (
+        <DesfazerToast
+          texto={removidos.n === 0
+            ? 'Nenhum treino foi removido.'
+            : `${removidos.n} treino${removidos.n > 1 ? 's' : ''} removido${removidos.n > 1 ? 's' : ''} do calendário.`}
+          onDesfazer={removidos.linhas.length
+            ? async () => { await restaurarPlannedWorkouts(removidos.linhas); load() }
+            : undefined}
+          onFechar={() => setRemovidos(null)} />
+      )}
+
       {showRemove && (
         <RemoveWorkoutsModal athleteId={athleteId} onClose={() => setShowRemove(false)}
-          onRemoved={n => { setShowRemove(false); setRemovidos(n); load(); setTimeout(() => setRemovidos(null), 6000) }} />
+          onRemoved={(n, linhas) => { setShowRemove(false); setRemovidos({ n, linhas }); load() }} />
       )}
 
       {showPlan && (
