@@ -27,6 +27,7 @@ import { VersionTag } from '@/components/ui/version-tag'
 import { RecadosTab } from '@/components/athlete/recados-tab'
 import { MarcaDoAluno } from '@/components/athlete/marca-do-aluno'
 import { getBrand } from '@/lib/portal-brands'
+import { MarcaLogo } from '@/components/athlete/marca-logo'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users, MessageCircle } from 'lucide-react'
 
@@ -181,6 +182,10 @@ export default function AtletaPage() {
       <MarcaDoAluno brand={data.portalBrand} />
       {/* Barra lateral (desktop) — mesmo padrão do painel do treinador */}
       <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-border bg-sidebar">
+        {/* A marca do portal fica no topo, como no painel do treinador. */}
+        <div className="px-5 py-4 border-b border-border">
+          <MarcaLogo brand={marca} altura={38} />
+        </div>
         <button onClick={() => go('dados')} className="flex items-center gap-3 px-5 py-5 border-b border-border text-left hover:bg-secondary/40 transition-colors">
           <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: 'var(--marca-22)', border: '1.5px solid var(--marca-55)', color: 'var(--marca)' }}>
             {profile?.avatar_url
@@ -217,10 +222,6 @@ export default function AtletaPage() {
           <button onClick={logout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors">
             <LogOut className="w-4 h-4" /><span className="flex-1 text-left">Sair</span>
           </button>
-          {/* Quem é o dono do portal: SAAB ou Caqui Pro. */}
-          <p className="text-[10px] text-muted-foreground/60 px-3 pt-1" style={{ fontFamily: marca.headingFont, fontWeight: 700 }}>
-            {marca.name} <span className="font-normal opacity-70">· {marca.tagline}</span>
-          </p>
           <VersionTag className="text-[10px] text-muted-foreground/50 px-3 pt-1" />
         </div>
       </aside>
@@ -231,6 +232,9 @@ export default function AtletaPage() {
       {/* Calendário usa a largura toda; as demais abas ficam num leitura confortável. */}
       <div className={`w-full space-y-5 ${tab === 'calendario' ? '' : 'max-w-6xl mx-auto'}`}>
       {/* Cabeçalho (só no celular — no desktop a identidade está na sidebar) */}
+      <div className="flex justify-center lg:hidden">
+        <MarcaLogo brand={marca} altura={40} />
+      </div>
       <div className="flex items-center justify-between gap-2 lg:hidden">
         <div className="flex items-center gap-3 min-w-0">
           <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: 'var(--marca-22)', border: '1.5px solid var(--marca-55)', color: 'var(--marca)' }} title="Editar meus dados">
@@ -364,9 +368,6 @@ export default function AtletaPage() {
 
       <div className="text-center pt-2 space-y-0.5 lg:hidden">
         <p className="text-[10px] text-muted-foreground/60">Saab Sports Performance Platform</p>
-        <p className="text-[10px] text-muted-foreground/60" style={{ fontFamily: marca.headingFont, fontWeight: 700 }}>
-          {marca.name} <span className="font-normal opacity-70">· {marca.tagline}</span>
-        </p>
         <VersionTag className="text-[10px] text-muted-foreground/50" />
       </div>
       </div>{/* /conteúdo max-w-5xl */}
