@@ -1334,6 +1334,137 @@ export async function getDashboardSummary() {
   }
 }
 
+// ─── Painel do treinador: a semana da equipe ────────────────────────────────
+
+export type DiaDoAluno = {
+  date: string
+  planejados: number
+  feitos: number
+}
+
+export type AlunoNaSemana = {
+  id: string
+  nome: string
+  sport: string
+  tsb: number | null
+  status: string | null
+  /** Sete dias, de segunda a domingo, na ordem. */
+  dias: DiaDoAluno[]
+  /** Recados do aluno que o treinador ainda não leu. */
+  recadosNaoLidos: number
+  /** Dor do último check-in (0–10) e quando foi. */
+  dor: number | null
+  dorEm: string | null
+  /**
+   * Data do último treino programado desta semana em diante — avisa que o
+   * plano vai acabar. `null` quando não há mais nada programado.
+   */
+  ultimoPlanejado: string | null
+}
+
+/**
+ * Uma linha por aluno com a semana inteira, para o treinador ler a equipe de
+ * relance.
+ *
+ * A Visão Geral mostrava CTL médio do grupo — número de relatório mensal. A
+ * pergunta de quem abre o painel de manhã é outra: quem treinou ontem, quem
+ * faltou, quem está com dor, quem está sem plano. Para responder isso era
+ * preciso entrar aluno por aluno.
+ *
+ * `de` e `ate` no formato AAAA-MM-DD, segunda a domingo.
+ */
+export async function getSemanaDaEquipe(de: string, ate: string): Promise<AlunoNaSemana[]> {
+  const sb = createClient()
+  const { data: brutos, error } = await sb.from('v_athlete_summary')
+    .select('id, full_name, primary_sport, tsb, status, active').order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+
+  const alunos = (brutos ?? []).filter((a: { active?: boolean }) => a.active !== false) as {
+    id: string; full_name: string; primary_sport: string; tsb: number | null; status: string | null
+  }[]
+  if (alunos.length === 0) return []
+  const ids = alunos.map(a => a.id)
+
+  // Os treinos futuros vêm numa busca separada, só para saber até quando o
+  // plano de cada um vai. Filtrada de hoje em diante de propósito: puxar o
+  // histórico inteiro estouraria o limite de linhas do Supabase, e aluno
+  // cortado pelo limite apareceria como "sem plano" sem estar.
+  const [planRes, actRes, comRes, chkRes, futuroRes] = await Promise.all([
+    sb.from('planned_workouts').select('athlete_id, date, completed')
+      .in('athlete_id', ids).gte('date', de).lte('date', ate),
+    sb.from('activities').select('athlete_id, started_at')
+      .in('athlete_id', ids).gte('started_at', `${de}T00:00:00`).lte('started_at', `${ate}T23:59:59`),
+    sb.from('workout_comments').select('athlete_id')
+      .in('athlete_id', ids).eq('read_by_staff', false),
+    sb.from('athlete_checkins').select('athlete_id, checkin_date, soreness')
+      .in('athlete_id', ids).gte('checkin_date', de).order('checkin_date', { ascending: false }),
+    sb.from('planned_workouts').select('athlete_id, date')
+      .in('athlete_id', ids).gte('date', de).order('date', { ascending: false }),
+  ])
+
+  const dias = diasEntre(de, ate)
+
+  const planejados = new Map<string, number>()
+  const feitos = new Map<string, number>()
+  for (const p of (planRes.data ?? []) as { athlete_id: string; date: string; completed: boolean }[]) {
+    const k = `${p.athlete_id}|${p.date}`
+    planejados.set(k, (planejados.get(k) ?? 0) + 1)
+    if (p.completed) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+  }
+  // Atividade importada também conta como treino feito: nem todo aluno lembra
+  // de marcar no app, mas o relógio dele não esquece.
+  for (const a of (actRes.data ?? []) as { athlete_id: string; started_at: string }[]) {
+    const k = `${a.athlete_id}|${a.started_at.slice(0, 10)}`
+    if ((feitos.get(k) ?? 0) < (planejados.get(k) ?? 0)) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+    else if (!planejados.has(k)) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+  }
+
+  const naoLidos = new Map<string, number>()
+  for (const c of (comRes.data ?? []) as { athlete_id: string | null }[]) {
+    if (c.athlete_id) naoLidos.set(c.athlete_id, (naoLidos.get(c.athlete_id) ?? 0) + 1)
+  }
+
+  const dor = new Map<string, { valor: number; em: string }>()
+  for (const c of (chkRes.data ?? []) as { athlete_id: string; checkin_date: string; soreness: number | null }[]) {
+    if (c.soreness == null || dor.has(c.athlete_id)) continue   // já vem do mais recente
+    dor.set(c.athlete_id, { valor: c.soreness, em: c.checkin_date })
+  }
+
+  const ultimo = new Map<string, string>()
+  for (const p of (futuroRes.data ?? []) as { athlete_id: string; date: string }[]) {
+    if (!ultimo.has(p.athlete_id)) ultimo.set(p.athlete_id, p.date)
+  }
+
+  return alunos.map(a => ({
+    id: a.id,
+    nome: a.full_name,
+    sport: a.primary_sport,
+    tsb: a.tsb,
+    status: a.status,
+    dias: dias.map(d => ({
+      date: d,
+      planejados: planejados.get(`${a.id}|${d}`) ?? 0,
+      feitos: feitos.get(`${a.id}|${d}`) ?? 0,
+    })),
+    recadosNaoLidos: naoLidos.get(a.id) ?? 0,
+    dor: dor.get(a.id)?.valor ?? null,
+    dorEm: dor.get(a.id)?.em ?? null,
+    ultimoPlanejado: ultimo.get(a.id) ?? null,
+  }))
+}
+
+/** As datas de `de` até `ate`, inclusive. */
+function diasEntre(de: string, ate: string): string[] {
+  const saida: string[] = []
+  const d = new Date(de + 'T12:00:00')
+  const fim = new Date(ate + 'T12:00:00')
+  while (d <= fim) {
+    saida.push(d.toLocaleDateString('en-CA'))
+    d.setDate(d.getDate() + 1)
+  }
+  return saida
+}
+
 // ─── Matrícula pública + anamnese (funil "Meus primeiros 5 km") ─────────────
 
 export type EnrollmentRow = {
