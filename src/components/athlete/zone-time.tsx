@@ -34,19 +34,23 @@ function fmtMin(min: number) {
  * A barra de sequência do treino já fica logo acima, então aqui basta o total
  * de cada zona — uma tabela inteira só repetiria a mesma informação.
  */
-export function ZoneTime({ structure }: { structure: WorkoutStructure }) {
+export function ZoneTime({ structure, tecnico = false }: {
+  structure: WorkoutStructure
+  /** Treinador lê "Z4"; o aluno lê "Limiar" — a sigla não diz nada a quem começa. */
+  tecnico?: boolean
+}) {
   const totais = zoneTotals(structure)
   if (totais.length === 0) return null
 
   return (
     <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-      <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Tempo por zona</span>
+      <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">{tecnico ? 'Tempo por zona' : 'Tempo em cada ritmo'}</span>
       {totais.map(t => {
         const z = ZONES[t.zone]
         return (
           <span key={t.zone} className="inline-flex items-center gap-1 text-[11px] tabular-nums">
             <span className="w-2 h-2 rounded-full shrink-0" style={{ background: z.color }} />
-            <b className="text-foreground">{z.label}</b>
+            <b className="text-foreground">{tecnico ? z.label : z.name}</b>
             <span className="text-muted-foreground">{fmtMin(t.min)}</span>
           </span>
         )

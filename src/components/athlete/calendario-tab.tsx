@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import {
   getPlannedWorkouts, createPlannedWorkout, updatePlannedWorkout, deletePlannedWorkout,
   getActivitiesRange, bulkCreatePlannedWorkouts, submitWorkoutCheckin, matchPlannedActivities,
-  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms,
+  getWorkoutLibrary, createLibraryWorkout, getTrainingPrograms, restaurarPlannedWorkouts,
   type PlannedWorkoutRow, type ActivityRow, type WorkoutLibraryRow,
 } from '@/lib/supabase/queries'
 import { structureForTitle } from '@/lib/training-plans'
@@ -13,6 +13,10 @@ import { opcoesDePlano, PLAN_SPORT_LABEL, type PlanoOpcao } from '@/lib/plan-opt
 import { StructuredBuilder, StructureBar } from '@/components/athlete/structured-builder'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
+import { CargaChip } from '@/components/athlete/carga-chip'
+import { DesfazerToast } from '@/components/ui/desfazer-toast'
+import { SkeletonLista } from '@/components/ui/skeleton'
+import { textoDeCarga, cargaDe } from '@/lib/carga'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import { LibraryPanel } from '@/components/athlete/library-panel'
 import type { Thresholds } from '@/lib/workout-export'
@@ -31,7 +35,7 @@ const SPORTS = [
   { key: 'swimming', label: 'Natação', color: '#00b4d8', icon: Waves },
   { key: 'triathlon', label: 'Triathlon', color: '#8b5cf6', icon: ActIcon },
   { key: 'duathlon', label: 'Duathlon', color: '#ffa800', icon: ActIcon },
-  { key: 'strength', label: 'Força', color: '#e8001c', icon: Dumbbell },
+  { key: 'strength', label: 'Força', color: 'var(--marca)', icon: Dumbbell },
   { key: 'other', label: 'Outro', color: '#64748b', icon: ActIcon },
 ]
 const sportInfo = (s: string) => SPORTS.find(x => x.key === s) ?? SPORTS[6]
@@ -64,7 +68,9 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
   const [selectedDay, setSelectedDay] = useState<string>(() => ymd(new Date()))
   const [showPlan, setShowPlan] = useState(false)
   const [showRemove, setShowRemove] = useState(false)
-  const [removidos, setRemovidos] = useState<number | null>(null)
+  // Guarda as linhas apagadas junto com o número: é com elas que o "Desfazer"
+  // recoloca os treinos.
+  const [removidos, setRemovidos] = useState<{ n: number; linhas: PlannedWorkoutRow[] } | null>(null)
   const [daySheet, setDaySheet] = useState<string | null>(null)  // dia aberto para ações rápidas (treinador)
   const [dragLib, setDragLib] = useState<WorkoutLibraryRow | null>(null)
   const [dragOverDay, setDragOverDay] = useState<string | null>(null)
@@ -128,7 +134,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
     return m
   }, [planned])
   // atividades já vinculadas a um treino planejado (mostradas junto do planejado)
-  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.avg_hr_bpm ? `${a.avg_hr_bpm} bpm` : null, a.tss != null ? `${a.tss.toFixed(0)} TSS` : null].filter(Boolean).join(' · ')
+  const realizedLine = (a: ActivityRow) => [fmtDur(Math.round((a.duration_seconds || 0) / 60)), a.distance_meters ? `${(a.distance_meters / 1000).toFixed(1)}km` : null, a.avg_hr_bpm ? `${a.avg_hr_bpm} bpm` : null, textoDeCarga(a.tss)?.toLowerCase() ?? null].filter(Boolean).join(' · ')
   const doneByDay = useMemo(() => {
     const m: Record<string, ActivityRow[]> = {}
     for (const a of done) { const k = ymd(new Date(a.started_at)); (m[k] ??= []).push(a) }
@@ -271,8 +277,8 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                 <button key={key} onClick={() => setSelectedDay(key)}
                   className="flex flex-col items-center lg:items-stretch justify-start rounded-xl transition-colors p-1 lg:p-1.5 min-h-[44px] aspect-square lg:aspect-auto"
                   style={{
-                    background: isSel ? '#e8001c18' : 'transparent',
-                    border: isSel ? '1.5px solid #e8001c' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
+                    background: isSel ? 'var(--marca-18)' : 'transparent',
+                    border: isSel ? '1.5px solid var(--marca)' : isToday ? '1.5px solid var(--primary)' : '1.5px solid transparent',
                     opacity: inMonth ? 1 : 0.4,
                   }}>
                   <span className={`text-xs lg:text-sm font-bold lg:self-start ${isToday ? 'text-primary' : 'text-foreground'}`}>{d.getDate()}</span>
@@ -302,7 +308,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
             {dayLabel(selectedDay)} <span className="text-muted-foreground font-medium">· {new Date(selectedDay + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
           </p>
           {loading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+            <SkeletonLista linhas={3} altura={72} />
           ) : (sel.pairs.length === 0 && sel.extras.length === 0) ? (
             <p className="text-xs text-muted-foreground rounded-xl p-4 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>Nenhum treino neste dia.</p>
           ) : (
@@ -321,7 +327,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
                         : <span className="text-[10px] font-bold px-2 py-0.5 rounded" style={{ background: info.color + '22', color: info.color }}>Ver</span>}
                     </div>
                     <p className="text-[11px] text-muted-foreground mt-1">
-                      <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{p.planned_tss ? ` · ${p.planned_tss} TSS` : ''}
+                      <span className="font-semibold">Planejado:</span> {info.label}{p.planned_duration_min ? ` · ${fmtDur(p.planned_duration_min)}` : ''}{textoDeCarga(p.planned_tss) ? ` · ${textoDeCarga(p.planned_tss)!.toLowerCase()}` : ''}
                     </p>
                     {act && (
                       <p className="text-[11px] mt-0.5 font-semibold" style={{ color: '#00d084' }}>Realizado: {realizedLine(act)} <span className="opacity-70 font-normal">· toque p/ detalhes</span></p>
@@ -404,12 +410,6 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
         </div>
       </div>
 
-
-      {removidos != null && (
-        <p className="text-xs font-semibold rounded-lg px-3 py-2.5 mb-3" style={{ background: '#00d08414', color: '#00d084' }}>
-          {removidos === 0 ? 'Nenhum treino foi removido.' : `${removidos} treino${removidos > 1 ? 's' : ''} removido${removidos > 1 ? 's' : ''} do calendário.`}
-        </p>
-      )}
 
       <div className="flex gap-3 items-start">
       <div className="flex-1 min-w-0">
@@ -578,11 +578,22 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
           onReopen={() => toggleDone(detail)} />
       )}
 
-      {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} />}
+      {detailActivity && <ActivityDetailModal activity={detailActivity} onClose={() => setDetailActivity(null)} tecnico />}
+
+      {removidos && (
+        <DesfazerToast
+          texto={removidos.n === 0
+            ? 'Nenhum treino foi removido.'
+            : `${removidos.n} treino${removidos.n > 1 ? 's' : ''} removido${removidos.n > 1 ? 's' : ''} do calendário.`}
+          onDesfazer={removidos.linhas.length
+            ? async () => { await restaurarPlannedWorkouts(removidos.linhas); load() }
+            : undefined}
+          onFechar={() => setRemovidos(null)} />
+      )}
 
       {showRemove && (
         <RemoveWorkoutsModal athleteId={athleteId} onClose={() => setShowRemove(false)}
-          onRemoved={n => { setShowRemove(false); setRemovidos(n); load(); setTimeout(() => setRemovidos(null), 6000) }} />
+          onRemoved={(n, linhas) => { setShowRemove(false); setRemovidos({ n, linhas }); load() }} />
       )}
 
       {showPlan && (
@@ -656,7 +667,7 @@ function DaySheet({ date, planned, library, onClose, onNew, onEdit, onDelete, on
           )}
 
           {/* Ações */}
-          <button onClick={onNew} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white" style={{ background: '#e8001c' }}>
+          <button onClick={onNew} className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-black text-white" style={{ background: 'var(--marca)' }}>
             <Plus className="w-4 h-4" /> Novo treino
           </button>
 
@@ -664,7 +675,7 @@ function DaySheet({ date, planned, library, onClose, onNew, onEdit, onDelete, on
           {library.length > 0 && (
             <div>
               <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Da biblioteca</p>
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar treino…" className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2 focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar treino…" className="w-full rounded-lg px-3 py-2 text-sm bg-background border border-border text-foreground mb-2 focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]" />
               <div className="space-y-1.5 max-h-56 overflow-y-auto">
                 {lib.map(w => {
                   const info = sportInfo(w.sport)
@@ -707,7 +718,11 @@ function ZoneBar({ label, minutes }: { label: string; minutes: number[] }) {
 }
 
 // Detalhe do treino REALIZADO (importado): KM, FC, potência, pace, zonas...
-function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; onClose: () => void }) {
+function ActivityDetailModal({ activity: a, onClose, tecnico = false }: {
+  activity: ActivityRow; onClose: () => void
+  /** Treinador vê TSS e IF; o aluno vê a carga em palavras. */
+  tecnico?: boolean
+}) {
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
   const info = sportInfo(a.sport)
@@ -722,8 +737,13 @@ function ActivityDetailModal({ activity: a, onClose }: { activity: ActivityRow; 
     dist > 0 ? { label: 'Distância', value: `${(dist / 1000).toFixed(2)} km` } : null,
     { label: 'Duração', value: fmtDur(Math.round((a.duration_seconds || 0) / 60)) ?? '—' },
     pace ? { label: 'Pace', value: fmtPace(pace) } : null,
-    a.tss != null ? { label: 'TSS', value: a.tss.toFixed(0), hi: true } : null,
-    a.intensity_factor != null ? { label: 'IF', value: a.intensity_factor.toFixed(3) } : null,
+    a.tss != null
+      ? (tecnico
+        ? { label: 'TSS', value: a.tss.toFixed(0), hi: true }
+        : { label: 'Carga', value: cargaDe(a.tss)?.rotulo ?? '—', hi: true })
+      : null,
+    // IF é razão de intensidade sobre o limiar: número de treinador, não de aluno.
+    tecnico && a.intensity_factor != null ? { label: 'IF', value: a.intensity_factor.toFixed(3) } : null,
     a.avg_hr_bpm ? { label: 'FC média', value: `${a.avg_hr_bpm} bpm` } : null,
     a.max_hr_bpm ? { label: 'FC máx', value: `${a.max_hr_bpm} bpm` } : null,
     a.avg_power_watts ? { label: 'Pot. média', value: `${a.avg_power_watts} W` } : null,
@@ -834,7 +854,7 @@ function WorkoutDetailModal({ workout, thresholds, onClose, onComplete, onReopen
           </div>
           <div className="flex gap-2 mt-3">
             {workout.planned_duration_min ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>{fmtDur(workout.planned_duration_min)}</span> : null}
-            {workout.planned_tss ? <span className="text-[11px] font-bold px-2 py-1 rounded-lg" style={{ background: '#0088ff18', color: '#0088ff' }}>{workout.planned_tss} TSS</span> : null}
+            <CargaChip tss={workout.planned_tss} className="py-1" />
           </div>
         </div>
         <div className="p-5 space-y-4">

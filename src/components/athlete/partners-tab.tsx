@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { getPartners, type PartnerRow } from '@/lib/supabase/queries'
 import { Loader2, ExternalLink } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 
 /** Faixa de parceiros (propaganda) para o Hoje e abaixo do Calendário.
  *  Visual limpo: só os logos em chips flutuantes, sem caixa e sem rótulo.
@@ -61,7 +61,7 @@ export function PartnersTab() {
               )}
               <div className="p-4 flex items-center gap-3">
                 {!p.logo_url && (
-                  <span className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-base font-black" style={{ background: RED + '18', color: RED }}>{p.name.slice(0, 2).toUpperCase()}</span>
+                  <span className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-base font-black" style={{ background: 'var(--marca-18)', color: RED }}>{p.name.slice(0, 2).toUpperCase()}</span>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-black text-foreground flex items-center gap-1.5">{p.name} {p.url && <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />}</p>

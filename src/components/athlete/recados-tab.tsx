@@ -7,7 +7,7 @@ import {
 } from '@/lib/supabase/queries'
 import { MessageCircle, ChevronLeft, Loader2, Send } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 
 function quando(iso: string): string {
   const d = new Date(iso)

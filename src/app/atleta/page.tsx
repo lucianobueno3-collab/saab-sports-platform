@@ -25,6 +25,9 @@ import { structureSummary } from '@/lib/workout-structure'
 import { ForcePasswordChange, mustChangePassword } from '@/components/auth/force-password-change'
 import { VersionTag } from '@/components/ui/version-tag'
 import { RecadosTab } from '@/components/athlete/recados-tab'
+import { MarcaDoAluno } from '@/components/athlete/marca-do-aluno'
+import { getBrand } from '@/lib/portal-brands'
+import { MarcaLogo } from '@/components/athlete/marca-logo'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 import { Activity, Loader2, CheckCircle2, Dumbbell, LogOut, CalendarDays, ShieldCheck, Heart, Trophy, Target, UserRound, Save, MoreHorizontal, X, Camera, Ruler, Handshake, PartyPopper, Clock, RefreshCw, Users, MessageCircle } from 'lucide-react'
 
@@ -172,12 +175,19 @@ export default function AtletaPage() {
   function go(k: AtletaTab) { setTab(k); setMoreOpen(false) }
 
   const allTabs = [...primaryTabs, ...moreTabs]
+  const marca = getBrand(data.portalBrand)
   return (
     <div className="saab-bg flex min-h-dvh">
+      {/* Pinta o portal com a marca do aluno — SAAB ou Caqui Pro. */}
+      <MarcaDoAluno brand={data.portalBrand} />
       {/* Barra lateral (desktop) — mesmo padrão do painel do treinador */}
       <aside className="hidden lg:flex flex-col w-60 shrink-0 border-r border-border bg-sidebar">
+        {/* A marca do portal fica no topo, como no painel do treinador. */}
+        <div className="px-5 py-4 border-b border-border">
+          <MarcaLogo brand={marca} altura={38} />
+        </div>
         <button onClick={() => go('dados')} className="flex items-center gap-3 px-5 py-5 border-b border-border text-left hover:bg-secondary/40 transition-colors">
-          <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }}>
+          <span className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: 'var(--marca-22)', border: '1.5px solid var(--marca-55)', color: 'var(--marca)' }}>
             {profile?.avatar_url
               ? <img src={profile.avatar_url} alt={a.full_name} className="w-full h-full object-cover" />
               : (profile?.full_name ?? a.full_name).split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
@@ -191,10 +201,10 @@ export default function AtletaPage() {
           {allTabs.map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => go(key)}
               className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors"
-              style={tab === key ? { background: '#e8001c15', color: '#e8001c', border: '1px solid #e8001c40' } : { color: 'var(--muted-foreground)' }}>
+              style={tab === key ? { background: 'var(--marca-15)', color: 'var(--marca)', border: '1px solid var(--marca-40)' } : { color: 'var(--muted-foreground)' }}>
               <Icon className="w-4 h-4 flex-shrink-0" /><span className="flex-1 text-left">{label}</span>
               {key === 'recados' && naoLidos > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: '#e8001c' }}>{naoLidos}</span>
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: 'var(--marca)' }}>{naoLidos}</span>
               )}
             </button>
           ))}
@@ -222,9 +232,12 @@ export default function AtletaPage() {
       {/* Calendário usa a largura toda; as demais abas ficam num leitura confortável. */}
       <div className={`w-full space-y-5 ${tab === 'calendario' ? '' : 'max-w-6xl mx-auto'}`}>
       {/* Cabeçalho (só no celular — no desktop a identidade está na sidebar) */}
+      <div className="flex justify-center lg:hidden">
+        <MarcaLogo brand={marca} altura={40} />
+      </div>
       <div className="flex items-center justify-between gap-2 lg:hidden">
         <div className="flex items-center gap-3 min-w-0">
-          <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Editar meus dados">
+          <button onClick={() => go('dados')} className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center text-sm font-black flex-shrink-0" style={{ background: 'var(--marca-22)', border: '1.5px solid var(--marca-55)', color: 'var(--marca)' }} title="Editar meus dados">
             {profile?.avatar_url
               ? <img src={profile.avatar_url} alt={a.full_name} className="w-full h-full object-cover" />
               : (profile?.full_name ?? a.full_name).split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
@@ -232,7 +245,7 @@ export default function AtletaPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 min-w-0">
               <p className="text-base font-black text-foreground leading-tight truncate">{profile?.full_name ?? a.full_name}</p>
-              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: '#e8001c22', color: '#e8001c' }}>Atleta</span>
+              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded" style={{ background: 'var(--marca-22)', color: 'var(--marca)' }}>Atleta</span>
             </div>
             <p className="text-xs text-muted-foreground">{sportLabel(a.primary_sport)} · Meu treino</p>
           </div>
@@ -259,7 +272,7 @@ export default function AtletaPage() {
       <div className="space-y-5 max-w-4xl mx-auto">
       {/* Boas-vindas enquanto o plano ainda não foi montado */}
       {data.plannedWorkouts.length === 0 && (
-        <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, #e8001c, #7a0010)' }}>
+        <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, var(--marca), #7a0010)' }}>
           <p className="text-lg font-black text-white">Bem-vindo(a), {(profile?.full_name ?? a.full_name).split(' ')[0]}! 🎉</p>
           <p className="text-sm text-white/90 mt-1">Recebemos seu cadastro. Seu treinador está montando o seu plano — em breve seus treinos aparecem aqui no Calendário. Enquanto isso, complete seus dados em <strong>Meus dados</strong>.</p>
         </div>
@@ -388,11 +401,11 @@ export default function AtletaPage() {
             return (
               <button key={key} onClick={() => go(key)}
                 className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors relative"
-                style={{ color: active ? '#e8001c' : 'var(--muted-foreground)' }}>
+                style={{ color: active ? 'var(--marca)' : 'var(--muted-foreground)' }}>
                 <span className="relative">
                   <Icon className="w-5 h-5" />
                   {key === 'recados' && naoLidos > 0 && (
-                    <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: '#e8001c' }}>{naoLidos}</span>
+                    <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] px-1 rounded-full text-[9px] font-black text-white flex items-center justify-center tabular-nums" style={{ background: 'var(--marca)' }}>{naoLidos}</span>
                   )}
                 </span>
                 <span className="text-[10px] font-semibold">{label}</span>
@@ -401,7 +414,7 @@ export default function AtletaPage() {
           })}
           <button onClick={() => setMoreOpen(true)}
             className="flex-1 flex flex-col items-center gap-0.5 py-2 transition-colors"
-            style={{ color: moreActive ? '#e8001c' : 'var(--muted-foreground)' }}>
+            style={{ color: moreActive ? 'var(--marca)' : 'var(--muted-foreground)' }}>
             <MoreHorizontal className="w-5 h-5" />
             <span className="text-[10px] font-semibold">Mais</span>
           </button>
@@ -416,13 +429,13 @@ export default function AtletaPage() {
 function EnrollmentGate({ status, name, onLogout, onRefresh }: {
   status: 'pending' | 'rejected'; name: string | null; onLogout: () => void; onRefresh: () => void
 }) {
-  const RED = '#e8001c'
+  const RED = 'var(--marca)'
   const firstName = (name ?? '').trim().split(/\s+/)[0] || null
   const rejected = status === 'rejected'
   return (
     <div className="saab-bg min-h-dvh flex flex-col items-center justify-center px-6 text-center">
       <div className="w-full max-w-md rounded-3xl p-8 sm:p-10" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
-        <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center" style={{ background: RED + '18' }}>
+        <div className="w-16 h-16 mx-auto rounded-2xl flex items-center justify-center" style={{ background: 'var(--marca-18)' }}>
           {rejected ? <Clock className="w-8 h-8" style={{ color: RED }} /> : <PartyPopper className="w-8 h-8" style={{ color: RED }} />}
         </div>
 
@@ -563,7 +576,7 @@ function MyDataForm({ athleteId, profile, onSaved }: {
       <h2 className="text-sm font-bold text-foreground mb-4">Foto e nome</h2>
       <div className="flex items-center gap-4">
         <label className="relative w-20 h-20 rounded-full overflow-hidden flex items-center justify-center text-lg font-black cursor-pointer flex-shrink-0"
-          style={{ background: '#e8001c22', border: '1.5px solid #e8001c55', color: '#e8001c' }} title="Trocar foto">
+          style={{ background: 'var(--marca-22)', border: '1.5px solid var(--marca-55)', color: 'var(--marca)' }} title="Trocar foto">
           {avatar
             ? <img src={avatar} alt="" className="w-full h-full object-cover" />
             : (name || '?').split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
@@ -614,7 +627,7 @@ function MyDataForm({ athleteId, profile, onSaved }: {
 const PLAN_SPORT: Record<string, { label: string; color: string }> = {
   running: { label: 'Corrida', color: '#ff6b00' }, cycling: { label: 'Ciclismo', color: '#0088ff' },
   swimming: { label: 'Natação', color: '#00b4d8' }, triathlon: { label: 'Triathlon', color: '#8b5cf6' },
-  duathlon: { label: 'Duathlon', color: '#ffa800' }, strength: { label: 'Força', color: '#e8001c' },
+  duathlon: { label: 'Duathlon', color: '#ffa800' }, strength: { label: 'Força', color: 'var(--marca)' },
   other: { label: 'Outro', color: '#64748b' },
 }
 function planDayLabel(d: string) {

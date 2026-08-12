@@ -2,10 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { countPlannedWorkouts, bulkDeletePlannedWorkouts, type BulkDeleteScope } from '@/lib/supabase/queries'
+import {
+  countPlannedWorkouts, bulkDeletePlannedWorkouts,
+  type BulkDeleteScope, type PlannedWorkoutRow,
+} from '@/lib/supabase/queries'
 import { Trash2, X, Loader2, AlertTriangle } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const ymd = (d: Date) => d.toLocaleDateString('en-CA')
 
 type Alcance = 'futuros' | 'periodo' | 'tudo'
@@ -13,15 +16,18 @@ type Alcance = 'futuros' | 'periodo' | 'tudo'
 /**
  * Remoção em lote dos treinos de um aluno.
  *
- * Isto não tem desfazer, então a tela mostra QUANTOS treinos serão apagados
- * antes de habilitar o botão, e o número se atualiza a cada mudança de opção.
+ * A tela mostra QUANTOS treinos serão apagados antes de habilitar o botão, e o
+ * número se atualiza a cada mudança de opção. Depois de apagar, um aviso com
+ * "Desfazer" fica alguns segundos na tela e recoloca tudo se for o caso.
  *
  * O padrão preserva o que o aluno já concluiu: o histórico é o registro do que
  * ele fez, e apagá-lo distorceria a carga acumulada e as conquistas. Dá para
  * incluir os concluídos, mas é uma escolha explícita e avisada.
  */
 export function RemoveWorkoutsModal({ athleteId, athleteName, onClose, onRemoved }: {
-  athleteId: string; athleteName?: string | null; onClose: () => void; onRemoved: (n: number) => void
+  athleteId: string; athleteName?: string | null; onClose: () => void
+  /** Recebe também as linhas apagadas, que é o que o "Desfazer" recoloca. */
+  onRemoved: (n: number, apagados: PlannedWorkoutRow[]) => void
 }) {
   const hoje = ymd(new Date())
   const [alcance, setAlcance] = useState<Alcance>('futuros')
@@ -67,7 +73,7 @@ export function RemoveWorkoutsModal({ athleteId, athleteName, onClose, onRemoved
     const res = await bulkDeletePlannedWorkouts(athleteId, escopo)
     setApagando(false)
     if (!res.ok) { setErro(res.error ?? 'Falha ao remover os treinos.'); return }
-    onRemoved(res.count)
+    onRemoved(res.count, res.apagados ?? [])
   }
 
   if (!mounted) return null
@@ -127,7 +133,7 @@ export function RemoveWorkoutsModal({ athleteId, athleteName, onClose, onRemoved
           </label>
 
           {/* O número, antes de confirmar */}
-          <div className="rounded-xl px-4 py-3.5 text-center" style={{ background: nada || periodoInvalido ? 'var(--panel)' : RED + '14', border: `1px solid ${nada || periodoInvalido ? 'var(--panel-border)' : RED + '44'}` }}>
+          <div className="rounded-xl px-4 py-3.5 text-center" style={{ background: nada || periodoInvalido ? 'var(--panel)' : 'var(--marca-14)', border: `1px solid ${nada || periodoInvalido ? 'var(--panel-border)' : 'var(--marca-44)'}` }}>
             {periodoInvalido ? (
               <span className="text-sm font-bold text-foreground">A data inicial é depois da final.</span>
             ) : contando ? (

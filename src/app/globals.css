@@ -49,7 +49,26 @@
 }
 
 /* Saab Sports — tema claro (padrão sem a classe .dark) */
+/*
+ * Cor de destaque do app. O portal do aluno sobrescreve estas variáveis com a
+ * marca dele (SAAB ou Caqui Pro); em todo o resto — painel do treinador,
+ * componentes compartilhados — vale o vermelho SAAB, exatamente como era.
+ */
 :root {
+  --marca: #e8001c;
+  --marca-12: #e8001c12;
+  --marca-14: #e8001c14;
+  --marca-15: #e8001c15;
+  --marca-18: #e8001c18;
+  --marca-1f: #e8001c1f;
+  --marca-22: #e8001c22;
+  --marca-33: #e8001c33;
+  --marca-3d: #e8001c3d;
+  --marca-40: #e8001c40;
+  --marca-44: #e8001c44;
+  --marca-55: #e8001c55;
+  --marca-fonte-titulo: var(--font-sans);
+
   --background: #f4f4f7;
   --foreground: #16161f;
   --card: #ffffff;

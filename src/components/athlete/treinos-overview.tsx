@@ -10,6 +10,8 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
+import { CargaChip } from '@/components/athlete/carga-chip'
+import { SkeletonTreinosDoAluno } from '@/components/ui/skeleton'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { structureForTitle } from '@/lib/training-plans'
@@ -29,12 +31,12 @@ function passosDe(w: PlannedWorkoutRow) {
   return w.structure?.length ? w.structure : structureForTitle(w.title, w.planned_duration_min)
 }
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const SPORTS: Record<string, { label: string; color: string; icon: typeof Footprints }> = {
   running: { label: 'Corrida', color: '#ff6b00', icon: Footprints },
   cycling: { label: 'Ciclismo', color: '#0088ff', icon: Bike },
   swimming: { label: 'Natação', color: '#00b4d8', icon: Waves },
-  strength: { label: 'Força', color: '#e8001c', icon: Dumbbell },
+  strength: { label: 'Força', color: 'var(--marca)', icon: Dumbbell },
   triathlon: { label: 'Triathlon', color: '#8b5cf6', icon: ActIcon },
 }
 const sportOf = (s: string) => SPORTS[s] ?? { label: s, color: '#64748b', icon: ActIcon }
@@ -87,7 +89,7 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
     await load(); setBusy(null); onChanged?.()
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+  if (loading) return <SkeletonTreinosDoAluno />
   if (!ov || ov.all.length === 0) return null
 
   const todayISO = new Date().toLocaleDateString('en-CA')
@@ -112,7 +114,7 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
 
       {/* Resposta nova do treinador */}
       {unread > 0 && (
-        <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: RED + '14', border: `1px solid ${RED}44` }}>
+        <div className="rounded-2xl p-3.5 flex items-center gap-3" style={{ background: 'var(--marca-14)', border: `1px solid var(--marca-44)` }}>
           <MessageCircle className="w-5 h-5 shrink-0" style={{ color: RED }} />
           <p className="text-sm font-bold text-foreground">
             Seu treinador respondeu {unread > 1 ? `${unread} recados` : 'seu recado'} — abra o treino para ver.
@@ -140,8 +142,8 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
                 <span className="text-[10px] font-bold" style={{ color: isToday ? RED : 'var(--muted-foreground)' }}>{WD[i]}</span>
                 <div className="w-full rounded-xl py-2 flex flex-col items-center gap-1 transition-colors"
                   style={{
-                    background: isToday ? RED + '14' : 'var(--panel)',
-                    border: `1px solid ${isToday ? RED + '55' : 'var(--panel-border)'}`,
+                    background: isToday ? 'var(--marca-14)' : 'var(--panel)',
+                    border: `1px solid ${isToday ? 'var(--marca-55)' : 'var(--panel-border)'}`,
                   }}>
                   {rest ? <Moon className="w-3.5 h-3.5 text-muted-foreground/40" />
                     : done ? <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#00d084' }} />
@@ -267,7 +269,7 @@ function HeroCard({ w, th, busy, onToggle, onNotDone, onChat, extra }: {
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: 'var(--panel)', color: 'var(--muted-foreground)' }}>{fmtDur(w.planned_duration_min)}</span>
               )}
               {w.planned_tss != null && (
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg" style={{ background: '#0088ff18', color: '#0088ff' }}>{w.planned_tss} TSS</span>
+                <CargaChip tss={w.planned_tss} />
               )}
               {extra > 0 && <span className="text-[11px] text-muted-foreground">+{extra} treino{extra > 1 ? 's' : ''} hoje</span>}
             </div>
@@ -370,7 +372,7 @@ function NotDoneModal({ w, onClose, onDone }: { w: PlannedWorkoutRow; onClose: (
     setSaving(false); onDone()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
@@ -390,12 +392,12 @@ function NotDoneModal({ w, onClose, onDone }: { w: PlannedWorkoutRow; onClose: (
               </p>
               <div className="space-y-2">
                 <button onClick={() => setMode('move')} className="w-full text-left rounded-xl px-3.5 py-3 transition-colors"
-                  style={mode === 'move' ? { background: RED + '12', border: `1.5px solid ${RED}` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                  style={mode === 'move' ? { background: 'var(--marca-12)', border: `1.5px solid ${RED}` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                   <p className="text-sm font-black text-foreground flex items-center gap-2"><CalendarClock className="w-4 h-4" style={{ color: RED }} /> Remarcar para outro dia</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">O treino muda de data e continua no seu plano.</p>
                 </button>
                 <button onClick={() => setMode('skip')} className="w-full text-left rounded-xl px-3.5 py-3 transition-colors"
-                  style={mode === 'skip' ? { background: RED + '12', border: `1.5px solid ${RED}` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                  style={mode === 'skip' ? { background: 'var(--marca-12)', border: `1.5px solid ${RED}` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                   <p className="text-sm font-black text-foreground flex items-center gap-2"><SkipForward className="w-4 h-4" style={{ color: RED }} /> Pular sem culpa</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">Uma semana não define o processo. Segue o plano a partir do próximo.</p>
                 </button>
@@ -473,7 +475,7 @@ function ChatModal({ w, athleteId, onClose }: { w: PlannedWorkoutRow; athleteId:
             const staff = c.author_role === 'coach' || c.author_role === 'admin' || c.author_role === 'doctor'
             return (
               <div key={c.id} className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${staff ? 'ml-auto' : ''}`}
-                style={staff ? { background: RED + '18', border: `1px solid ${RED}33` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
+                style={staff ? { background: 'var(--marca-18)', border: `1px solid var(--marca-33)` } : { background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                 <p className="text-[10px] font-black uppercase tracking-wider" style={{ color: staff ? RED : 'var(--muted-foreground)' }}>
                   {staff ? (c.author_name ?? 'Treinador') : (c.author_name ?? 'Você')}
                 </p>
@@ -488,7 +490,7 @@ function ChatModal({ w, athleteId, onClose }: { w: PlannedWorkoutRow; athleteId:
           <input value={text} onChange={e => setText(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() } }}
             placeholder="Escreva seu recado…"
-            className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40" />
+            className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]" />
           <button onClick={send} disabled={sending || !text.trim()}
             className="p-2.5 rounded-lg text-white disabled:opacity-50 shrink-0" style={{ background: RED }} aria-label="Enviar">
             {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}

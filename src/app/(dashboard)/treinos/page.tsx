@@ -11,6 +11,7 @@ import { agruparBiblioteca, gruposExistentes } from '@/lib/library-groups'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { estimarForca } from '@/lib/fase-1-forca'
+import { SkeletonLista, SkeletonCartoes } from '@/components/ui/skeleton'
 import { estimateStructure, structureSummary, type WorkoutStructure } from '@/lib/workout-structure'
 import { buildWorkoutTCX, downloadFile, slugify } from '@/lib/workout-export'
 import {
@@ -159,7 +160,7 @@ export default function TreinosPage() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-20 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
+          modo === 'lista' ? <SkeletonLista linhas={6} /> : <SkeletonCartoes cartoes={6} />
         ) : totalVisivel === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <Library className="w-10 h-10 text-muted-foreground/40 mb-3" />
@@ -513,7 +514,7 @@ function LibraryModal({ edit, gruposSugeridos, onClose, onSaved }: {
               {structured && structure.length > 0 && (
                 <div className="rounded-lg p-3" style={{ background: 'var(--panel)', border: '1px solid var(--panel-border)' }}>
                   <p className="text-[11px] font-black text-muted-foreground uppercase tracking-wide mb-2">Passos (para o relógio)</p>
-                  <WorkoutSteps title={title || 'Treino'} sport={sport} structure={structure} compact />
+                  <WorkoutSteps title={title || 'Treino'} sport={sport} structure={structure} compact tecnico />
                 </div>
               )}
             </>

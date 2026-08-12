@@ -8,7 +8,7 @@ import {
 } from '@/lib/supabase/queries'
 import { ShieldCheck, Plus, X, Loader2, Check, Trash2, AlertTriangle, Stethoscope } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const STATUS_OPTS: { v: ClearanceStatus; t: string; d: string; c: string }[] = [
   { v: 'apto', t: 'Apto', d: 'Liberado para treinar e competir sem restrições.', c: '#00d084' },
   { v: 'apto_restricao', t: 'Apto com restrição', d: 'Pode treinar, mas com limitações que o treinador precisa respeitar.', c: '#f59e0b' },
@@ -148,7 +148,7 @@ function ClearanceModal({ athleteId, onClose, onSaved }: { athleteId: string; on
     onSaved()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-2 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">

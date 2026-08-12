@@ -141,7 +141,7 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
           {program.structure.map((d, i) => (
             <button key={i} onClick={() => setDayIdx(i)}
               className="px-3 py-1.5 text-[11px] font-bold rounded-lg whitespace-nowrap flex-shrink-0 transition-colors"
-              style={i === dayIdx ? { background: '#e8001c', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>{d.label}</button>
+              style={i === dayIdx ? { background: 'var(--marca)', color: '#fff' } : { background: 'var(--secondary)', color: 'var(--muted-foreground)' }}>{d.label}</button>
           ))}
         </div>
       )}
@@ -150,10 +150,10 @@ export function StrengthPlayer({ athleteId, program, logs, onLogged }: {
       <div className="flex gap-1 px-5 pb-3">
         {day.exercises.map((_, i) => (
           <button key={i} onClick={() => setExIdx(i)} className="flex-1 h-1.5 rounded-full transition-colors" aria-label={`Exercício ${i + 1}`}
-            style={{ background: exDone[i] ? '#00d084' : (!isReview && i === exIdx) ? '#e8001c' : 'var(--border)' }} />
+            style={{ background: exDone[i] ? '#00d084' : (!isReview && i === exIdx) ? 'var(--marca)' : 'var(--border)' }} />
         ))}
         <button onClick={() => setExIdx(total)} className="w-5 h-1.5 rounded-full flex items-center justify-center"
-          style={{ background: isReview ? '#e8001c' : 'var(--border)' }} aria-label="Revisão" />
+          style={{ background: isReview ? 'var(--marca)' : 'var(--border)' }} aria-label="Revisão" />
       </div>
 
       {isReview ? (

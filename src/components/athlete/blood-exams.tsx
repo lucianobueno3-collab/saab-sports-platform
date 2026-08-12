@@ -11,7 +11,7 @@ import { hasExtractableText, extractDateFromText } from '@/lib/parsers/pdf-parse
 import { parseBloodPdfText } from '@/lib/blood-parser'
 import { Plus, Trash2, Pencil, X, Loader2, ChevronDown, FlaskConical, Check, Upload } from 'lucide-react'
 
-const RED = '#e8001c'
+const RED = 'var(--marca)'
 const FLAG_COLOR = { low: '#0088ff', high: '#ef4444', ok: 'var(--foreground)' } as const
 
 function fmt(value: number | null, decimals?: number) {
@@ -240,7 +240,7 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
     setSaving(false); onSaved()
   }
 
-  const inCls = 'w-full rounded-lg px-2.5 py-1.5 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40'
+  const inCls = 'w-full rounded-lg px-2.5 py-1.5 text-sm bg-background border border-border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]'
   if (!mounted) return null
   return createPortal(
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm">
@@ -294,7 +294,7 @@ function ExamModal({ athleteId, sex, edit, onClose, onSaved }: {
                           <p className="text-[10px] text-muted-foreground">{m.unit || '—'} · ref {refLabel(m, sex)}</p>
                         </div>
                         <input inputMode="decimal" value={vals[m.key] ?? ''} onChange={e => setV(m.key, e.target.value)}
-                          placeholder="—" className="w-[84px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border text-foreground focus:outline-none focus:ring-2 focus:ring-[#e8001c]/40"
+                          placeholder="—" className="w-[84px] shrink-0 rounded-lg px-2 py-1.5 text-sm text-right bg-background border text-foreground focus:outline-none focus:ring-2 focus:ring-[var(--marca-40)]"
                           style={imported.has(m.key) ? { borderColor: RED, boxShadow: `0 0 0 1px ${RED}` } : { borderColor: 'var(--border)' }} />
                       </label>
                     ))}

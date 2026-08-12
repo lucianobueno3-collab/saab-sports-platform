@@ -287,15 +287,32 @@ export async function countPlannedWorkouts(athleteId: string, scope: BulkDeleteS
  */
 export async function bulkDeletePlannedWorkouts(
   athleteId: string, scope: BulkDeleteScope,
-): Promise<{ ok: boolean; count: number; error?: string }> {
+): Promise<{ ok: boolean; count: number; error?: string; apagados?: PlannedWorkoutRow[] }> {
   const sb = createClient()
   let q = sb.from('planned_workouts').delete().eq('athlete_id', athleteId)
   if (scope.from) q = q.gte('date', scope.from)
   if (scope.to) q = q.lte('date', scope.to)
   if (!scope.includeCompleted) q = q.eq('completed', false)
-  const { data, error } = await q.select('id')
+  // Devolve as linhas inteiras, não só os ids: é com elas que o "Desfazer"
+  // recria os treinos. Apagar o plano de um aluno não tinha volta.
+  const { data, error } = await q.select('*')
   if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
-  return { ok: true, count: data?.length ?? 0 }
+  const apagados = (data ?? []) as PlannedWorkoutRow[]
+  return { ok: true, count: apagados.length, apagados }
+}
+
+/**
+ * Recria treinos que acabaram de ser apagados — o "Desfazer".
+ *
+ * Recoloca com o mesmo id, para que qualquer coisa que apontasse para o treino
+ * (um recado, por exemplo) continue apontando para ele.
+ */
+export async function restaurarPlannedWorkouts(linhas: PlannedWorkoutRow[]): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (linhas.length === 0) return { ok: true, count: 0 }
+  const sb = createClient()
+  const { data, error } = await sb.from('planned_workouts').insert(linhas).select('id')
+  if (error) { console.error('[queries]', error.message); return { ok: false, count: 0, error: error.message } }
+  return { ok: true, count: data?.length ?? linhas.length }
 }
 
 /** Insere vários treinos programados de uma vez (ao aplicar um plano). */
@@ -1099,14 +1116,17 @@ async function fetchAthleteSelf(athleteId: string) {
   const since = new Date(); since.setDate(since.getDate() - 30)
   const todayISO = new Date().toLocaleDateString('en-CA')
   const in14 = new Date(); in14.setDate(in14.getDate() + 14)
-  const [summary, metrics, activities, checkins, programs, logs, plans] = await Promise.all([
+  const [summary, metrics, activities, checkins, programs, logs, plans, marca] = await Promise.all([
     sb.from('v_athlete_summary').select('id, full_name, primary_sport, ctl, atl, tsb').eq('id', athleteId).maybeSingle(),
     sb.from('daily_metrics').select('date, hrv_ms, body_battery, sleep_hours, resting_hr').eq('athlete_id', athleteId).order('date', { ascending: false }).limit(1),
     sb.from('activities').select('name, sport, started_at, duration_seconds, distance_meters, tss').eq('athlete_id', athleteId).order('started_at', { ascending: false }).limit(5),
     sb.from('athlete_checkins').select('checkin_date, rpe, soreness, sleep_quality, mood, pain_location, notes').eq('athlete_id', athleteId).order('checkin_date', { ascending: false }).limit(30),
     sb.from('strength_programs').select('id, name, goal, structure').eq('athlete_id', athleteId).eq('active', true).order('created_at', { ascending: false }).limit(1),
     sb.from('strength_logs').select('id, day_label, performed_at, rpe, completed, notes').eq('athlete_id', athleteId).order('performed_at', { ascending: false }).limit(30),
-    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+    sb.from('planned_workouts').select('id, athlete_id, date, sport, title, description, planned_duration_min, planned_tss, completed, structure, exercises').eq('athlete_id', athleteId).gte('date', todayISO).lte('date', in14.toLocaleDateString('en-CA')).order('date').limit(20),
+    // A marca vem junto e entra no cache offline: sem isso o portal da Caqui
+    // piscaria vermelho SAAB a cada abertura antes de se corrigir.
+    sb.from('athletes').select('portal_brand').eq('id', athleteId).maybeSingle(),
   ])
   return {
     summary: summary.data as { id: string; full_name: string; primary_sport: string; ctl: number | null; atl: number | null; tsb: number | null } | null,
@@ -1116,6 +1136,7 @@ async function fetchAthleteSelf(athleteId: string) {
     program: (programs.data?.[0] ?? null) as PortalStrengthProgram | null,
     strengthLogs: (logs.data ?? []) as StrengthLogRow[],
     plannedWorkouts: (plans.data ?? []) as PlannedWorkoutRow[],
+    portalBrand: ((marca.data as { portal_brand?: string | null } | null)?.portal_brand ?? 'saab') as string,
   }
 }
 
@@ -1332,6 +1353,167 @@ export async function getDashboardSummary() {
     athletes: athletes ?? [],
     weeklyActivities: weeklyActivities ?? 0,
   }
+}
+
+// ─── Painel do treinador: a semana da equipe ────────────────────────────────
+
+export type DiaDoAluno = {
+  date: string
+  planejados: number
+  feitos: number
+}
+
+export type AlunoNaSemana = {
+  id: string
+  nome: string
+  sport: string
+  tsb: number | null
+  status: string | null
+  /** Sete dias, de segunda a domingo, na ordem. */
+  dias: DiaDoAluno[]
+  /** Recados do aluno que o treinador ainda não leu. */
+  recadosNaoLidos: number
+  /** Dor do último check-in (0–10) e quando foi. */
+  dor: number | null
+  dorEm: string | null
+  /**
+   * Data do último treino programado desta semana em diante — avisa que o
+   * plano vai acabar. `null` quando não há mais nada programado.
+   */
+  ultimoPlanejado: string | null
+}
+
+/**
+ * Uma linha por aluno com a semana inteira, para o treinador ler a equipe de
+ * relance.
+ *
+ * A Visão Geral mostrava CTL médio do grupo — número de relatório mensal. A
+ * pergunta de quem abre o painel de manhã é outra: quem treinou ontem, quem
+ * faltou, quem está com dor, quem está sem plano. Para responder isso era
+ * preciso entrar aluno por aluno.
+ *
+ * `de` e `ate` no formato AAAA-MM-DD, segunda a domingo.
+ */
+export async function getSemanaDaEquipe(de: string, ate: string): Promise<AlunoNaSemana[]> {
+  const sb = createClient()
+  const { data: brutos, error } = await sb.from('v_athlete_summary')
+    .select('id, full_name, primary_sport, tsb, status, active').order('full_name')
+  if (error) { console.error('[queries]', error.message); return [] }
+
+  const alunos = (brutos ?? []).filter((a: { active?: boolean }) => a.active !== false) as {
+    id: string; full_name: string; primary_sport: string; tsb: number | null; status: string | null
+  }[]
+  if (alunos.length === 0) return []
+  const ids = alunos.map(a => a.id)
+
+  // Os treinos futuros vêm numa busca separada, só para saber até quando o
+  // plano de cada um vai. Filtrada de hoje em diante de propósito: puxar o
+  // histórico inteiro estouraria o limite de linhas do Supabase, e aluno
+  // cortado pelo limite apareceria como "sem plano" sem estar.
+  const [planRes, actRes, comRes, chkRes, futuroRes] = await Promise.all([
+    sb.from('planned_workouts').select('athlete_id, date, completed')
+      .in('athlete_id', ids).gte('date', de).lte('date', ate),
+    sb.from('activities').select('athlete_id, started_at')
+      .in('athlete_id', ids).gte('started_at', `${de}T00:00:00`).lte('started_at', `${ate}T23:59:59`),
+    sb.from('workout_comments').select('athlete_id')
+      .in('athlete_id', ids).eq('read_by_staff', false),
+    sb.from('athlete_checkins').select('athlete_id, checkin_date, soreness')
+      .in('athlete_id', ids).gte('checkin_date', de).order('checkin_date', { ascending: false }),
+    sb.from('planned_workouts').select('athlete_id, date')
+      .in('athlete_id', ids).gte('date', de).order('date', { ascending: false }),
+  ])
+
+  const dias = diasEntre(de, ate)
+
+  const planejados = new Map<string, number>()
+  const feitos = new Map<string, number>()
+  for (const p of (planRes.data ?? []) as { athlete_id: string; date: string; completed: boolean }[]) {
+    const k = `${p.athlete_id}|${p.date}`
+    planejados.set(k, (planejados.get(k) ?? 0) + 1)
+    if (p.completed) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+  }
+  // Atividade importada também conta como treino feito: nem todo aluno lembra
+  // de marcar no app, mas o relógio dele não esquece.
+  for (const a of (actRes.data ?? []) as { athlete_id: string; started_at: string }[]) {
+    const k = `${a.athlete_id}|${a.started_at.slice(0, 10)}`
+    if ((feitos.get(k) ?? 0) < (planejados.get(k) ?? 0)) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+    else if (!planejados.has(k)) feitos.set(k, (feitos.get(k) ?? 0) + 1)
+  }
+
+  const naoLidos = new Map<string, number>()
+  for (const c of (comRes.data ?? []) as { athlete_id: string | null }[]) {
+    if (c.athlete_id) naoLidos.set(c.athlete_id, (naoLidos.get(c.athlete_id) ?? 0) + 1)
+  }
+
+  const dor = new Map<string, { valor: number; em: string }>()
+  for (const c of (chkRes.data ?? []) as { athlete_id: string; checkin_date: string; soreness: number | null }[]) {
+    if (c.soreness == null || dor.has(c.athlete_id)) continue   // já vem do mais recente
+    dor.set(c.athlete_id, { valor: c.soreness, em: c.checkin_date })
+  }
+
+  const ultimo = new Map<string, string>()
+  for (const p of (futuroRes.data ?? []) as { athlete_id: string; date: string }[]) {
+    if (!ultimo.has(p.athlete_id)) ultimo.set(p.athlete_id, p.date)
+  }
+
+  return alunos.map(a => ({
+    id: a.id,
+    nome: a.full_name,
+    sport: a.primary_sport,
+    tsb: a.tsb,
+    status: a.status,
+    dias: dias.map(d => ({
+      date: d,
+      planejados: planejados.get(`${a.id}|${d}`) ?? 0,
+      feitos: feitos.get(`${a.id}|${d}`) ?? 0,
+    })),
+    recadosNaoLidos: naoLidos.get(a.id) ?? 0,
+    dor: dor.get(a.id)?.valor ?? null,
+    dorEm: dor.get(a.id)?.em ?? null,
+    ultimoPlanejado: ultimo.get(a.id) ?? null,
+  }))
+}
+
+/**
+ * Quantos alunos o treinador tem, quantos têm ritmo de limiar e quantos têm
+ * treino programado — para os primeiros passos.
+ *
+ * Deduzido dos dados, e não de um "já vi isso" guardado no navegador: um aluno
+ * novo sem ritmo faz o aviso voltar, que é justamente o que se quer.
+ */
+export async function getEstadoDaMontagem(): Promise<{ alunos: number; comRitmo: number; comPlano: number }> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('id, threshold_pace_sec_km, lthr_run_bpm, lthr_bpm').eq('active', true)
+  if (error) { console.error('[queries]', error.message); return { alunos: 0, comRitmo: 0, comPlano: 0 } }
+
+  const alunos = (data ?? []) as {
+    id: string; threshold_pace_sec_km: number | null; lthr_run_bpm: number | null; lthr_bpm: number | null
+  }[]
+  if (alunos.length === 0) return { alunos: 0, comRitmo: 0, comPlano: 0 }
+
+  // Ritmo OU frequência de limiar já basta: com qualquer um dos dois o treino
+  // deixa de chegar como percentual seco.
+  const comRitmo = alunos.filter(a => a.threshold_pace_sec_km || a.lthr_run_bpm || a.lthr_bpm).length
+
+  const hoje = new Date().toLocaleDateString('en-CA')
+  const { data: planos } = await sb.from('planned_workouts')
+    .select('athlete_id').in('athlete_id', alunos.map(a => a.id)).gte('date', hoje)
+  const comPlano = new Set(((planos ?? []) as { athlete_id: string }[]).map(p => p.athlete_id)).size
+
+  return { alunos: alunos.length, comRitmo, comPlano }
+}
+
+/** As datas de `de` até `ate`, inclusive. */
+function diasEntre(de: string, ate: string): string[] {
+  const saida: string[] = []
+  const d = new Date(de + 'T12:00:00')
+  const fim = new Date(ate + 'T12:00:00')
+  while (d <= fim) {
+    saida.push(d.toLocaleDateString('en-CA'))
+    d.setDate(d.getDate() + 1)
+  }
+  return saida
 }
 
 // ─── Matrícula pública + anamnese (funil "Meus primeiros 5 km") ─────────────
