@@ -32,6 +32,14 @@ export interface Brand {
   /** caminho do logo em imagem (em /public); null = usa wordmark tipográfico */
   logoSrc: string | null
   /**
+   * O arquivo do logo tem fundo sólido claro em vez de transparente.
+   *
+   * Nesse caso o tema escuro ganha uma placa clara arredondada atrás dele —
+   * senão o logo vira um retângulo branco recortado no meio da barra escura.
+   * O ideal continua sendo um PNG transparente; isto é a rede de proteção.
+   */
+  logoComFundoClaro?: boolean
+  /**
    * Cor de destaque do portal do aluno, por tema.
    *
    * São duas porque a mesma cor não serve nos dois fundos: o laranja da Caqui

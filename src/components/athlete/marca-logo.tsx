@@ -16,7 +16,7 @@ export function MarcaLogo({ brand, altura = 34 }: { brand: Brand; altura?: numbe
   // Num slot de 38px o texto ficaria ilegível, então ele ganha mais altura.
   const alturaReal = brand.logoSrc ? Math.round(altura * 1.7) : altura
   const [falhou, setFalhou] = useState(false)
-  const img = useRef<HTMLImageElement>(null)
+  const ref = useRef<HTMLImageElement>(null)
 
   /*
    * O `onError` do React não basta aqui. Isto é exportação estática: o HTML já
@@ -25,17 +25,17 @@ export function MarcaLogo({ brand, altura = 34 }: { brand: Brand; altura?: numbe
    * Conferir `naturalWidth` na montagem pega o caso que passou batido.
    */
   useEffect(() => {
-    const el = img.current
+    const el = ref.current
     if (el && el.complete && el.naturalWidth === 0) setFalhou(true)
   }, [brand.logoSrc])
 
   if (brand.logoSrc && !falhou) {
-    return (
+    const imagem = (
       // Sem next/image de propósito: a marca é escolhida em tempo de execução, e
       // o otimizador do Next não roda em exportação estática.
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        ref={img}
+        ref={ref}
         src={brand.logoSrc}
         alt={brand.name}
         style={{ height: alturaReal }}
@@ -43,6 +43,11 @@ export function MarcaLogo({ brand, altura = 34 }: { brand: Brand; altura?: numbe
         onError={() => setFalhou(true)}
       />
     )
+    // Logo com fundo sólido claro precisa de uma placa no tema escuro, senão
+    // fica um retângulo branco recortado na barra.
+    return brand.logoComFundoClaro
+      ? <span className="inline-block rounded-lg dark:bg-white dark:px-2 dark:py-1.5">{imagem}</span>
+      : imagem
   }
 
   return (
