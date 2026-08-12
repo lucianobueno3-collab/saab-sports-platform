@@ -7,8 +7,9 @@ import {
   painelDeHoje, estadoDoDia, totaisDaSemana, COR_DO_DIA, NOME_DO_ESTADO,
   type Motivo,
 } from '@/lib/painel-treinador'
+import { SkeletonSemanaDaEquipe } from '@/components/ui/skeleton'
 import {
-  Loader2, CheckCircle2, Clock, MessageCircle, AlertTriangle,
+  CheckCircle2, Clock, MessageCircle, AlertTriangle,
   CalendarX, BatteryLow, ChevronRight, Moon,
 } from 'lucide-react'
 
@@ -56,7 +57,7 @@ export function HojeDaEquipe() {
   const totais = useMemo(() => totaisDaSemana(alunos, hoje), [alunos, hoje])
 
   if (loading) {
-    return <div className="flex items-center justify-center py-16 text-muted-foreground"><Loader2 className="w-6 h-6 animate-spin" /></div>
+    return <SkeletonSemanaDaEquipe />
   }
   if (alunos.length === 0) return null
 

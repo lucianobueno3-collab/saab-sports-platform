@@ -1470,6 +1470,36 @@ export async function getSemanaDaEquipe(de: string, ate: string): Promise<AlunoN
   }))
 }
 
+/**
+ * Quantos alunos o treinador tem, quantos têm ritmo de limiar e quantos têm
+ * treino programado — para os primeiros passos.
+ *
+ * Deduzido dos dados, e não de um "já vi isso" guardado no navegador: um aluno
+ * novo sem ritmo faz o aviso voltar, que é justamente o que se quer.
+ */
+export async function getEstadoDaMontagem(): Promise<{ alunos: number; comRitmo: number; comPlano: number }> {
+  const sb = createClient()
+  const { data, error } = await sb.from('athletes')
+    .select('id, threshold_pace_sec_km, lthr_run_bpm, lthr_bpm').eq('active', true)
+  if (error) { console.error('[queries]', error.message); return { alunos: 0, comRitmo: 0, comPlano: 0 } }
+
+  const alunos = (data ?? []) as {
+    id: string; threshold_pace_sec_km: number | null; lthr_run_bpm: number | null; lthr_bpm: number | null
+  }[]
+  if (alunos.length === 0) return { alunos: 0, comRitmo: 0, comPlano: 0 }
+
+  // Ritmo OU frequência de limiar já basta: com qualquer um dos dois o treino
+  // deixa de chegar como percentual seco.
+  const comRitmo = alunos.filter(a => a.threshold_pace_sec_km || a.lthr_run_bpm || a.lthr_bpm).length
+
+  const hoje = new Date().toLocaleDateString('en-CA')
+  const { data: planos } = await sb.from('planned_workouts')
+    .select('athlete_id').in('athlete_id', alunos.map(a => a.id)).gte('date', hoje)
+  const comPlano = new Set(((planos ?? []) as { athlete_id: string }[]).map(p => p.athlete_id)).size
+
+  return { alunos: alunos.length, comRitmo, comPlano }
+}
+
 /** As datas de `de` até `ate`, inclusive. */
 function diasEntre(de: string, ate: string): string[] {
   const saida: string[] = []

@@ -11,6 +11,7 @@ import { createClient } from '@/lib/supabase/client'
 import { offlineKey, readSnapshot, saveSnapshot, snapshotAge } from '@/lib/offline-cache'
 import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { CargaChip } from '@/components/athlete/carga-chip'
+import { SkeletonTreinosDoAluno } from '@/components/ui/skeleton'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { StructureBar } from '@/components/athlete/structured-builder'
 import { structureForTitle } from '@/lib/training-plans'
@@ -88,7 +89,7 @@ export function TreinosOverview({ athleteId, onChanged }: { athleteId: string; o
     await load(); setBusy(null); onChanged?.()
   }
 
-  if (loading) return <div className="flex items-center justify-center py-12 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+  if (loading) return <SkeletonTreinosDoAluno />
   if (!ov || ov.all.length === 0) return null
 
   const todayISO = new Date().toLocaleDateString('en-CA')

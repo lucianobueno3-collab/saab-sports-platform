@@ -11,6 +11,7 @@ import { getDashboardSummary } from '@/lib/supabase/queries'
 import { MetricDetailSheet, type MetricKey } from '@/components/ui/metric-detail-sheet'
 import { InstallAppCard } from '@/components/pwa/install-app'
 import { HojeDaEquipe } from '@/components/dashboard/hoje-da-equipe'
+import { PrimeirosPassosCard } from '@/components/dashboard/primeiros-passos-card'
 
 type AthleteSummary = {
   id: string
@@ -60,6 +61,9 @@ export default function DashboardPage() {
       <div className="p-6 space-y-6">
         {/* Convite para deixar o app na tela de início (some quando já instalado) */}
         <InstallAppCard storageKey="saab:install-dismissed-coach" />
+
+        {/* Some sozinho quando a montagem está completa. */}
+        <PrimeirosPassosCard />
 
         {/* A rotina do dia vem antes dos indicadores: CTL médio é número de
             relatório mensal; quem faltou hoje é o que muda o que você faz agora. */}

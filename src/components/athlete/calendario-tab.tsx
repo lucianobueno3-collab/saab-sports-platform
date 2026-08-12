@@ -15,6 +15,7 @@ import { WorkoutSteps } from '@/components/athlete/workout-steps'
 import { StrengthSteps } from '@/components/athlete/strength-steps'
 import { CargaChip } from '@/components/athlete/carga-chip'
 import { DesfazerToast } from '@/components/ui/desfazer-toast'
+import { SkeletonLista } from '@/components/ui/skeleton'
 import { textoDeCarga, cargaDe } from '@/lib/carga'
 import { RemoveWorkoutsModal } from '@/components/athlete/remove-workouts-modal'
 import { LibraryPanel } from '@/components/athlete/library-panel'
@@ -307,7 +308,7 @@ export function CalendarioTab({ athleteId, defaultSport = 'running', readOnly = 
             {dayLabel(selectedDay)} <span className="text-muted-foreground font-medium">· {new Date(selectedDay + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}</span>
           </p>
           {loading ? (
-            <div className="flex items-center justify-center py-10 text-muted-foreground"><Loader2 className="w-5 h-5 animate-spin" /></div>
+            <SkeletonLista linhas={3} altura={72} />
           ) : (sel.pairs.length === 0 && sel.extras.length === 0) ? (
             <p className="text-xs text-muted-foreground rounded-xl p-4 text-center" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>Nenhum treino neste dia.</p>
           ) : (
